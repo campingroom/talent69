@@ -6,7 +6,13 @@
 ---
 
 ## 1. ลิงก์สำคัญประจำระบบ
-- **เกณฑ์การแข่งขัน (Google Drive):** [เปิดโฟลเดอร์เกณฑ์การแข่งขัน](https://drive.google.com/drive/folders/1hIdXcgsOqNt5plNqRizfp9YbHzgjpRwv)
+- **เกณฑ์การแข่งขัน (Google Drive สำหรับครูทั่วไป):** [เปิดโฟลเดอร์เกณฑ์การแข่งขัน](https://drive.google.com/drive/folders/1hIdXcgsOqNt5plNqRizfp9YbHzgjpRwv)
+- **โฟลเดอร์ Google Drive เก็บงานหลังบ้านทั้งหมด (สำหรับแอดมิน):** [เปิดโฟลเดอร์งานลงทะเบียนศิลปหัตถกรรม ครั้งที่ 74-2569](https://drive.google.com/drive/folders/1cskJzZ8Tz-oZN0sUjBSDE3_vXZQl_tE4)
+  - `01_ฐานข้อมูล_Google_Sheets` — เก็บไฟล์ตาราง Google Sheets หลักของระบบ
+  - `02_โค้ดหลังบ้าน_Apps_Script` — เก็บไฟล์ `Code.gs` และคู่มือการตั้งค่า
+  - `03_ซอร์สโค้ดหน้าเว็บ_Web_App` — เก็บไฟล์หน้าเว็บ (`index.html`, `css/`, `js/`)
+  - `04_ประกาศและเอกสารอ้างอิง` — เก็บภาพประกาศรายการแข่งขัน สพป.มหาสารคาม เขต 3 ทั้ง 4 หน้า
+  - `05_ไฟล์ส่งออกและเกียรติบัตร_CSV` — สำหรับเก็บไฟล์ CSV รายชื่อและไฟล์ทำเกียรติบัตร
 - **ตารางฐานข้อมูล Google Sheets (สำหรับแอดมิน):** [เปิดไฟล์ Google Sheets งานศิลปหัตถกรรม ครั้งที่ 74](https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit)
 
 ---
