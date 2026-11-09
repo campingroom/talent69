@@ -2319,7 +2319,7 @@
 
         const sigHtml = students
           .map(function () {
-            return '<div class="row-subitem sig-cell">ลงชื่อ ............................................................</div>';
+            return '<div class="row-subitem sig-cell">ลงชื่อ ....................................................</div>';
           })
           .join('');
 
@@ -2337,14 +2337,11 @@
           '<td class="font-bold">' +
           escapeHtml(r.school_name) +
           '</td>' +
-          '<td class="text-center">' +
-          escapeHtml(subdistrict) +
-          '</td>' +
           '<td>' +
           (stuHtml || '-') +
           '</td>' +
           '<td>' +
-          (sigHtml || '<div class="row-subitem sig-cell">ลงชื่อ ............................................................</div>') +
+          (sigHtml || '<div class="row-subitem sig-cell">ลงชื่อ ....................................................</div>') +
           '</td>' +
           '<td>' +
           (tchHtml || '-') +
@@ -2365,9 +2362,8 @@
           b +
           '</td>' +
           '<td></td>' +
-          '<td></td>' +
           '<td><div class="row-subitem">1. ....................................................</div></td>' +
-          '<td><div class="row-subitem sig-cell">ลงชื่อ ............................................................</div></td>' +
+          '<td><div class="row-subitem sig-cell">ลงชื่อ ....................................................</div></td>' +
           '<td><div class="row-subitem">1. ....................................................</div></td>' +
           '</tr>';
       }
@@ -2447,6 +2443,7 @@
       '.sig-cell {' +
       '  color: #444;' +
       '  text-align: center;' +
+      '  white-space: nowrap;' +
       '}' +
       '.judges-section {' +
       '  margin-top: 20px;' +
@@ -2506,11 +2503,10 @@
       '<thead>' +
       '<tr>' +
       '<th style="width: 45px;">ลำดับ</th>' +
-      '<th style="width: 190px;">โรงเรียน</th>' +
-      '<th style="width: 95px;">สังกัด/ตำบล</th>' +
+      '<th style="width: 230px;">โรงเรียน</th>' +
       '<th>ผู้เข้าแข่งขัน (นักเรียน)</th>' +
-      '<th style="width: 210px;">ลงชื่อตัวบรรจง</th>' +
-      '<th style="width: 190px;">ครูผู้ฝึกซ้อม / ควบคุมดูแล</th>' +
+      '<th style="width: 260px;">ลงชื่อตัวบรรจง</th>' +
+      '<th style="width: 220px;">ครูผู้ฝึกซ้อม</th>' +
       '</tr>' +
       '</thead>' +
       '<tbody>' +
