@@ -2344,6 +2344,130 @@
     showToast('ดาวน์โหลดไฟล์ CSV เรียบร้อยแล้ว', 'success');
   }
 
+  // Load ExcelJS on demand (pinned version + SRI) so normal page loads stay light
+  let exceljsLoadPromise = null;
+  function loadExcelJs() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    if (exceljsLoadPromise) return exceljsLoadPromise;
+    exceljsLoadPromise = new Promise(function (resolve, reject) {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+      s.integrity = 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz';
+      s.crossOrigin = 'anonymous';
+      s.onload = function () {
+        resolve(window.ExcelJS);
+      };
+      s.onerror = function () {
+        exceljsLoadPromise = null;
+        reject(new Error('โหลดตัวสร้างไฟล์ Excel ไม่สำเร็จ'));
+      };
+      document.head.appendChild(s);
+    });
+    return exceljsLoadPromise;
+  }
+
+  // Export one school's registrations as .xlsx (layout follows the group's official sample file)
+  async function exportSchoolExcel(schoolName) {
+    if (!schoolName) {
+      showToast('กรุณาเลือกโรงเรียนก่อนดาวน์โหลด Excel', 'warning');
+      return;
+    }
+    const order = {};
+    state.competitions.forEach(function (c, i) {
+      order[c.comp_id] = i;
+    });
+    const list = state.registrations
+      .filter((r) => r.school_name === schoolName)
+      .sort((a, b) => (order[a.comp_id] || 0) - (order[b.comp_id] || 0));
+    if (list.length === 0) {
+      showToast('โรงเรียนนี้ยังไม่มีรายการลงทะเบียน', 'warning');
+      return;
+    }
+
+    let ExcelJS;
+    try {
+      ExcelJS = await loadExcelJs();
+    } catch (err) {
+      showToast(err.message, 'error');
+      return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('รายชื่อ');
+    ws.columns = [
+      { width: 6 },
+      { width: 50 },
+      { width: 10 },
+      { width: 12 },
+      { width: 30 },
+      { width: 30 },
+      { width: 26 }
+    ];
+    const titles = [
+      'รายการกิจกรรมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง ปีการศึกษา 2569',
+      '',
+      'ณ โรงเรียนบ้านวังยาววิทยายน'
+    ];
+    titles.forEach(function (t, i) {
+      ws.mergeCells(i + 1, 1, i + 1, 7);
+      const cell = ws.getCell(i + 1, 1);
+      cell.value = t;
+      cell.font = { bold: true, size: 15 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    const thin = { style: 'thin' };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const header = ws.getRow(4);
+    ['ที่', 'สาระ/กิจกรรม', 'ระดับ', 'ประเภท', 'ชื่อ - สกุล นักเรียน', 'ชื่อ - สกุล ครูผู้ควบคุมดูแล', 'โรงเรียน'].forEach(
+      function (h, i) {
+        const c = header.getCell(i + 1);
+        c.value = h;
+        c.font = { bold: true };
+        c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        c.border = border;
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F1EF' } };
+      }
+    );
+
+    let rowNo = 5;
+    list.forEach(function (r, idx) {
+      const students = r.students || [];
+      const teachers = r.teachers || [];
+      const lines = Math.max(students.length, teachers.length, 1);
+      const typeText = r.team_type === 'ทีม' ? 'ทีม ' + students.length + ' คน' : r.team_type || '';
+      for (let i = 0; i < lines; i++) {
+        const row = ws.getRow(rowNo++);
+        const s = students[i];
+        const t = teachers[i];
+        const vals =
+          i === 0
+            ? [idx + 1, r.comp_name, r.level, typeText, s ? s.prefix + s.name : '', t ? t.prefix + t.name : '', r.school_name]
+            : [null, null, null, null, s ? s.prefix + s.name : '', t ? t.prefix + t.name : null, null];
+        vals.forEach(function (v, ci) {
+          const c = row.getCell(ci + 1);
+          c.value = v;
+          c.border = border;
+          c.alignment = { vertical: 'top', wrapText: true, horizontal: ci === 0 || ci === 2 ? 'center' : 'left' };
+        });
+      }
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ศิลปหัตถกรรมครั้งที่74_' + schoolName + '.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดไฟล์ Excel เรียบร้อยแล้ว', 'success');
+  }
+
   // Admin Tool: Export 1-Person-Per-Row CSV for Canva / Word Certificate Mail Merge
   function exportCertificateMailMergeCsv() {
     if (!state.isAdmin) {
@@ -3679,6 +3803,11 @@
             showToast('เข้าสู่โหมดแอดมินสำเร็จ', 'success');
             return;
           }
+          // Server answered "wrong PIN": do not fall back to the local default PIN
+          if (remoteCheck && remoteCheck.error === 'รหัสแอดมินไม่ถูกต้อง') {
+            showToast('รหัสแอดมินไม่ถูกต้อง', 'error');
+            return;
+          }
         }
 
         if (pin === state.adminPin) {
@@ -3872,6 +4001,13 @@
       });
     }
 
+    const btnExportSchoolExcel = document.getElementById('btnExportSchoolExcel');
+    if (btnExportSchoolExcel) {
+      btnExportSchoolExcel.addEventListener('click', function () {
+        exportSchoolExcel(document.getElementById('schoolViewSelect').value);
+      });
+    }
+
     const btnExportAllCsv = document.getElementById('btnExportAllCsv');
     if (btnExportAllCsv) {
       btnExportAllCsv.addEventListener('click', function () {
@@ -3935,13 +4071,22 @@
           return;
         }
         const oldPin = state.adminPin;
-        state.adminPin = newPin;
-        localStorage.setItem(ADMIN_PIN_KEY, newPin);
-        await postToGoogleSheets({
-          action: 'set_admin_pin',
+        const result = await postToGoogleSheets({
+          action: 'change_admin_pin',
           admin_pin: oldPin,
           new_pin: newPin
         });
+        if (!result || !result.ok) {
+          showToast('เปลี่ยนรหัสไม่สำเร็จ: ' + ((result && result.error) || 'ไม่ทราบสาเหตุ'), 'error');
+          return;
+        }
+        state.adminPin = newPin;
+        if (result.localOnly) {
+          localStorage.setItem(ADMIN_PIN_KEY, newPin);
+        } else {
+          // Server holds the real PIN; do not keep it in the browser
+          localStorage.removeItem(ADMIN_PIN_KEY);
+        }
         changeAdminPinForm.reset();
         showToast('เปลี่ยนรหัสแอดมินใหม่เรียบร้อยแล้ว', 'success');
       });
