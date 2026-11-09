@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 — กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-800">
+
+  <!-- Top Header Banner -->
+  <header class="bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-800 text-white shadow-lg no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div class="flex items-start gap-4">
+          <div class="w-14 h-14 rounded-2xl bg-amber-400/20 border border-amber-300/40 flex items-center justify-center text-3xl shrink-0 shadow-inner">
+            🏆
+          </div>
+          <div>
+            <div class="inline-flex flex-wrap items-center gap-2 px-3 py-0.5 rounded-full bg-amber-400/20 text-amber-200 text-xs font-medium mb-1 border border-amber-300/30">
+              <span>สพป.มหาสารคาม เขต 3</span>
+              <span>•</span>
+              <span>แข่งระดับกลุ่มโรงเรียน: ภายใน 30 พ.ย. 2569</span>
+              <span>•</span>
+              <span>ระดับเขตพื้นที่ฯ: 23–24 ธ.ค. 2569</span>
+            </div>
+            <h1 class="text-xl sm:text-2xl lg:text-3xl font-bold font-heading tracking-tight">
+              งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569
+            </h1>
+            <p class="text-blue-100 text-sm sm:text-base mt-0.5">
+              กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (13 โรงเรียน • 13 หมวดกิจกรรม 149 รายการ) — กติกา 1 โรงเรียน ส่งได้ 1 ทีมต่อรายการ
+            </p>
+          </div>
+        </div>
+
+        <!-- Quick Actions & Sync Status -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <a id="headerSheetLink"
+             href="https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-heading text-xs sm:text-sm font-medium shadow transition">
+            <span>🟢 เปิดตาราง Google Sheets</span>
+          </a>
+          <button id="btnSyncNow"
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white font-heading text-xs sm:text-sm font-medium border border-white/20 transition">
+            <span>🔄 รีเฟรชข้อมูล</span>
+          </button>
+          <div id="syncModeBadge"
+               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-950/60 border border-blue-400/30 text-xs text-blue-100">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="syncModeText">โหมดพร้อมใช้งานทันที</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Navigation Bar -->
+      <nav class="mt-5 flex flex-wrap gap-2 pt-3 border-t border-white/15" aria-label="เมนูหลัก">
+        <button type="button" data-tab="dashboard" class="nav-tab-btn active px-4 py-2.5 rounded-xl font-heading text-sm font-medium flex items-center gap-2 bg-white/10 text-white hover:bg-white/20">
+          <span>📊</span>
+          <span>1. แดชบอร์ดภาพรวม</span>
+        </button>
+        <button type="button" data-tab="register" class="nav-tab-btn px-4 py-2.5 rounded-xl font-heading text-sm font-medium flex items-center gap-2 bg-white/10 text-white hover:bg-white/20">
+          <span>✍️</span>
+          <span>2. ลงทะเบียนเข้าแข่งขัน</span>
+        </button>
+        <button type="button" data-tab="school" class="nav-tab-btn px-4 py-2.5 rounded-xl font-heading text-sm font-medium flex items-center gap-2 bg-white/10 text-white hover:bg-white/20">
+          <span>🏫</span>
+          <span>3. ดูข้อมูลรายโรงเรียน</span>
+        </button>
+        <button type="button" data-tab="competition" class="nav-tab-btn px-4 py-2.5 rounded-xl font-heading text-sm font-medium flex items-center gap-2 bg-white/10 text-white hover:bg-white/20">
+          <span>🏅</span>
+          <span>4. ดูรายรายการ / รายการที่ยังไม่มีผู้สมัคร</span>
+        </button>
+        <button type="button" data-tab="settings" class="nav-tab-btn px-4 py-2.5 rounded-xl font-heading text-sm font-medium flex items-center gap-2 bg-white/10 text-white hover:bg-white/20">
+          <span>⚙️</span>
+          <span>5. จัดการรายการ & เชื่อมต่อชีต</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Toast Notification Banner -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full px-4 pointer-events-none"></div>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ==========================================
+         TAB 1: OVERALL DASHBOARD (แดชบอร์ดภาพรวม)
+         ========================================== -->
+    <section id="tab-dashboard" class="tab-panel space-y-6">
+      <!-- Sample Data Notice Banner -->
+      <div id="sampleDataBanner" class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div class="flex items-start gap-3">
+          <span class="text-2xl">💡</span>
+          <div class="text-sm text-amber-900">
+            <p class="font-heading font-semibold">ขณะนี้มีข้อมูลตัวอย่างจำลอง (<span id="sampleCountText">6</span> รายการ) เพื่อให้เห็นภาพการทำงานของแดชบอร์ด</p>
+            <p class="text-amber-700 mt-0.5">คุณครูสามารถทดลองกดลงทะเบียนเพิ่มได้เลย รายชื่อจะขึ้นในแดชบอร์ดทันที หรือกดล้างข้อมูลตัวอย่างเมื่อพร้อมรับสมัครจริง</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button type="button" id="btnGoRegisterHero" class="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-heading text-xs font-medium shadow-sm transition">
+            ✍️ ไปหน้าลงทะเบียน
+          </button>
+          <button type="button" id="btnClearSamplesQuick" class="px-3.5 py-2 rounded-xl bg-amber-200/70 hover:bg-amber-300/80 text-amber-950 font-heading text-xs font-medium transition">
+            🧹 ล้างข้อมูลตัวอย่าง
+          </button>
+        </div>
+      </div>
+
+      <!-- 6 KPI Summary Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <!-- KPI 1: Total Competitions -->
+        <div data-goto-comp="ALL" class="kpi-card cursor-pointer bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-heading font-medium text-slate-500">รายการแข่งขันทั้งหมด</span>
+            <span class="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center text-lg">📋</span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="kpiTotalComp" class="text-2xl font-bold font-heading text-slate-900">0</span>
+            <span class="text-xs text-slate-500">รายการ</span>
+          </div>
+          <p class="text-xs text-blue-600 mt-1">ครบ 13 หมวดตามประกาศเขตฯ →</p>
+        </div>
+
+        <!-- KPI 2: Registered Competitions -->
+        <div data-goto-comp="REGISTERED" class="kpi-card cursor-pointer bg-white rounded-2xl p-4 border border-emerald-200 shadow-sm hover:shadow-md hover:border-emerald-400 transition">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-heading font-medium text-emerald-700">รายการที่มีผู้สมัครแล้ว</span>
+            <span class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">✅</span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="kpiRegComp" class="text-2xl font-bold font-heading text-emerald-700">0</span>
+            <span class="text-xs text-slate-500">รายการ (<span id="kpiRegCompPct">0%</span>)</span>
+          </div>
+          <p class="text-xs text-emerald-600 mt-1">คลิกดูรายการที่มีทีมส่ง →</p>
+        </div>
+
+        <!-- KPI 3: Unregistered (Zero) Competitions -->
+        <div data-goto-comp="EMPTY" class="kpi-card cursor-pointer bg-white rounded-2xl p-4 border border-rose-200 shadow-sm hover:shadow-md hover:border-rose-400 transition">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-heading font-medium text-rose-700">ยังไม่มีผู้สมัคร (ว่าง)</span>
+            <span class="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg">⚠️</span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="kpiEmptyComp" class="text-2xl font-bold font-heading text-rose-600">0</span>
+            <span class="text-xs text-slate-500">รายการ</span>
+          </div>
+          <p class="text-xs text-rose-600 mt-1 font-medium">คลิกดูรายการที่ยังไม่มีใครส่ง →</p>
+        </div>
+
+        <!-- KPI 4: Participating Schools -->
+        <div id="kpiCardSchools" class="cursor-pointer bg-white rounded-2xl p-4 border border-indigo-200 shadow-sm hover:shadow-md hover:border-indigo-400 transition">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-heading font-medium text-indigo-700">โรงเรียนที่ส่งแข่งขัน</span>
+            <span class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">🏫</span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="kpiActiveSchools" class="text-2xl font-bold font-heading text-indigo-700">0</span>
+            <span class="text-xs text-slate-500">/ <span id="kpiTotalSchools">13</span> โรงเรียน</span>
+          </div>
+          <p class="text-xs text-indigo-600 mt-1">รวม <span id="kpiTotalTeams">0</span> ทีมที่ลงทะเบียน →</p>
+        </div>
+
+        <!-- KPI 5: Total Students -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-heading font-medium text-slate-500">นักเรียนผู้เข้าแข่งขัน</span>
+            <span class="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center text-lg">👧👦</span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="kpiTotalStudents" class="text-2xl font-bold font-heading text-slate-900">0</span>
+            <span class="text-xs text-slate-500">คน</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">นับรวมทุกประเภทเดี่ยวและทีม</p>
+        </div>
+
+        <!-- KPI 6: Total Teachers -->
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-heading font-medium text-slate-500">ครูผู้ฝึกซ้อมรวม</span>
+            <span class="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg">👩‍🏫</span>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1.5">
+            <span id="kpiTotalTeachers" class="text-2xl font-bold font-heading text-slate-900">0</span>
+            <span class="text-xs text-slate-500">คน (รายการ)</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">ครูผู้ฝึกซ้อม/ที่ปรึกษาทุกรายการ</p>
+        </div>
+      </div>
+
+      <!-- Two-Column Breakdown: By Learning Area & By School -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left 7 cols: Breakdown by Learning Area & Grade Level -->
+        <div class="lg:col-span-7 space-y-6">
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+              <div>
+                <h2 class="text-lg font-bold font-heading text-slate-900">📚 สรุปตามกลุ่มสาระการเรียนรู้</h2>
+                <p class="text-xs text-slate-500">คลิกที่แต่ละกลุ่มสาระฯ เพื่อเจาะดูรายการที่มีผู้สมัคร หรือรายการที่ยังว่าง</p>
+              </div>
+              <span class="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-heading">ครบ 13 หมวดกิจกรรม</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm text-left">
+                <thead class="text-xs font-heading text-slate-600 bg-slate-50 border-y border-slate-200">
+                  <tr>
+                    <th class="py-2.5 px-3">กลุ่มสาระการเรียนรู้</th>
+                    <th class="py-2.5 px-2 text-center">รายการทั้งหมด</th>
+                    <th class="py-2.5 px-2 text-center text-emerald-700">มีผู้สมัครแล้ว</th>
+                    <th class="py-2.5 px-2 text-center text-rose-600">ยังว่าง (0 ทีม)</th>
+                    <th class="py-2.5 px-2 text-center">รวมทีมที่ส่ง</th>
+                    <th class="py-2.5 px-2 text-right">ดูรายการ</th>
+                  </tr>
+                </thead>
+                <tbody id="dashboardAreaTableBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Breakdown by Grade Level -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <h2 class="text-base font-bold font-heading text-slate-900 mb-3">🎓 สรุปตามระดับช่วงชั้น</h2>
+            <div id="dashboardLevelGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3"></div>
+          </div>
+        </div>
+
+        <!-- Right 5 cols: Breakdown by 13 Schools in Wang Yao Khwao Rai Don Klang -->
+        <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-lg font-bold font-heading text-slate-900">🏫 สรุปการส่งของทั้ง 13 โรงเรียน</h2>
+              <p class="text-xs text-slate-500">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (คลิกชื่อโรงเรียนเพื่อดูรายละเอียด)</p>
+            </div>
+          </div>
+          <div class="overflow-x-auto flex-1">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs font-heading text-slate-600 bg-slate-50 border-y border-slate-200">
+                <tr>
+                  <th class="py-2.5 px-2.5">โรงเรียน</th>
+                  <th class="py-2.5 px-2 text-center">รายการที่ส่ง</th>
+                  <th class="py-2.5 px-2 text-center">นักเรียน</th>
+                  <th class="py-2.5 px-2 text-center">ครู</th>
+                </tr>
+              </thead>
+              <tbody id="dashboardSchoolTableBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Registrations Live Table -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <div>
+            <h2 class="text-lg font-bold font-heading text-slate-900">⚡ รายการลงทะเบียนล่าสุด (อัปเดตทันทีเมื่อกดส่ง)</h2>
+            <p class="text-xs text-slate-500">แสดงรายการที่โรงเรียนต่าง ๆ ลงทะเบียนเข้ามาล่าสุดพร้อมรายชื่อนักเรียนและครูผู้ฝึกซ้อม</p>
+          </div>
+          <button type="button" id="btnExportAllCsv" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading text-xs font-medium transition">
+            <span>📥 ดาวน์โหลดข้อมูลทั้งหมด (CSV / Excel)</span>
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="text-xs font-heading text-slate-600 bg-slate-50 border-y border-slate-200">
+              <tr>
+                <th class="py-2.5 px-3">เวลา</th>
+                <th class="py-2.5 px-3">โรงเรียน</th>
+                <th class="py-2.5 px-3">กลุ่มสาระฯ / รายการแข่งขัน</th>
+                <th class="py-2.5 px-2 text-center">ช่วงชั้น</th>
+                <th class="py-2.5 px-3">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
+                <th class="py-2.5 px-3">ครูผู้ฝึกซ้อม</th>
+                <th class="py-2.5 px-2 text-right">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="recentRegistrationsBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         TAB 2: REGISTRATION FORM (หน้าลงทะเบียน)
+         ========================================== -->
+    <section id="tab-register" class="tab-panel hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left 7 Cols: The Registration Form -->
+        <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
+          <div class="border-b border-slate-100 pb-4 mb-5">
+            <span class="inline-block px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-heading text-xs font-semibold mb-1">
+              แบบฟอร์มส่งรายชื่อเข้าแข่งขัน
+            </span>
+            <h2 class="text-xl font-bold font-heading text-slate-900">✍️ ลงทะเบียนนักเรียนและครูผู้ฝึกซ้อม</h2>
+            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+              กติกา: ในแต่ละรายการแข่งขัน <strong>1 โรงเรียนสามารถส่งได้ 1 ทีม (หรือ 1 คนสำหรับประเภทเดี่ยว)</strong> หากเคยส่งแล้วสามารถแก้ไขรายชื่อเดิมได้ทันที
+            </p>
+          </div>
+
+          <form id="registrationForm" class="space-y-5" novalidate>
+            <input type="hidden" id="formEditRegId" value="" />
+
+            <!-- Step 1: Select School -->
+            <div class="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
+              <h3 class="font-heading font-semibold text-sm text-slate-800 flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-blue-700 text-white text-xs flex items-center justify-center">1</span>
+                <span>ข้อมูลโรงเรียนที่ส่งเข้าแข่งขัน</span>
+              </h3>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="sm:col-span-2">
+                  <label for="regSchoolSelect" class="block text-xs font-medium text-slate-700 mb-1">เลือกโรงเรียน <span class="text-rose-500">*</span></label>
+                  <select id="regSchoolSelect" required class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-600 focus:outline-none">
+                    <option value="">-- กรุณาเลือกโรงเรียนในกลุ่มวังยาวเขวาไร่ดอนกลาง --</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="regCoordinatorPhone" class="block text-xs font-medium text-slate-700 mb-1">เบอร์ติดต่อผู้ประสานงาน</label>
+                  <input type="tel" id="regCoordinatorPhone" placeholder="เช่น 081-234-5678" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-600 focus:outline-none" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 2: Select Competition -->
+            <div class="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
+              <h3 class="font-heading font-semibold text-sm text-slate-800 flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-blue-700 text-white text-xs flex items-center justify-center">2</span>
+                <span>เลือกรายการแข่งขันและระดับช่วงชั้น</span>
+              </h3>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="regAreaFilter" class="block text-xs font-medium text-slate-700 mb-1">กรองกลุ่มสาระการเรียนรู้</label>
+                  <select id="regAreaFilter" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-600 focus:outline-none">
+                    <option value="ALL">-- ทุกกลุ่มสาระการเรียนรู้ --</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="regLevelFilter" class="block text-xs font-medium text-slate-700 mb-1">กรองระดับช่วงชั้น</label>
+                  <select id="regLevelFilter" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-600 focus:outline-none">
+                    <option value="ALL">-- ทุกระดับช่วงชั้น --</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label for="regCompSelect" class="block text-xs font-medium text-slate-700 mb-1">เลือกรายการแข่งขัน <span class="text-rose-500">*</span></label>
+                <select id="regCompSelect" required class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium focus:border-blue-600 focus:outline-none">
+                  <option value="">-- กรุณาเลือกรายการแข่งขัน --</option>
+                </select>
+              </div>
+
+              <!-- Selected Competition Metadata Pill -->
+              <div id="selectedCompMeta" class="hidden rounded-xl bg-blue-50/90 border border-blue-200 p-3 text-xs text-blue-900 flex flex-wrap items-center justify-between gap-2">
+                <div class="space-y-0.5">
+                  <div class="font-heading font-semibold text-sm" id="metaCompTitle">-</div>
+                  <div class="text-blue-700" id="metaCompDetails">-</div>
+                </div>
+                <span id="metaCompBadge" class="px-2.5 py-1 rounded-full font-heading font-semibold text-xs bg-blue-600 text-white">-</span>
+              </div>
+
+              <!-- Duplicate School+Competition Alert Box -->
+              <div id="duplicateWarningBox" class="hidden rounded-xl bg-amber-50 border border-amber-300 p-3.5 text-xs text-amber-950 space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <p class="font-heading font-bold text-amber-900">⚠️ โรงเรียนนี้ได้ลงทะเบียนในรายการนี้ไว้แล้ว (กติกา 1 โรงเรียน 1 ทีม)</p>
+                    <p id="duplicateExistingSummary" class="mt-1 text-amber-800 whitespace-pre-line"></p>
+                  </div>
+                  <button type="button" id="btnLoadExistingToEdit" class="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-heading font-medium text-xs shadow-sm transition">
+                    ✏️ แก้ไขรายชื่อเดิม
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 3: Students Input List -->
+            <div class="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h3 class="font-heading font-semibold text-sm text-slate-800 flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full bg-blue-700 text-white text-xs flex items-center justify-center">3</span>
+                  <span>รายชื่อนักเรียนผู้เข้าแข่งขัน</span>
+                  <span id="studentRuleLabel" class="text-xs font-normal text-slate-500">(กรุณาเลือกรายการแข่งขันก่อน)</span>
+                </h3>
+                <button type="button" id="btnAddStudentRow" class="hidden px-3 py-1 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-800 font-heading text-xs font-medium transition">
+                  + เพิ่มนักเรียน
+                </button>
+              </div>
+              <div id="studentsInputContainer" class="space-y-2.5"></div>
+            </div>
+
+            <!-- Step 4: Teachers (Advisors/Trainers) Input List -->
+            <div class="bg-slate-50 rounded-xl p-4 border border-slate-200/80 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h3 class="font-heading font-semibold text-sm text-slate-800 flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-full bg-blue-700 text-white text-xs flex items-center justify-center">4</span>
+                  <span>รายชื่อครูผู้ฝึกซ้อม / ครูที่ปรึกษา</span>
+                  <span id="teacherRuleLabel" class="text-xs font-normal text-slate-500">(ระบุได้ 1 หรือหลายคนตามเกณฑ์)</span>
+                </h3>
+                <button type="button" id="btnAddTeacherRow" class="px-3 py-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-heading text-xs font-medium transition">
+                  + เพิ่มครูผู้ฝึกซ้อม
+                </button>
+              </div>
+              <div id="teachersInputContainer" class="space-y-2.5"></div>
+            </div>
+
+            <!-- Submit & Reset Buttons -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <button type="button" id="btnResetForm" class="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-heading text-sm font-medium transition">
+                ล้างฟอร์ม
+              </button>
+              <button type="submit" id="btnSubmitRegistration" class="px-6 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-heading text-sm font-semibold shadow-md hover:shadow-lg transition flex items-center gap-2">
+                <span>💾 ยืนยันการลงทะเบียน</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Right 5 Cols: Instant Live Preview of Selected School's Registrations -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+              <div>
+                <h3 class="font-heading font-bold text-base text-slate-900">📌 รายการที่โรงเรียนนี้ลงทะเบียนแล้ว</h3>
+                <p id="livePreviewSchoolSubtitle" class="text-xs text-slate-500">เลือกโรงเรียนด้านซ้ายเพื่อดูรายการที่ส่งแล้วทันที</p>
+              </div>
+              <span id="livePreviewCountBadge" class="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 font-heading font-bold text-xs">0 รายการ</span>
+            </div>
+            <div id="liveSchoolRegistrationsList" class="space-y-2.5 max-h-[600px] overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         TAB 3: SCHOOL VIEW (มุมมองรายโรงเรียน)
+         ========================================== -->
+    <section id="tab-school" class="tab-panel hidden space-y-6">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 no-print">
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div class="flex-1 max-w-xl">
+            <label for="schoolViewSelect" class="block text-xs font-heading font-semibold text-slate-600 mb-1.5">
+              🏫 เลือกดูข้อมูลเฉพาะโรงเรียน (กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง)
+            </label>
+            <select id="schoolViewSelect" class="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-medium focus:border-blue-600 focus:outline-none">
+            </select>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="btnRegisterForThisSchool" class="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-heading text-xs sm:text-sm font-medium shadow-sm transition">
+              ✍️ ลงทะเบียนเพิ่มให้โรงเรียนนี้
+            </button>
+            <button type="button" id="btnExportSchoolCsv" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs sm:text-sm font-medium transition">
+              📥 ดาวน์โหลดรายชื่อโรงเรียนนี้ (CSV)
+            </button>
+            <button type="button" onclick="window.print()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading text-xs sm:text-sm font-medium transition">
+              🖨️ พิมพ์ใบสรุปโรงเรียน
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- School Summary Header & Cards -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 print-container space-y-5">
+        <div class="border-b border-slate-200 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <span class="text-xs font-heading text-blue-700 font-semibold">สรุปข้อมูลการส่งเข้าแข่งขันรายโรงเรียน • งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</span>
+            <h2 id="schoolViewHeaderName" class="text-xl sm:text-2xl font-bold font-heading text-slate-900 mt-0.5">-</h2>
+            <p id="schoolViewHeaderMeta" class="text-xs text-slate-500">-</p>
+          </div>
+        </div>
+
+        <!-- 4 Mini KPI Cards for Selected School -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="rounded-xl bg-blue-50/70 border border-blue-200 p-3.5">
+            <div class="text-xs text-blue-800 font-heading">ส่งเข้าแข่งขันรวม</div>
+            <div class="text-2xl font-bold font-heading text-blue-900 mt-1"><span id="schKpiItems">0</span> <span class="text-xs font-normal">รายการ</span></div>
+          </div>
+          <div class="rounded-xl bg-indigo-50/70 border border-indigo-200 p-3.5">
+            <div class="text-xs text-indigo-800 font-heading">ประเภทเดี่ยว / ทีม</div>
+            <div class="text-lg font-bold font-heading text-indigo-900 mt-1">เดี่ยว <span id="schKpiSingle">0</span> • ทีม <span id="schKpiTeam">0</span></div>
+          </div>
+          <div class="rounded-xl bg-emerald-50/70 border border-emerald-200 p-3.5">
+            <div class="text-xs text-emerald-800 font-heading">จำนวนนักเรียนรวม</div>
+            <div class="text-2xl font-bold font-heading text-emerald-900 mt-1"><span id="schKpiStudents">0</span> <span class="text-xs font-normal">คน</span></div>
+          </div>
+          <div class="rounded-xl bg-purple-50/70 border border-purple-200 p-3.5">
+            <div class="text-xs text-purple-800 font-heading">จำนวนครูผู้ฝึกซ้อมรวม</div>
+            <div class="text-2xl font-bold font-heading text-purple-900 mt-1"><span id="schKpiTeachers">0</span> <span class="text-xs font-normal">คน (รายการ)</span></div>
+          </div>
+        </div>
+
+        <!-- Table of School's Registered Competitions -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="text-xs font-heading text-slate-600 bg-slate-50 border-y border-slate-200">
+              <tr>
+                <th class="py-2.5 px-3">ลำดับ</th>
+                <th class="py-2.5 px-3">รหัส / กลุ่มสาระการเรียนรู้</th>
+                <th class="py-2.5 px-3">รายการแข่งขัน</th>
+                <th class="py-2.5 px-2 text-center">ระดับช่วงชั้น</th>
+                <th class="py-2.5 px-2 text-center">ประเภท</th>
+                <th class="py-2.5 px-3">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
+                <th class="py-2.5 px-3">รายชื่อครูผู้ฝึกซ้อม</th>
+                <th class="py-2.5 px-2 text-right no-print">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="schoolViewTableBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================
+         TAB 4: COMPETITION VIEW (ดูรายรายการ / รายการว่าง)
+         ========================================== -->
+    <section id="tab-competition" class="tab-panel hidden space-y-5">
+      <!-- Filter Bar -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold font-heading text-slate-900">🏅 ตรวจสอบรายการแข่งขัน & โรงเรียนที่ส่งเข้าแข่งขัน</h2>
+            <p class="text-xs text-slate-500">ดูได้ทั้งรายการที่มีผู้สมัครแล้ว รายชื่อโรงเรียนที่ส่งในแต่ละรายการ และรายการที่ยังไม่มีผู้สมัคร</p>
+          </div>
+
+          <!-- Quick Status Pills -->
+          <div class="flex flex-wrap gap-2">
+            <button type="button" data-comp-status="ALL" class="comp-status-pill px-3.5 py-1.5 rounded-xl font-heading text-xs font-semibold bg-blue-700 text-white shadow-sm transition">
+              📋 ทั้งหมด (<span id="pillCountAll">0</span>)
+            </button>
+            <button type="button" data-comp-status="REGISTERED" class="comp-status-pill px-3.5 py-1.5 rounded-xl font-heading text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition">
+              ✅ มีโรงเรียนสมัครแล้ว (<span id="pillCountReg">0</span>)
+            </button>
+            <button type="button" data-comp-status="EMPTY" class="comp-status-pill px-3.5 py-1.5 rounded-xl font-heading text-xs font-semibold bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100 transition">
+              ⚠️ ยังไม่มีผู้สมัคร (<span id="pillCountEmpty">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+          <div>
+            <label for="compViewAreaFilter" class="block text-xs font-medium text-slate-600 mb-1">กลุ่มสาระการเรียนรู้</label>
+            <select id="compViewAreaFilter" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-600 focus:outline-none">
+              <option value="ALL">-- ทุกกลุ่มสาระการเรียนรู้ --</option>
+            </select>
+          </div>
+          <div>
+            <label for="compViewLevelFilter" class="block text-xs font-medium text-slate-600 mb-1">ระดับช่วงชั้น</label>
+            <select id="compViewLevelFilter" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-600 focus:outline-none">
+              <option value="ALL">-- ทุกระดับช่วงชั้น --</option>
+            </select>
+          </div>
+          <div>
+            <label for="compViewSearch" class="block text-xs font-medium text-slate-600 mb-1">ค้นหาชื่อรายการ / รหัสรายการ</label>
+            <input type="search" id="compViewSearch" placeholder="พิมพ์ชื่อรายการ เช่น คิดเลขเร็ว, ปั้นดินน้ำมัน..." class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-600 focus:outline-none" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Competition Cards / Accordion List -->
+      <div id="competitionListContainer" class="space-y-3"></div>
+    </section>
+
+    <!-- ==========================================
+         TAB 5: SETTINGS & MASTER DATA (จัดการรายการ & เชื่อมต่อชีต)
+         ========================================== -->
+    <section id="tab-settings" class="tab-panel hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left 6 cols: Google Sheets Connection -->
+        <div class="lg:col-span-6 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <span class="inline-block px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-heading text-xs font-semibold mb-1">
+                Google Drive & Google Sheets
+              </span>
+              <h2 class="text-lg font-bold font-heading text-slate-900">🔗 เชื่อมต่อฐานข้อมูล Google Sheets</h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                ตาราง Google Sheets ถูกสร้างไว้บนบัญชีคุณครูเรียบร้อยแล้วครบทั้ง 4 แผ่นงาน (`Competitions`, `Schools`, `Registrations`, `Summary_Dashboard`)
+              </p>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-2 text-xs text-emerald-950">
+            <div class="font-heading font-semibold text-sm">📄 ลิงก์ Google Sheets ประจำงานนี้:</div>
+            <a href="https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="inline-block text-emerald-700 underline break-all font-medium">
+              https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit
+            </a>
+          </div>
+
+          <div class="space-y-2 pt-2">
+            <label for="gasWebAppUrlInput" class="block text-xs font-heading font-semibold text-slate-700">
+              URL ของ Google Apps Script Web App (เมื่อต้องการให้ครูหลายเครื่องกรอกออนไลน์พร้อมกัน)
+            </label>
+            <input type="url"
+                   id="gasWebAppUrlInput"
+                   placeholder="https://script.google.com/macros/s/....../exec"
+                   class="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm focus:border-blue-600 focus:outline-none" />
+            <p class="text-xs text-slate-500">
+              ดูวิธีคัดลอกโค้ด <code>google-apps-script/Code.gs</code> ไปวางในเมนู <em>ส่วนขยาย &gt; Apps Script</em> ได้ในไฟล์ <code>วิธีเชื่อมต่อ-Google-Sheets.md</code>
+            </p>
+            <div class="flex flex-wrap gap-2 pt-1">
+              <button type="button" id="btnSaveGasUrl" class="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-heading text-xs font-semibold transition">
+                💾 บันทึกลิงก์และซิงก์ข้อมูล
+              </button>
+              <button type="button" id="btnResetToDefaultData" class="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-heading text-xs font-medium transition">
+                🔄 รีเซ็ตเป็นค่าเริ่มต้นของระบบ
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right 6 cols: Add New Competition or School on the fly -->
+        <div class="lg:col-span-6 space-y-6">
+          <!-- Add New Competition Box -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+            <div>
+              <h2 class="text-lg font-bold font-heading text-slate-900">➕ เพิ่มรายการแข่งขันใหม่</h2>
+              <p class="text-xs text-slate-500">เมื่อคุณครูได้รายการแข่งขันเพิ่มเติม สามารถกรอกเพิ่มที่นี่ หรือไปเพิ่มในแผ่นงาน <code>Competitions</code> ของ Google Sheets ได้เลยครับ</p>
+            </div>
+            <form id="addCompForm" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-slate-700 mb-1">รหัสรายการ *</label>
+                  <input type="text" id="newCompId" required placeholder="เช่น TH-10" class="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-sm" />
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="block text-xs font-medium text-slate-700 mb-1">กลุ่มสาระการเรียนรู้ *</label>
+                  <input type="text" id="newCompArea" required list="learningAreaList" placeholder="เช่น ภาษาไทย, คณิตศาสตร์, ปฐมวัย" class="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-sm" />
+                  <datalist id="learningAreaList"></datalist>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">ชื่อรายการแข่งขัน *</label>
+                <input type="text" id="newCompName" required placeholder="เช่น การแข่งขันคัดลายมือสื่อภาษาไทย" class="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-sm" />
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-slate-700 mb-1">ระดับช่วงชั้น *</label>
+                  <select id="newCompLevel" class="w-full rounded-xl border border-slate-300 px-2.5 py-1.5 text-sm bg-white">
+                    <option value="ปฐมวัย">ปฐมวัย</option>
+                    <option value="ป.1–ป.3">ป.1–ป.3</option>
+                    <option value="ป.4–ป.6">ป.4–ป.6</option>
+                    <option value="ป.1–ป.6">ป.1–ป.6</option>
+                    <option value="ป.1–ม.3">ป.1–ม.3</option>
+                    <option value="ป.1–ม.3 (ขยายโอกาส)">ป.1–ม.3 (ขยายโอกาส)</option>
+                    <option value="ม.1–ม.3">ม.1–ม.3</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-700 mb-1">ประเภท *</label>
+                  <select id="newCompType" class="w-full rounded-xl border border-slate-300 px-2.5 py-1.5 text-sm bg-white">
+                    <option value="เดี่ยว">เดี่ยว</option>
+                    <option value="ทีม">ทีม</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-700 mb-1">จำนวนนักเรียนสูงสุด</label>
+                  <input type="number" id="newCompMaxStu" min="1" max="30" value="1" class="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-sm" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-700 mb-1">จำนวนครูสูงสุด</label>
+                  <input type="number" id="newCompMaxTch" min="1" max="10" value="1" class="w-full rounded-xl border border-slate-300 px-3 py-1.5 text-sm" />
+                </div>
+              </div>
+              <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-semibold transition">
+                + บันทึกรายการแข่งขันใหม่
+              </button>
+            </form>
+          </div>
+
+          <!-- Add New School Box -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+            <h2 class="text-base font-bold font-heading text-slate-900">🏫 เพิ่มรายชื่อโรงเรียนเพิ่มเติม</h2>
+            <form id="addSchoolForm" class="flex flex-col sm:flex-row gap-2">
+              <input type="text" id="newSchoolName" required placeholder="พิมพ์ชื่อโรงเรียน เช่น โรงเรียนบ้าน..." class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+              <input type="text" id="newSchoolSubdistrict" placeholder="ตำบล (เช่น ต.วังยาว)" class="sm:w-40 rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+              <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-heading text-xs font-semibold shrink-0 transition">
+                + เพิ่มโรงเรียน
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 mt-10 py-4 text-center text-xs text-slate-500 no-print">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <span>ระบบลงทะเบียนและแดชบอร์ด งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 • กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</span>
+      <span>สพป.มหาสารคาม เขต 3 • เชื่อมต่อฐานข้อมูล Google Sheets</span>
+    </div>
+  </footer>
+
+  <script src="js/mock-data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

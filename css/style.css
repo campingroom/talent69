@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap');
+
+:root {
+  --font-heading: 'Prompt', sans-serif;
+  --font-body: 'Sarabun', sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: var(--font-heading);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Tab active indicator */
+.nav-tab-btn {
+  transition: all 0.2s ease;
+}
+.nav-tab-btn.active {
+  background-color: #1e40af;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.25);
+}
+
+/* Smooth highlight animation when new registration is added */
+@keyframes pulseHighlight {
+  0% { background-color: #fef08a; }
+  100% { background-color: transparent; }
+}
+.row-new-highlight {
+  animation: pulseHighlight 2.5s ease-out;
+}
+
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background-color: #ffffff !important;
+  }
+  .print-container {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+}
