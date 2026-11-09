@@ -2,18 +2,11 @@
  * ระบบลงทะเบียนและแดชบอร์ด งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569
  * กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (สพป.มหาสารคาม เขต 3)
  *
- * วิธีติดตั้ง:
- * 1. เปิดไฟล์ Google Sheets: https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit
- * 2. ไปที่เมนู "ส่วนขยาย (Extensions)" > "Apps Script"
- * 3. วางโค้ดนี้ทั้งหมดทับลงในไฟล์ Code.gs แล้วกดปุ่มบันทึก (รูปแผ่นดิสก์)
- * 4. กดปุ่ม "การทำให้ใช้งานได้ (Deploy)" > "การทำให้ใช้งานได้รายการใหม่ (New deployment)"
- * 5. เลือกประเภทเป็น "เว็บแอป (Web app)"
- *    - ดำเนินการในฐานะ (Execute as): "ฉัน (Me)"
- *    - ผู้ที่มีสิทธิ์เข้าถึง (Who has access): "ทุกคน (Anyone)"
- * 6. คัดลอก URL ของเว็บแอป (ลงท้ายด้วย /exec) มาใส่ในปุ่ม "เชื่อมต่อ Google Sheets" บนหน้าเว็บ
+ * รองรับระบบตรวจสอบสิทธิ์แอดมิน (Admin PIN) และการยืนยันตัวตนด้วยเบอร์โทรผู้ประสานงานเมื่อแก้ไขรายชื่อ
  */
 
 const SPREADSHEET_ID = '1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ';
+const DEFAULT_ADMIN_PIN = '7469';
 
 function getSpreadsheet_() {
   try {
@@ -29,8 +22,31 @@ function jsonResponse_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+function getAdminPin_() {
+  const props = PropertiesService.getScriptProperties();
+  return props.getProperty('ADMIN_PIN') || DEFAULT_ADMIN_PIN;
+}
+
+function isRegistrationOpen_() {
+  const props = PropertiesService.getScriptProperties();
+  const val = props.getProperty('REGISTRATION_OPEN');
+  return val === null ? true : val === 'true';
+}
+
+function verifyAdminPin_(pin) {
+  if (!pin) return false;
+  return String(pin).trim() === String(getAdminPin_()).trim();
+}
+
+function verifyPhoneMatch_(savedPhone, verifyInput) {
+  const cleanSaved = String(savedPhone || '').replace(/\D/g, '');
+  const cleanInput = String(verifyInput || '').replace(/\D/g, '');
+  if (!cleanSaved || !cleanInput || cleanInput.length < 4) return false;
+  return cleanSaved === cleanInput || cleanSaved.slice(-4) === cleanInput.slice(-4);
+}
+
 /**
- * ดึงข้อมูลทั้งหมด (Schools, Competitions, Registrations) ส่งกลับให้หน้าเว็บ
+ * ดึงข้อมูลทั้งหมด (Schools, Competitions, Registrations, Config) ส่งกลับให้หน้าเว็บ
  */
 function doGet(e) {
   try {
@@ -42,6 +58,9 @@ function doGet(e) {
     return jsonResponse_({
       ok: true,
       updatedAt: new Date().toISOString(),
+      config: {
+        registrationOpen: isRegistrationOpen_()
+      },
       schools: schools,
       competitions: competitions,
       registrations: registrations
@@ -55,7 +74,7 @@ function doGet(e) {
 }
 
 /**
- * รับคำสั่งบันทึกข้อมูลจากหน้าเว็บ (ลงทะเบียนใหม่, แก้ไขรายชื่อเดิม, ลบใบสมัคร, เพิ่มรายการแข่งขัน)
+ * รับคำสั่งบันทึกข้อมูลจากหน้าเว็บ พร้อมตรวจสอบสิทธิ์แอดมิน/ผู้ประสานงาน
  */
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -65,10 +84,26 @@ function doPost(e) {
     const body = JSON.parse(rawBody);
     const action = body.action || 'register';
     const ss = getSpreadsheet_();
+    const isAdmin = verifyAdminPin_(body.admin_pin);
+
+    if (action === 'verify_admin') {
+      return jsonResponse_({ ok: isAdmin, error: isAdmin ? null : 'รหัสแอดมินไม่ถูกต้อง' });
+    }
 
     if (action === 'register') {
-      return handleRegister_(ss, body);
-    } else if (action === 'delete_registration') {
+      return handleRegister_(ss, body, isAdmin);
+    }
+
+    // คำสั่งต่อไปนี้อนุญาตเฉพาะแอดมินเท่านั้น
+    if (!isAdmin) {
+      return jsonResponse_({
+        ok: false,
+        code: 'UNAUTHORIZED_ADMIN',
+        error: 'คำสั่งนี้ต้องใช้สิทธิ์แอดมินเท่านั้น กรุณาเข้าสู่ระบบแอดมินก่อนดำเนินการ'
+      });
+    }
+
+    if (action === 'delete_registration') {
       return handleDeleteRegistration_(ss, body.reg_id);
     } else if (action === 'clear_sample_data') {
       return handleClearSampleData_(ss);
@@ -76,6 +111,19 @@ function doPost(e) {
       return handleAddCompetition_(ss, body.competition);
     } else if (action === 'add_school') {
       return handleAddSchool_(ss, body.school);
+    } else if (action === 'set_registration_status') {
+      PropertiesService.getScriptProperties().setProperty(
+        'REGISTRATION_OPEN',
+        body.registrationOpen ? 'true' : 'false'
+      );
+      return jsonResponse_({ ok: true, registrationOpen: Boolean(body.registrationOpen) });
+    } else if (action === 'change_admin_pin') {
+      const newPin = String(body.new_pin || '').trim();
+      if (newPin.length < 4) {
+        return jsonResponse_({ ok: false, error: 'รหัสแอดมินต้องมีอย่างน้อย 4 ตัวอักษร' });
+      }
+      PropertiesService.getScriptProperties().setProperty('ADMIN_PIN', newPin);
+      return jsonResponse_({ ok: true });
     }
 
     return jsonResponse_({ ok: false, error: 'ไม่รู้จักคำสั่ง: ' + action });
@@ -89,7 +137,14 @@ function doPost(e) {
   }
 }
 
-function handleRegister_(ss, body) {
+function handleRegister_(ss, body, isAdmin) {
+  if (!isRegistrationOpen_() && !isAdmin) {
+    return jsonResponse_({
+      ok: false,
+      error: 'ขณะนี้ระบบปิดรับสมัครแล้ว หากต้องการแก้ไขข้อมูลกรุณาติดต่อแอดมินกลุ่มโรงเรียน'
+    });
+  }
+
   const regSheet = ss.getSheetByName('Registrations');
   const data = regSheet.getDataRange().getValues();
   const schoolName = String(body.school_name || '').trim();
@@ -103,22 +158,38 @@ function handleRegister_(ss, body) {
   // ตรวจกฎเหล็ก: 1 โรงเรียน ส่งได้แค่ 1 ทีม ต่อ 1 รายการแข่งขัน
   let existingRowIndex = -1;
   let existingRegId = '';
+  let existingPhone = '';
+  let existingStatus = '';
   for (let i = 1; i < data.length; i++) {
     const rowSchool = String(data[i][2] || '').trim();
     const rowCompId = String(data[i][3] || '').trim();
     if (rowSchool === schoolName && rowCompId === compId) {
-      existingRowIndex = i + 1; // 1-based row number in Sheet
+      existingRowIndex = i + 1;
       existingRegId = String(data[i][0] || '');
+      existingPhone = String(data[i][12] || '');
+      existingStatus = String(data[i][13] || '');
       break;
     }
   }
 
-  if (existingRowIndex !== -1 && !allowOverwrite) {
-    return jsonResponse_({
-      ok: false,
-      code: 'DUPLICATE_ENTRY',
-      error: 'โรงเรียนนี้ได้ลงทะเบียนรายการนี้ไปแล้ว (กติกา: 1 โรงเรียน ส่งได้ 1 ทีมต่อรายการ)'
-    });
+  if (existingRowIndex !== -1) {
+    if (!allowOverwrite) {
+      return jsonResponse_({
+        ok: false,
+        code: 'DUPLICATE_ENTRY',
+        error: 'โรงเรียนนี้ได้ลงทะเบียนรายการนี้ไปแล้ว (กติกา: 1 โรงเรียน ส่งได้ 1 ทีมต่อรายการ)'
+      });
+    }
+    // ตรวจสอบสิทธิ์การแก้ไขรายชื่อเดิม: ต้องเป็นแอดมิน หรือเป็นข้อมูลตัวอย่าง หรือยืนยันเบอร์โทรผู้ประสานงานตรงกัน
+    const isSampleRow = existingStatus.indexOf('ตัวอย่าง') !== -1;
+    const phoneVerified = verifyPhoneMatch_(existingPhone, body.edit_verify_token || body.coordinator_phone);
+    if (!isAdmin && !isSampleRow && !phoneVerified) {
+      return jsonResponse_({
+        ok: false,
+        code: 'EDIT_VERIFY_FAILED',
+        error: 'เบอร์โทรศัพท์ผู้ประสานงานไม่ตรงกับที่ใช้ลงทะเบียนไว้ ไม่สามารถแก้ไขทับได้'
+      });
+    }
   }
 
   const students = Array.isArray(body.students) ? body.students : [];
