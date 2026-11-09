@@ -43,7 +43,9 @@
     calendar:
       '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
     award:
-      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>'
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>',
+    table:
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>'
   };
 
   let state = {
@@ -292,6 +294,7 @@
     const headerSheetLink = document.getElementById('headerSheetLink');
     const navTabSettings = document.getElementById('navTabSettings');
     const btnClearSamplesQuick = document.getElementById('btnClearSamplesQuick');
+    const btnClearSamplesAdmin = document.getElementById('btnClearSamplesAdmin');
     const btnAdminToggle = document.getElementById('btnAdminToggle');
     const adminBtnText = document.getElementById('adminBtnText');
     const adminAddJudgeCard = document.getElementById('adminAddJudgeCard');
@@ -316,14 +319,33 @@
       }
     }
 
+    // Dynamic Sample Button State (Smart Toggle: ล้างข้อมูลตัวอย่าง ⇄ สร้างข้อมูลตัวอย่างทดสอบ)
+    const sampleCount = state.registrations.filter(
+      (r) => String(r.status || '').indexOf('ตัวอย่าง') !== -1
+    ).length;
+    const hasSamples = sampleCount > 0;
+    const sampleBtnLabel = hasSamples
+      ? 'ล้างข้อมูลตัวอย่าง (' + sampleCount + ')'
+      : 'สร้างข้อมูลตัวอย่างทดสอบ';
+    const sampleBtnIcon = hasSamples ? ICONS.trash : ICONS.plus;
+    const sampleBtnBaseCls =
+      'items-center gap-1.5 px-3.5 py-2 rounded-lg font-heading text-xs font-medium transition ';
+    const sampleBtnColorCls = hasSamples
+      ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
+      : 'bg-[#EDF3EC] hover:bg-[#E2EDE0] text-[#448361] border border-[#D7E6D5]';
+
     if (btnClearSamplesQuick) {
       if (state.isAdmin) {
-        btnClearSamplesQuick.classList.remove('hidden');
-        btnClearSamplesQuick.classList.add('inline-flex');
+        btnClearSamplesQuick.className = 'inline-flex ' + sampleBtnBaseCls + sampleBtnColorCls;
+        btnClearSamplesQuick.innerHTML = sampleBtnIcon + '<span>' + escapeHtml(sampleBtnLabel) + '</span>';
       } else {
-        btnClearSamplesQuick.classList.add('hidden');
-        btnClearSamplesQuick.classList.remove('inline-flex');
+        btnClearSamplesQuick.className = 'hidden ' + sampleBtnBaseCls + sampleBtnColorCls;
       }
+    }
+
+    if (btnClearSamplesAdmin) {
+      btnClearSamplesAdmin.className = 'inline-flex ' + sampleBtnBaseCls + sampleBtnColorCls;
+      btnClearSamplesAdmin.innerHTML = sampleBtnIcon + '<span>' + escapeHtml(sampleBtnLabel) + '</span>';
     }
 
     if (adminAddJudgeCard) {
@@ -1301,34 +1323,64 @@
     showToast('ลบรายการลงทะเบียนเรียบร้อยแล้ว', 'warning');
   }
 
-  async function clearSampleData() {
+  async function handleSampleDataToggle() {
     if (!state.isAdmin) {
-      showToast('เฉพาะแอดมินเท่านั้นที่สามารถล้างข้อมูลตัวอย่างได้', 'error');
+      showToast('เฉพาะแอดมินเท่านั้นที่สามารถจัดการข้อมูลตัวอย่างได้', 'error');
       return;
     }
     const sampleCount = state.registrations.filter(
       (r) => String(r.status || '').indexOf('ตัวอย่าง') !== -1
     ).length;
-    if (sampleCount === 0) {
-      showToast('ไม่มีข้อมูลตัวอย่างค้างอยู่ในระบบแล้ว', 'warning');
-      return;
-    }
-    const ok = window.confirm(
-      'ต้องการล้างข้อมูลตัวอย่างจำลองทั้ง ' +
-        sampleCount +
-        ' รายการ ออกจากระบบ (ข้อมูลที่ครูลงทะเบียนจริงจะไม่ถูกลบ) ใช่หรือไม่?'
-    );
-    if (!ok) return;
 
-    state.registrations = state.registrations.filter(
-      (r) => String(r.status || '').indexOf('ตัวอย่าง') === -1
-    );
-    saveState();
-    await postToGoogleSheets({ action: 'clear_sample_data', admin_pin: state.adminPin });
-    populateRegCompetitionOptions();
-    renderAll();
-    showToast('ล้างข้อมูลตัวอย่างเรียบร้อยแล้ว พร้อมรับสมัครจริง', 'success');
+    if (sampleCount > 0) {
+      // 1. ล้างข้อมูลตัวอย่าง (ลบเฉพาะแถวที่มีคำว่า "ตัวอย่าง" ข้อมูลครูลงทะเบียนจริงไม่หาย)
+      const ok = window.confirm(
+        'ต้องการล้างข้อมูลตัวอย่างจำลองทั้ง ' +
+          sampleCount +
+          ' รายการ ออกจากระบบ (ข้อมูลที่ครูลงทะเบียนจริงจะไม่ถูกลบ) ใช่หรือไม่?'
+      );
+      if (!ok) return;
+
+      state.registrations = state.registrations.filter(
+        (r) => String(r.status || '').indexOf('ตัวอย่าง') === -1
+      );
+      saveState();
+      await postToGoogleSheets({ action: 'clear_sample_data', admin_pin: state.adminPin });
+      populateRegCompetitionOptions();
+      renderAll();
+      showToast('ล้างข้อมูลตัวอย่างเรียบร้อยแล้ว พร้อมรับสมัครจริง', 'success');
+    } else {
+      // 2. สร้างข้อมูลตัวอย่างขึ้นมาใหม่สำหรับทดสอบระบบ
+      const ok = window.confirm(
+        'ต้องการสร้างข้อมูลตัวอย่างจำลองสำหรับทดสอบระบบ ใช่หรือไม่?\n(ข้อมูลตัวอย่างจะถูกระบุสถานะเป็น "ข้อมูลตัวอย่าง" ชัดเจน และสามารถกดล้างออกได้ตลอดเวลา)'
+      );
+      if (!ok) return;
+
+      const samples = cloneDeep(DEFAULT_DATA.sampleRegistrations || []);
+      if (samples.length === 0) {
+        showToast('ไม่พบชุดข้อมูลตัวอย่างตั้งต้น', 'error');
+        return;
+      }
+      const existingIds = new Set(state.registrations.map((r) => r.reg_id));
+      const toAdd = samples.map(function (s, idx) {
+        let newId = s.reg_id;
+        if (existingIds.has(newId)) {
+          newId = 'REG-74-SAMPLE-' + (idx + 1);
+        }
+        return Object.assign({}, s, {
+          reg_id: newId,
+          status: 'ข้อมูลตัวอย่าง'
+        });
+      });
+
+      state.registrations = state.registrations.concat(toAdd);
+      saveState();
+      populateRegCompetitionOptions();
+      renderAll();
+      showToast('สร้างข้อมูลตัวอย่าง ' + toAdd.length + ' รายการเรียบร้อยแล้ว', 'success');
+    }
   }
+  const clearSampleData = handleSampleDataToggle;
 
   // ==========================================
   // RENDER TAB 1: OVERALL DASHBOARD
@@ -1368,10 +1420,31 @@
     ).length;
     const sampleBanner = document.getElementById('sampleDataBanner');
     const sampleCountText = document.getElementById('sampleCountText');
+    const sampleBannerTitle = document.getElementById('sampleBannerTitle');
+    const sampleBannerSubtitle = document.getElementById('sampleBannerSubtitle');
     if (sampleBanner) {
       if (sampleCount > 0) {
         sampleBanner.classList.remove('hidden');
         if (sampleCountText) sampleCountText.textContent = String(sampleCount);
+        if (sampleBannerTitle) {
+          sampleBannerTitle.innerHTML =
+            'ขณะนี้มีข้อมูลตัวอย่างจำลอง (<span id="sampleCountText">' +
+            sampleCount +
+            '</span> รายการ) เพื่อแสดงตัวอย่างแดชบอร์ด';
+        }
+        if (sampleBannerSubtitle) {
+          sampleBannerSubtitle.textContent =
+            'ครูแต่ละโรงเรียนสามารถกดลงทะเบียนส่งรายชื่อได้ทันที (แอดมินสามารถกดล้างข้อมูลตัวอย่างออกได้ในโหมดแอดมิน)';
+        }
+      } else if (state.isAdmin) {
+        sampleBanner.classList.remove('hidden');
+        if (sampleBannerTitle) {
+          sampleBannerTitle.textContent = 'ระบบพร้อมรับสมัครจริง (ไม่มีข้อมูลตัวอย่างค้างในระบบ)';
+        }
+        if (sampleBannerSubtitle) {
+          sampleBannerSubtitle.textContent =
+            'แอดมินสามารถคลิกปุ่มด้านขวาเพื่อสร้างข้อมูลตัวอย่างจำลองสำหรับใช้ทดสอบฟังก์ชันต่าง ๆ ได้ตลอดเวลา';
+        }
       } else {
         sampleBanner.classList.add('hidden');
       }
@@ -2090,6 +2163,14 @@
             '</tbody></table></div>';
         }
 
+        const exportCompExcelBtnHtml = hasRegs
+          ? '<button type="button" data-export-comp-excel="' +
+            escapeHtml(c.comp_id) +
+            '" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] font-heading text-xs font-medium transition">' +
+            ICONS.table +
+            '<span>ดาวน์โหลด Excel</span></button>'
+          : '';
+
         const printCheckinBtnHtml = hasRegs
           ? '<button type="button" data-print-checkin="' +
             escapeHtml(c.comp_id) +
@@ -2149,6 +2230,7 @@
           '</div>' +
           '<div class="flex flex-wrap items-center gap-2 shrink-0">' +
           badgeHtml +
+          exportCompExcelBtnHtml +
           printCheckinBtnHtml +
           adminBtnsHtml +
           '<button type="button" data-quick-register="' +
@@ -2186,6 +2268,12 @@
     container.querySelectorAll('[data-print-checkin]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         printCompetitionCheckinSheet(btn.getAttribute('data-print-checkin'));
+      });
+    });
+
+    container.querySelectorAll('[data-export-comp-excel]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        exportCompetitionExcel(btn.getAttribute('data-export-comp-excel'));
       });
     });
 
@@ -2466,6 +2554,129 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast('ดาวน์โหลดไฟล์ Excel เรียบร้อยแล้ว', 'success');
+  }
+
+  // Export one competition's registrations as .xlsx (specific competition)
+  async function exportCompetitionExcel(compId) {
+    if (!compId) return;
+    const comp = state.competitions.find((c) => c.comp_id === compId);
+    if (!comp) {
+      showToast('ไม่พบข้อมูลรายการแข่งขัน', 'error');
+      return;
+    }
+    const regs = state.registrations.filter((r) => r.comp_id === compId);
+    if (regs.length === 0) {
+      showToast('ยังไม่มีโรงเรียนลงทะเบียนในรายการนี้', 'warning');
+      return;
+    }
+
+    let ExcelJS;
+    try {
+      ExcelJS = await loadExcelJs();
+    } catch (err) {
+      showToast(err.message, 'error');
+      return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const sheetTitle = (comp.comp_id || 'รายการ').substring(0, 31);
+    const ws = wb.addWorksheet(sheetTitle);
+    ws.columns = [
+      { width: 6 },   // ลำดับ
+      { width: 34 },  // โรงเรียน
+      { width: 14 },  // ตำบล
+      { width: 32 },  // รายชื่อนักเรียนผู้เข้าแข่งขัน
+      { width: 12 },  // ระดับชั้น
+      { width: 32 }   // รายชื่อครูผู้ฝึกซ้อม
+    ];
+
+    const titles = [
+      'รายการกิจกรรมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง ปีการศึกษา 2569',
+      'รายการแข่งขัน: [' + comp.comp_id + '] ' + comp.comp_name + ' (ระดับ ' + comp.level + ' • ประเภท' + comp.team_type + ')',
+      'ณ โรงเรียนบ้านวังยาววิทยายน'
+    ];
+    titles.forEach(function (t, i) {
+      ws.mergeCells(i + 1, 1, i + 1, 6);
+      const cell = ws.getCell(i + 1, 1);
+      cell.value = t;
+      cell.font = { bold: true, size: i === 0 ? 14 : 12 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    const thin = { style: 'thin' };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const header = ws.getRow(4);
+    ['ที่', 'โรงเรียน', 'ตำบล', 'ชื่อ - สกุล นักเรียนผู้เข้าแข่งขัน', 'ระดับชั้น', 'ชื่อ - สกุล ครูผู้ฝึกซ้อม'].forEach(
+      function (h, i) {
+        const c = header.getCell(i + 1);
+        c.value = h;
+        c.font = { bold: true };
+        c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        c.border = border;
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F1EF' } };
+      }
+    );
+
+    let rowNo = 5;
+    regs.forEach(function (r, idx) {
+      const sch = state.schools.find((s) => s.school_name === r.school_name);
+      const subdistrict = sch ? sch.subdistrict : '';
+      const students = r.students || [];
+      const teachers = r.teachers || [];
+      const lines = Math.max(students.length, teachers.length, 1);
+
+      for (let i = 0; i < lines; i++) {
+        const row = ws.getRow(rowNo++);
+        const s = students[i];
+        const t = teachers[i];
+        const vals =
+          i === 0
+            ? [
+                idx + 1,
+                r.school_name,
+                subdistrict,
+                s ? s.prefix + s.name : '',
+                s ? s.grade : '',
+                t ? t.prefix + t.name : ''
+              ]
+            : [
+                null,
+                null,
+                null,
+                s ? s.prefix + s.name : '',
+                s ? s.grade : '',
+                t ? t.prefix + t.name : null
+              ];
+
+        vals.forEach(function (v, ci) {
+          const c = row.getCell(ci + 1);
+          c.value = v;
+          c.border = border;
+          c.alignment = {
+            vertical: 'top',
+            wrapText: true,
+            horizontal: ci === 0 || ci === 2 || ci === 4 ? 'center' : 'left'
+          };
+        });
+      }
+    });
+
+    const safeCompName = comp.comp_name.replace(/[/\\?%*:|"<>]/g, '_');
+    const filename = 'ศิลปหัตถกรรมครั้งที่74_' + comp.comp_id + '_' + safeCompName + '.xlsx';
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดไฟล์ Excel รายการแข่งขันเรียบร้อยแล้ว', 'success');
   }
 
   // Admin Tool: Export 1-Person-Per-Row CSV for Canva / Word Certificate Mail Merge
