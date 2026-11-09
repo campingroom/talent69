@@ -1,12 +1,13 @@
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'talent69_wangyao_state_v3';
+  const STORAGE_KEY = 'talent69_wangyao_state_v4';
   const GAS_URL_KEY = 'talent69_wangyao_gas_url_v1';
   const ADMIN_PIN_KEY = 'talent69_wangyao_admin_pin_v1';
   const ADMIN_SESSION_KEY = 'talent69_wangyao_admin_session_v1';
   const REG_OPEN_KEY = 'talent69_wangyao_reg_open_v1';
   const DEFAULT_ADMIN_PIN = '7469';
+  const ENABLE_PHASE_2 = false;
   const DEFAULT_GAS_WEB_APP_URL =
     'https://script.google.com/macros/s/AKfycbxMnn_WoMLx83wa--6WcYMgBEmR1sqoxyKST1RxLaxFEHaEWjjuBQB1j47vd4U83eCqoQ/exec';
 
@@ -1378,7 +1379,9 @@
 
     // Set KPI numbers
     const totalJudges = state.judges.length;
-    const grandTotalPeople = totalStudents + totalTeachers + totalJudges;
+    const grandTotalPeople = ENABLE_PHASE_2
+      ? totalStudents + totalTeachers + totalJudges
+      : totalStudents + totalTeachers;
     document.getElementById('kpiTotalComp').textContent = String(totalComp);
     document.getElementById('kpiRegComp').textContent = String(regCompCount);
     document.getElementById('kpiRegCompPct').textContent = regPct + '%';
@@ -1839,15 +1842,20 @@
         const medal = r.medal || calculateMedalFromScore(r.score);
         const award = r.award_title || getAwardTitleFromRank(r.rank, r.score);
         const hasScore = r.score !== null && r.score !== undefined && r.score !== '';
-        const resultCellHtml = hasScore
-          ? '<div class="font-heading font-bold text-[#37352F]">' +
-            Number(r.score).toFixed(2) +
-            ' คะแนน</div>' +
-            '<div class="mt-0.5">' +
-            renderMedalBadgeHtml(medal) +
-            '</div>' +
-            (award ? '<div class="text-[11px] font-heading font-semibold text-emerald-700 mt-0.5">' + escapeHtml(award) + '</div>' : '')
-          : '<span class="text-xs text-[#787774]">รอประกาศผล</span>';
+        const statusBadgeHtml = r.is_sample
+          ? '<span class="px-2.5 py-0.5 rounded-full bg-[#FBF3DB] text-[#CB912F] text-xs font-heading">ข้อมูลตัวอย่าง</span>'
+          : '<span class="px-2.5 py-0.5 rounded-full bg-[#EDF3EC] text-[#448361] text-xs font-heading">ลงทะเบียนแล้ว</span>';
+        const resultCellHtml = ENABLE_PHASE_2
+          ? hasScore
+            ? '<div class="font-heading font-bold text-[#37352F]">' +
+              Number(r.score).toFixed(2) +
+              ' คะแนน</div>' +
+              '<div class="mt-0.5">' +
+              renderMedalBadgeHtml(medal) +
+              '</div>' +
+              (award ? '<div class="text-[11px] font-heading font-semibold text-emerald-700 mt-0.5">' + escapeHtml(award) + '</div>' : '')
+            : '<span class="text-xs text-[#787774]">รอประกาศผล</span>'
+          : statusBadgeHtml;
 
         const deleteBtnHtml = state.isAdmin
           ? '<button type="button" data-sch-del="' +
@@ -1855,6 +1863,10 @@
             '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
             ICONS.trash +
             '<span>ลบ</span></button>'
+          : '';
+
+        const roomSubHtml = ENABLE_PHASE_2
+          ? '<div class="text-[11px] text-[#787774] mt-0.5">' + escapeHtml(roomInfo) + '</div>'
           : '';
 
         return (
@@ -1876,9 +1888,7 @@
           ' <span class="text-xs font-normal text-[#787774]">(' +
           escapeHtml(r.team_type) +
           ')</span></div>' +
-          '<div class="text-[11px] text-[#787774] mt-0.5">' +
-          escapeHtml(roomInfo) +
-          '</div>' +
+          roomSubHtml +
           '</td>' +
           '<td class="py-3 px-2 text-center">' +
           '<span class="px-2.5 py-0.5 rounded-md bg-[#F1F1EF] text-[#37352F] text-xs font-heading whitespace-nowrap">' +
@@ -2017,6 +2027,7 @@
 
         let schoolsTableHtml = '';
         if (hasRegs) {
+          const scoreHeaderHtml = ENABLE_PHASE_2 ? '<th class="py-2 px-2 text-center">ผลคะแนน</th>' : '';
           schoolsTableHtml =
             '<div class="mt-3 pt-3 border-t border-slate-100 overflow-x-auto">' +
             '<table class="w-full text-xs text-left">' +
@@ -2026,7 +2037,7 @@
             '<th class="py-2 px-3">โรงเรียนที่ส่งเข้าแข่งขัน</th>' +
             '<th class="py-2 px-3">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>' +
             '<th class="py-2 px-3">ครูผู้ฝึกซ้อม</th>' +
-            '<th class="py-2 px-2 text-center">ผลคะแนน</th>' +
+            scoreHeaderHtml +
             '<th class="py-2 px-2 text-right">จัดการ</th>' +
             '</tr>' +
             '</thead>' +
@@ -2047,6 +2058,9 @@
                       '</div>' +
                       renderMedalBadgeHtml(medal)
                     : '<span class="text-slate-400">รอผล</span>';
+                const scoreTdHtml = ENABLE_PHASE_2
+                  ? '<td class="py-2 px-2 text-center">' + scoreHtml + '</td>'
+                  : '';
                 return (
                   '<tr>' +
                   '<td class="py-2 px-3 font-heading text-[#787774]">' +
@@ -2061,9 +2075,7 @@
                   '<td class="py-2 px-3 text-[#787774]">' +
                   tchText +
                   '</td>' +
-                  '<td class="py-2 px-2 text-center">' +
-                  scoreHtml +
-                  '</td>' +
+                  scoreTdHtml +
                   '<td class="py-2 px-2 text-right">' +
                   '<button type="button" data-comp-edit-reg="' +
                   escapeHtml(r.reg_id) +
@@ -2086,19 +2098,28 @@
             '<span>ใบลงชื่อหน้าห้อง</span></button>'
           : '';
 
-        const adminBtnsHtml = state.isAdmin
-          ? '<button type="button" data-open-schedule="' +
-            escapeHtml(c.comp_id) +
-            '" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading text-xs font-medium transition">' +
+        const adminBtnsHtml =
+          ENABLE_PHASE_2 && state.isAdmin
+            ? '<button type="button" data-open-schedule="' +
+              escapeHtml(c.comp_id) +
+              '" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading text-xs font-medium transition">' +
+              ICONS.calendar +
+              '<span>ตั้งค่าห้องสอบ</span></button>' +
+              (hasRegs
+                ? '<button type="button" data-open-score="' +
+                  escapeHtml(c.comp_id) +
+                  '" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-heading text-xs font-medium transition">' +
+                  ICONS.award +
+                  '<span>บันทึกคะแนน</span></button>'
+                : '')
+            : '';
+
+        const scheduleInfoLineHtml = ENABLE_PHASE_2
+          ? '<div class="inline-flex items-center gap-1.5 text-xs text-[#787774]">' +
             ICONS.calendar +
-            '<span>ตั้งค่าห้องสอบ</span></button>' +
-            (hasRegs
-              ? '<button type="button" data-open-score="' +
-                escapeHtml(c.comp_id) +
-                '" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-heading text-xs font-medium transition">' +
-                ICONS.award +
-                '<span>บันทึกคะแนน</span></button>'
-              : '')
+            '<span>' +
+            escapeHtml(scheduleInfo) +
+            '</span></div>'
           : '';
 
         return (
@@ -2124,11 +2145,7 @@
           '<h3 class="text-base font-bold font-heading text-[#37352F]">' +
           escapeHtml(c.comp_name) +
           '</h3>' +
-          '<div class="inline-flex items-center gap-1.5 text-xs text-[#787774]">' +
-          ICONS.calendar +
-          '<span>' +
-          escapeHtml(scheduleInfo) +
-          '</span></div>' +
+          scheduleInfoLineHtml +
           '</div>' +
           '<div class="flex flex-wrap items-center gap-2 shrink-0">' +
           badgeHtml +

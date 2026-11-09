@@ -118,24 +118,24 @@
           <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
-          <span>รายการ / ตารางสถานที่</span>
+          <span>ดูรายรายการแข่งขัน</span>
         </button>
 
-        <button type="button" data-tab="judges" class="nav-tab-btn px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+        <button type="button" data-tab="judges" class="nav-tab-btn phase2-only hidden px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium items-center gap-2 text-slate-600 hover:bg-slate-100">
           <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           <span>กรรมการตัดสิน</span>
         </button>
 
-        <button type="button" data-tab="results" class="nav-tab-btn px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+        <button type="button" data-tab="results" class="nav-tab-btn phase2-only hidden px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium items-center gap-2 text-slate-600 hover:bg-slate-100">
           <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8 21h8m-4-4v4m-5.2-9.6A6 6 0 0112 15a6 6 0 015.2-3.6M6 4h12v3a6 6 0 01-12 0V4zM4 4h2v3a3 3 0 01-3-3h1zm16 0h-2v3a3 3 0 003-3h-1z" />
           </svg>
           <span>ผลการแข่งขัน / เหรียญรางวัล</span>
         </button>
 
-        <button type="button" data-tab="certificates" class="nav-tab-btn px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+        <button type="button" data-tab="certificates" class="nav-tab-btn phase2-only hidden px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium items-center gap-2 text-slate-600 hover:bg-slate-100">
           <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
           </svg>
@@ -458,24 +458,24 @@
           <p class="text-[11px] text-slate-500 mt-1">นับรวมทุกประเภทเดี่ยวและทีม</p>
         </div>
 
-        <!-- KPI 6: Total Teachers & Judges -->
+        <!-- KPI 6: Total Teachers -->
         <div class="bg-white rounded-xl p-4 border border-slate-200">
           <div class="flex items-center justify-between text-slate-500">
-            <span class="text-xs font-heading font-medium">ครูผู้ฝึกซ้อม / กรรมการ</span>
+            <span class="text-xs font-heading font-medium">ครูผู้ฝึกซ้อม</span>
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
               <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
           <div class="mt-2 flex items-baseline gap-1.5">
             <span id="kpiTotalTeachers" class="text-2xl font-bold font-heading text-slate-900">0</span>
-            <span class="text-xs text-slate-500">ครู • <span id="kpiTotalJudges">0</span> กรรมการ</span>
+            <span class="text-xs text-slate-500">คน<span id="kpiTotalJudges" class="hidden">0</span></span>
           </div>
-          <p class="text-[11px] text-slate-500 mt-1">บุคลากรรวมทั้งสิ้น <span id="kpiGrandTotalPeople">0</span> คน</p>
+          <p class="text-[11px] text-slate-500 mt-1">ผู้เข้าร่วมรวมทั้งสิ้น <span id="kpiGrandTotalPeople">0</span> คน</p>
         </div>
       </div>
 
-      <!-- cm3art-style Highlight Row: Timeline + Score Progress & Medals + QR Share -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <!-- cm3art-style Highlight Row: Timeline + Score Progress & Medals + QR Share (Phase 2 Hidden by Default) -->
+      <div id="phase2DashboardHighlightRow" class="phase2-only hidden grid-cols-1 lg:grid-cols-12 gap-5">
         <!-- Left 5 cols: กำหนดการดำเนินงาน (Operation Timeline) -->
         <div class="lg:col-span-5 bg-white rounded-xl border border-slate-200 p-5 flex flex-col justify-between">
           <div>
@@ -821,7 +821,7 @@
             <button type="button" id="btnRegisterForThisSchool" class="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition">
               ลงทะเบียนเพิ่มให้โรงเรียนนี้
             </button>
-            <button type="button" id="btnPrintSchoolIdCards" class="px-3.5 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition">
+            <button type="button" id="btnPrintSchoolIdCards" class="phase2-only hidden px-3.5 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition">
               พิมพ์บัตรประจำตัวผู้เข้าแข่งขัน
             </button>
             <button type="button" id="btnExportSchoolCsv" class="px-3.5 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition">
@@ -842,7 +842,7 @@
             <h2 id="schoolViewHeaderName" class="text-xl font-bold font-heading text-slate-900 mt-0.5">-</h2>
             <p id="schoolViewHeaderMeta" class="text-xs text-slate-500">-</p>
           </div>
-          <div id="schoolViewMedalSummary" class="flex flex-wrap gap-1.5 text-xs font-heading"></div>
+          <div id="schoolViewMedalSummary" class="phase2-only hidden flex-wrap gap-1.5 text-xs font-heading"></div>
         </div>
 
         <!-- 4 Mini KPI Cards for Selected School -->
@@ -872,11 +872,11 @@
               <tr>
                 <th class="py-2.5 px-3">ลำดับ</th>
                 <th class="py-2.5 px-3">รหัส / หมวดกิจกรรม</th>
-                <th class="py-2.5 px-3">รายการแข่งขัน / ห้องสอบ</th>
+                <th class="py-2.5 px-3">รายการแข่งขัน</th>
                 <th class="py-2.5 px-2 text-center">ระดับช่วงชั้น</th>
                 <th class="py-2.5 px-3">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
                 <th class="py-2.5 px-3">รายชื่อครูผู้ฝึกซ้อม</th>
-                <th class="py-2.5 px-2 text-center">ผลการแข่งขัน</th>
+                <th class="py-2.5 px-2 text-center">สถานะ</th>
                 <th class="py-2.5 px-2 text-right no-print">จัดการ</th>
               </tr>
             </thead>
@@ -887,14 +887,14 @@
     </section>
 
     <!-- ==========================================
-         TAB 4: COMPETITION VIEW (ดูรายรายการ / ตารางสถานที่)
+         TAB 4: COMPETITION VIEW (ดูรายรายการแข่งขัน)
          ========================================== -->
     <section id="tab-competition" class="tab-panel hidden space-y-5">
       <!-- Filter Bar -->
       <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4 no-print">
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <h2 class="text-base font-bold font-heading text-slate-900">รายการแข่งขัน ตารางวันเวลา และสถานที่จัดการแข่งขัน</h2>
+            <h2 class="text-base font-bold font-heading text-slate-900">รายการแข่งขันทั้งหมด (13 หมวดกิจกรรม 149 รายการ)</h2>
             <p class="text-xs text-slate-500">แยกดูตามหมวดกิจกรรม ระดับช่วงชั้น รายการที่มีโรงเรียนสมัครแล้ว หรือรายการที่ยังไม่มีผู้สมัคร พร้อมพิมพ์ใบลงชื่อหน้าห้อง</p>
           </div>
 

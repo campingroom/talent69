@@ -41,28 +41,28 @@ window.TALENT69_DEFAULT_DATA = {
     {
       "school_id": "SCH-05",
       "school_name": "โรงเรียนบ้านโคกกลาง",
-      "subdistrict": "ต.ดอนกลาง",
+      "subdistrict": "ต.เขวาไร่",
       "school_type": "ประถมศึกษา (อ.2–ป.6)",
       "network_group": "กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง"
     },
     {
       "school_id": "SCH-06",
       "school_name": "โรงเรียนบ้านหนองเขื่อน",
-      "subdistrict": "ต.ดอนกลาง",
+      "subdistrict": "ต.เขวาไร่",
       "school_type": "ประถมศึกษา (อ.2–ป.6)",
       "network_group": "กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง"
     },
     {
       "school_id": "SCH-07",
       "school_name": "โรงเรียนบ้านวังกุง",
-      "subdistrict": "ต.วังยาว",
+      "subdistrict": "ต.เขวาไร่",
       "school_type": "ประถมศึกษา (อ.2–ป.6)",
       "network_group": "กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง"
     },
     {
       "school_id": "SCH-08",
       "school_name": "โรงเรียนบ้านวังจาน",
-      "subdistrict": "ต.วังยาว",
+      "subdistrict": "ต.ดอนกลาง",
       "school_type": "ประถมศึกษา (อ.2–ป.6)",
       "network_group": "กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง"
     },
@@ -97,7 +97,7 @@ window.TALENT69_DEFAULT_DATA = {
     {
       "school_id": "SCH-13",
       "school_name": "โรงเรียนหินแห่เสริมศิลป์",
-      "subdistrict": "ต.วังยาว",
+      "subdistrict": "ต.ดอนกลาง",
       "school_type": "ขยายโอกาส (อ.2–ม.3)",
       "network_group": "กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง"
     }
@@ -1917,10 +1917,10 @@ window.TALENT69_DEFAULT_DATA = {
       ],
       "coordinator_phone": "080-000-0001",
       "status": "ข้อมูลตัวอย่าง",
-      "score": 94.5,
-      "medal": "เหรียญทอง",
-      "rank": 1,
-      "award_title": "ชนะเลิศ",
+      "score": "",
+      "medal": "",
+      "rank": "",
+      "award_title": "",
       "cert_code": "WYK74-2569-0001"
     },
     {
@@ -1961,10 +1961,10 @@ window.TALENT69_DEFAULT_DATA = {
       ],
       "coordinator_phone": "080-000-0001",
       "status": "ข้อมูลตัวอย่าง",
-      "score": 91.0,
-      "medal": "เหรียญทอง",
-      "rank": 1,
-      "award_title": "ชนะเลิศ",
+      "score": "",
+      "medal": "",
+      "rank": "",
+      "award_title": "",
       "cert_code": "WYK74-2569-0002"
     },
     {
@@ -1991,10 +1991,10 @@ window.TALENT69_DEFAULT_DATA = {
       ],
       "coordinator_phone": "080-000-0002",
       "status": "ข้อมูลตัวอย่าง",
-      "score": 88.0,
-      "medal": "เหรียญทอง",
-      "rank": 2,
-      "award_title": "รองชนะเลิศอันดับ 1",
+      "score": "",
+      "medal": "",
+      "rank": "",
+      "award_title": "",
       "cert_code": "WYK74-2569-0003"
     },
     {
@@ -2035,10 +2035,10 @@ window.TALENT69_DEFAULT_DATA = {
       ],
       "coordinator_phone": "080-000-0002",
       "status": "ข้อมูลตัวอย่าง",
-      "score": 92.5,
-      "medal": "เหรียญทอง",
-      "rank": 1,
-      "award_title": "ชนะเลิศ",
+      "score": "",
+      "medal": "",
+      "rank": "",
+      "award_title": "",
       "cert_code": "WYK74-2569-0004"
     },
     {
@@ -2065,10 +2065,10 @@ window.TALENT69_DEFAULT_DATA = {
       ],
       "coordinator_phone": "080-000-0003",
       "status": "ข้อมูลตัวอย่าง",
-      "score": 78.5,
-      "medal": "เหรียญเงิน",
-      "rank": 1,
-      "award_title": "ชนะเลิศ",
+      "score": "",
+      "medal": "",
+      "rank": "",
+      "award_title": "",
       "cert_code": "WYK74-2569-0005"
     },
     {
@@ -2095,10 +2095,10 @@ window.TALENT69_DEFAULT_DATA = {
       ],
       "coordinator_phone": "080-000-0004",
       "status": "ข้อมูลตัวอย่าง",
-      "score": 85.0,
-      "medal": "เหรียญทอง",
-      "rank": 1,
-      "award_title": "ชนะเลิศ",
+      "score": "",
+      "medal": "",
+      "rank": "",
+      "award_title": "",
       "cert_code": "WYK74-2569-0006"
     }
   ],
@@ -2199,7 +2199,7 @@ window.TALENT69_DEFAULT_DATA = {
 };
 
 (function enrichDefaultCompetitions() {
-  const publishedSampleIds = { "AC11-MA01": true, "EC09-01": true, "AC11-SC01": true, "AC11-TH01": true, "LO13-03": true };
+  const publishedSampleIds = {};
   if (window.TALENT69_DEFAULT_DATA && Array.isArray(window.TALENT69_DEFAULT_DATA.competitions)) {
     window.TALENT69_DEFAULT_DATA.competitions.forEach(function(c) {
       const area = String(c.learning_area || '');
