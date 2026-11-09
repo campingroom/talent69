@@ -2290,7 +2290,7 @@
     });
   }
 
-  // Print Competition Check-in Sheet (ใบลงทะเบียนหน้าห้องแข่งขัน)
+  // Print Competition Check-in Sheet (แบบลงทะเบียนนักเรียนผู้เข้าแข่งขัน - A4 แนวนอน TH Sarabun New 16pt)
   function printCompetitionCheckinSheet(compId) {
     const comp = state.competitions.find((c) => c.comp_id === compId);
     if (!comp) return;
@@ -2298,59 +2298,401 @@
 
     const rowsHtml = regs
       .map(function (r, idx) {
-        const stuList = (r.students || [])
-          .map((s, i) => i + 1 + '. ' + escapeHtml(s.prefix + s.name) + ' (' + escapeHtml(s.grade) + ')')
-          .join('<br/>');
-        const tchList = (r.teachers || [])
-          .map((t, i) => i + 1 + '. ' + escapeHtml(t.prefix + t.name))
-          .join('<br/>');
+        const sch = state.schools.find((s) => s.school_name === r.school_name);
+        const subdistrict = sch ? sch.subdistrict : '';
+        const students = r.students || [];
+        const teachers = r.teachers || [];
+
+        const stuHtml = students
+          .map(function (s, i) {
+            return (
+              '<div class="row-subitem">' +
+              (i + 1) +
+              '. ' +
+              escapeHtml(s.prefix + s.name) +
+              ' (' +
+              escapeHtml(s.grade) +
+              ')</div>'
+            );
+          })
+          .join('');
+
+        const sigHtml = students
+          .map(function () {
+            return '<div class="row-subitem sig-cell">ลงชื่อ ............................................................</div>';
+          })
+          .join('');
+
+        const tchHtml = teachers
+          .map(function (t, i) {
+            return '<div class="row-subitem">' + (i + 1) + '. ' + escapeHtml(t.prefix + t.name) + '</div>';
+          })
+          .join('');
+
         return (
           '<tr>' +
-          '<td style="border:1px solid #333;padding:8px;text-align:center;">' +
+          '<td class="text-center">' +
           (idx + 1) +
           '</td>' +
-          '<td style="border:1px solid #333;padding:8px;font-weight:600;">' +
+          '<td class="font-bold">' +
           escapeHtml(r.school_name) +
           '</td>' +
-          '<td style="border:1px solid #333;padding:8px;">' +
-          stuList +
+          '<td class="text-center">' +
+          escapeHtml(subdistrict) +
           '</td>' +
-          '<td style="border:1px solid #333;padding:8px;">' +
-          tchList +
+          '<td>' +
+          (stuHtml || '-') +
           '</td>' +
-          '<td style="border:1px solid #333;padding:8px;"></td>' +
-          '<td style="border:1px solid #333;padding:8px;"></td>' +
+          '<td>' +
+          (sigHtml || '<div class="row-subitem sig-cell">ลงชื่อ ............................................................</div>') +
+          '</td>' +
+          '<td>' +
+          (tchHtml || '-') +
+          '</td>' +
           '</tr>'
         );
       })
       .join('');
 
-    const w = window.open('', '_blank', 'width=900,height=700');
+    // If fewer than 2 registrations, add extra blank rows for committee note/addition if needed
+    let blankRowsHtml = '';
+    const currentCount = regs.length;
+    if (currentCount < 3) {
+      for (let b = currentCount + 1; b <= 3; b++) {
+        blankRowsHtml +=
+          '<tr class="blank-row">' +
+          '<td class="text-center">' +
+          b +
+          '</td>' +
+          '<td></td>' +
+          '<td></td>' +
+          '<td><div class="row-subitem">1. ....................................................</div></td>' +
+          '<td><div class="row-subitem sig-cell">ลงชื่อ ............................................................</div></td>' +
+          '<td><div class="row-subitem">1. ....................................................</div></td>' +
+          '</tr>';
+      }
+    }
+
+    const w = window.open('', '_blank', 'width=1100,height=800');
     if (!w) {
       window.print();
       return;
     }
-    w.document.write(
-      '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>ใบลงชื่อหน้าห้องแข่งขัน - ' +
-        escapeHtml(comp.comp_id) +
-        '</title><link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
-        '<style>body{font-family:"Sarabun",sans-serif;padding:24px;color:#111}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px}th{border:1px solid #333;padding:8px;background:#f3f3f1}</style></head><body>' +
-        '<h2 style="margin:0 0 4px 0;">ใบลงทะเบียนผู้เข้าแข่งขัน งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</h2>' +
-        '<div style="font-size:15px;margin-bottom:4px;"><strong>กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (สพป.มหาสารคาม เขต 3)</strong></div>' +
-        '<div style="font-size:15px;margin-bottom:12px;">รหัสรายการ: <strong>' +
-        escapeHtml(comp.comp_id) +
-        '</strong> • รายการ: <strong>' +
-        escapeHtml(comp.comp_name) +
-        '</strong> • ระดับ: <strong>' +
-        escapeHtml(comp.level) +
-        '</strong> (' +
-        escapeHtml(comp.learning_area) +
-        ')</div>' +
-        '<table><thead><tr><th style="width:45px">ลำดับ</th><th style="width:180px">โรงเรียน</th><th>รายชื่อนักเรียนผู้เข้าแข่งขัน</th><th>ครูผู้ฝึกซ้อม</th><th style="width:130px">ลายมือชื่อรายงานตัว</th><th style="width:90px">หมายเหตุ</th></tr></thead><tbody>' +
-        rowsHtml +
-        '</tbody></table>' +
-        '<script>window.onload=function(){window.print();}</script></body></html>'
-    );
+
+    const htmlDoc =
+      '<!DOCTYPE html>' +
+      '<html lang="th">' +
+      '<head>' +
+      '<meta charset="UTF-8">' +
+      '<title>แบบลงทะเบียนผู้เข้าแข่งขัน - ' +
+      escapeHtml(comp.comp_id) +
+      '</title>' +
+      '<link rel="preconnect" href="https://fonts.googleapis.com">' +
+      '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
+      '<style>' +
+      '@page {' +
+      '  size: A4 landscape;' +
+      '  margin: 10mm 15mm 10mm 15mm;' +
+      '}' +
+      '* { box-sizing: border-box; }' +
+      'body {' +
+      '  font-family: "TH Sarabun New", "TH Sarabun PSK", "Sarabun", sans-serif;' +
+      '  font-size: 16pt;' +
+      '  line-height: 1.35;' +
+      '  color: #000;' +
+      '  background: #fff;' +
+      '  margin: 0;' +
+      '  padding: 0;' +
+      '  -webkit-print-color-adjust: exact;' +
+      '  print-color-adjust: exact;' +
+      '}' +
+      '.header-title {' +
+      '  text-align: center;' +
+      '  margin-bottom: 10px;' +
+      '}' +
+      '.title-1 { font-size: 19pt; font-weight: bold; line-height: 1.25; }' +
+      '.title-2 { font-size: 17pt; font-weight: bold; line-height: 1.25; }' +
+      '.title-3 { font-size: 18pt; font-weight: bold; margin-top: 2px; text-decoration: underline; }' +
+      '.meta-row {' +
+      '  display: flex;' +
+      '  justify-content: space-between;' +
+      '  font-size: 16pt;' +
+      '  margin-bottom: 2px;' +
+      '}' +
+      'table.official-table {' +
+      '  width: 100%;' +
+      '  border-collapse: collapse;' +
+      '  margin-top: 8px;' +
+      '  font-size: 16pt;' +
+      '}' +
+      'table.official-table th {' +
+      '  border: 1px solid #000;' +
+      '  padding: 6px 6px;' +
+      '  background-color: #f2f2f2;' +
+      '  font-weight: bold;' +
+      '  text-align: center;' +
+      '}' +
+      'table.official-table td {' +
+      '  border: 1px solid #000;' +
+      '  padding: 6px 6px;' +
+      '  vertical-align: top;' +
+      '}' +
+      '.text-center { text-align: center; }' +
+      '.font-bold { font-weight: bold; }' +
+      '.row-subitem {' +
+      '  min-height: 28px;' +
+      '  line-height: 28px;' +
+      '}' +
+      '.sig-cell {' +
+      '  color: #444;' +
+      '  text-align: center;' +
+      '}' +
+      '.judges-section {' +
+      '  margin-top: 20px;' +
+      '  page-break-inside: avoid;' +
+      '}' +
+      '.judges-title {' +
+      '  font-size: 16pt;' +
+      '  font-weight: bold;' +
+      '  margin-bottom: 6px;' +
+      '}' +
+      'table.judges-table {' +
+      '  width: 100%;' +
+      '  border: none;' +
+      '  font-size: 16pt;' +
+      '  border-collapse: collapse;' +
+      '}' +
+      'table.judges-table td {' +
+      '  border: none;' +
+      '  text-align: center;' +
+      '  width: 33.33%;' +
+      '  padding: 4px;' +
+      '  vertical-align: top;' +
+      '  line-height: 1.6;' +
+      '}' +
+      '.footer-note {' +
+      '  font-size: 13pt;' +
+      '  color: #555;' +
+      '  margin-top: 8px;' +
+      '}' +
+      '</style>' +
+      '</head>' +
+      '<body>' +
+      '<div class="header-title">' +
+      '<div class="title-1">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>' +
+      '<div class="title-2">ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>' +
+      '<div class="title-3">แบบลงทะเบียนนักเรียนผู้เข้าแข่งขัน</div>' +
+      '</div>' +
+      '<div class="meta-row">' +
+      '<div><strong>กิจกรรม:</strong> ' +
+      escapeHtml(comp.comp_name) +
+      '</div>' +
+      '<div><strong>ระดับ:</strong> ' +
+      escapeHtml(comp.level) +
+      ' &nbsp;&nbsp; <strong>ประเภท:</strong> ' +
+      escapeHtml(comp.team_type) +
+      '</div>' +
+      '</div>' +
+      '<div class="meta-row">' +
+      '<div><strong>รหัสรายการ:</strong> ' +
+      escapeHtml(comp.comp_id) +
+      ' &nbsp;&nbsp; <strong>หมวดกิจกรรม:</strong> ' +
+      escapeHtml(comp.learning_area) +
+      '</div>' +
+      '<div><strong>สถานที่แข่งขัน:</strong> ณ โรงเรียนบ้านวังยาววิทยายน</div>' +
+      '</div>' +
+      '<table class="official-table">' +
+      '<thead>' +
+      '<tr>' +
+      '<th style="width: 45px;">ลำดับ</th>' +
+      '<th style="width: 190px;">โรงเรียน</th>' +
+      '<th style="width: 95px;">สังกัด/ตำบล</th>' +
+      '<th>ผู้เข้าแข่งขัน (นักเรียน)</th>' +
+      '<th style="width: 210px;">ลงชื่อตัวบรรจง</th>' +
+      '<th style="width: 190px;">ครูผู้ฝึกซ้อม / ควบคุมดูแล</th>' +
+      '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+      rowsHtml +
+      blankRowsHtml +
+      '</tbody>' +
+      '</table>' +
+      '<div class="judges-section">' +
+      '<div class="judges-title">กรรมการตัดสิน</div>' +
+      '<table class="judges-table">' +
+      '<tr>' +
+      '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>เบอร์โทร ....................................................</td>' +
+      '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>เบอร์โทร ....................................................</td>' +
+      '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>เบอร์โทร ....................................................</td>' +
+      '</tr>' +
+      '</table>' +
+      '<div class="footer-note">หมายเหตุ ศูนย์พัฒนาวิชาการปรับใช้ได้ตามความเหมาะสม</div>' +
+      '</div>' +
+      '<script>window.onload=function(){window.print();};<\/script>' +
+      '</body>' +
+      '</html>';
+
+    w.document.write(htmlDoc);
+    w.document.close();
+  }
+
+  // Print Competition Table of Contents (สารบัญรายการแข่งขัน - A4 แนวนอน TH Sarabun New 16pt)
+  function printCompetitionTableOfContents() {
+    const competitions = state.competitions || [];
+    if (competitions.length === 0) {
+      showToast('ไม่พบข้อมูลรายการแข่งขัน', 'error');
+      return;
+    }
+
+    const regCountMap = {};
+    state.registrations.forEach(function (r) {
+      regCountMap[r.comp_id] = (regCountMap[r.comp_id] || 0) + 1;
+    });
+
+    const rowsHtml = competitions
+      .map(function (c, idx) {
+        const count = regCountMap[c.comp_id] || 0;
+        const countBadge =
+          count > 0 ? '<strong>' + count + ' ทีม</strong>' : '<span style="color:#777">ยังไม่มี</span>';
+        return (
+          '<tr>' +
+          '<td class="text-center">' +
+          (idx + 1) +
+          '</td>' +
+          '<td class="text-center font-bold">' +
+          escapeHtml(c.comp_id) +
+          '</td>' +
+          '<td>' +
+          escapeHtml(c.learning_area) +
+          '</td>' +
+          '<td class="font-bold">' +
+          escapeHtml(c.comp_name) +
+          '</td>' +
+          '<td class="text-center">' +
+          escapeHtml(c.level) +
+          '</td>' +
+          '<td class="text-center">' +
+          escapeHtml(c.team_type) +
+          '</td>' +
+          '<td class="text-center">' +
+          countBadge +
+          '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    const registeredCompsCount = competitions.filter((c) => (regCountMap[c.comp_id] || 0) > 0).length;
+
+    const w = window.open('', '_blank', 'width=1100,height=800');
+    if (!w) {
+      window.print();
+      return;
+    }
+
+    const htmlDoc =
+      '<!DOCTYPE html>' +
+      '<html lang="th">' +
+      '<head>' +
+      '<meta charset="UTF-8">' +
+      '<title>สารบัญรายการแข่งขัน - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74</title>' +
+      '<link rel="preconnect" href="https://fonts.googleapis.com">' +
+      '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+      '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
+      '<style>' +
+      '@page {' +
+      '  size: A4 landscape;' +
+      '  margin: 10mm 15mm 10mm 15mm;' +
+      '}' +
+      '* { box-sizing: border-box; }' +
+      'body {' +
+      '  font-family: "TH Sarabun New", "TH Sarabun PSK", "Sarabun", sans-serif;' +
+      '  font-size: 16pt;' +
+      '  line-height: 1.35;' +
+      '  color: #000;' +
+      '  background: #fff;' +
+      '  margin: 0;' +
+      '  padding: 0;' +
+      '  -webkit-print-color-adjust: exact;' +
+      '  print-color-adjust: exact;' +
+      '}' +
+      '.header-title {' +
+      '  text-align: center;' +
+      '  margin-bottom: 8px;' +
+      '}' +
+      '.title-1 { font-size: 19pt; font-weight: bold; line-height: 1.25; }' +
+      '.title-2 { font-size: 17pt; font-weight: bold; line-height: 1.25; }' +
+      '.title-3 { font-size: 18pt; font-weight: bold; margin-top: 2px; text-decoration: underline; }' +
+      '.summary-row {' +
+      '  display: flex;' +
+      '  justify-content: space-between;' +
+      '  font-size: 15pt;' +
+      '  margin-bottom: 6px;' +
+      '  padding-bottom: 4px;' +
+      '  border-bottom: 1px solid #ccc;' +
+      '}' +
+      'table.official-table {' +
+      '  width: 100%;' +
+      '  border-collapse: collapse;' +
+      '  margin-top: 6px;' +
+      '  font-size: 15pt;' +
+      '}' +
+      'table.official-table th {' +
+      '  border: 1px solid #000;' +
+      '  padding: 5px 6px;' +
+      '  background-color: #f2f2f2;' +
+      '  font-weight: bold;' +
+      '  text-align: center;' +
+      '}' +
+      'table.official-table td {' +
+      '  border: 1px solid #000;' +
+      '  padding: 4px 6px;' +
+      '  vertical-align: top;' +
+      '}' +
+      '.text-center { text-align: center; }' +
+      '.font-bold { font-weight: bold; }' +
+      'tr { page-break-inside: avoid; }' +
+      '</style>' +
+      '</head>' +
+      '<body>' +
+      '<div class="header-title">' +
+      '<div class="title-1">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>' +
+      '<div class="title-2">ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>' +
+      '<div class="title-3">สารบัญรายการแข่งขันทั้งหมด (สำหรับเข้าเล่มแฟ้มกองอำนวยการ)</div>' +
+      '</div>' +
+      '<div class="summary-row">' +
+      '<div>รวมทั้งสิ้น <strong>' +
+      competitions.length +
+      ' รายการ</strong> (13 หมวดกิจกรรม)</div>' +
+      '<div>มีโรงเรียนสมัครแล้ว <strong>' +
+      registeredCompsCount +
+      ' รายการ</strong> • ทีมสมัครรวม <strong>' +
+      state.registrations.length +
+      ' ทีม</strong></div>' +
+      '<div>สถานที่แข่งขัน: <strong>ณ โรงเรียนบ้านวังยาววิทยายน</strong></div>' +
+      '</div>' +
+      '<table class="official-table">' +
+      '<thead>' +
+      '<tr>' +
+      '<th style="width: 45px;">ที่</th>' +
+      '<th style="width: 85px;">รหัส</th>' +
+      '<th style="width: 220px;">หมวดกิจกรรม / กลุ่มสาระฯ</th>' +
+      '<th>ชื่อรายการแข่งขัน</th>' +
+      '<th style="width: 85px;">ระดับ</th>' +
+      '<th style="width: 85px;">ประเภท</th>' +
+      '<th style="width: 95px;">ทีมที่สมัคร</th>' +
+      '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+      rowsHtml +
+      '</tbody>' +
+      '</table>' +
+      '<script>window.onload=function(){window.print();};<\/script>' +
+      '</body>' +
+      '</html>';
+
+    w.document.write(htmlDoc);
     w.document.close();
   }
 
@@ -4233,6 +4575,11 @@
         renderCompetitionViewTab();
       });
     });
+
+    const btnPrintCompTOC = document.getElementById('btnPrintCompTOC');
+    if (btnPrintCompTOC) {
+      btnPrintCompTOC.addEventListener('click', printCompetitionTableOfContents);
+    }
 
     ['compViewAreaFilter', 'compViewLevelFilter'].forEach(function (id) {
       const el = document.getElementById(id);

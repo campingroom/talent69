@@ -902,7 +902,7 @@
           </div>
 
           <!-- Quick Status Pills -->
-          <div class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <button type="button" data-comp-status="ALL" class="comp-status-pill px-3 py-1.5 rounded-lg font-heading text-xs font-medium bg-slate-900 text-white transition">
               ทั้งหมด (<span id="pillCountAll">0</span>)
             </button>
@@ -911,6 +911,12 @@
             </button>
             <button type="button" data-comp-status="EMPTY" class="comp-status-pill px-3 py-1.5 rounded-lg font-heading text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
               ยังไม่มีผู้สมัคร (<span id="pillCountEmpty">0</span>)
+            </button>
+            <button type="button" id="btnPrintCompTOC" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>พิมพ์สารบัญรายการแข่งขัน</span>
             </button>
           </div>
         </div>
