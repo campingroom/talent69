@@ -1916,7 +1916,12 @@ window.TALENT69_DEFAULT_DATA = {
         }
       ],
       "coordinator_phone": "080-000-0001",
-      "status": "ข้อมูลตัวอย่าง"
+      "status": "ข้อมูลตัวอย่าง",
+      "score": 94.5,
+      "medal": "เหรียญทอง",
+      "rank": 1,
+      "award_title": "ชนะเลิศ",
+      "cert_code": "WYK74-2569-0001"
     },
     {
       "reg_id": "REG-74-0002",
@@ -1955,7 +1960,12 @@ window.TALENT69_DEFAULT_DATA = {
         }
       ],
       "coordinator_phone": "080-000-0001",
-      "status": "ข้อมูลตัวอย่าง"
+      "status": "ข้อมูลตัวอย่าง",
+      "score": 91.0,
+      "medal": "เหรียญทอง",
+      "rank": 1,
+      "award_title": "ชนะเลิศ",
+      "cert_code": "WYK74-2569-0002"
     },
     {
       "reg_id": "REG-74-0003",
@@ -1980,7 +1990,12 @@ window.TALENT69_DEFAULT_DATA = {
         }
       ],
       "coordinator_phone": "080-000-0002",
-      "status": "ข้อมูลตัวอย่าง"
+      "status": "ข้อมูลตัวอย่าง",
+      "score": 88.0,
+      "medal": "เหรียญทอง",
+      "rank": 2,
+      "award_title": "รองชนะเลิศอันดับ 1",
+      "cert_code": "WYK74-2569-0003"
     },
     {
       "reg_id": "REG-74-0004",
@@ -2019,7 +2034,12 @@ window.TALENT69_DEFAULT_DATA = {
         }
       ],
       "coordinator_phone": "080-000-0002",
-      "status": "ข้อมูลตัวอย่าง"
+      "status": "ข้อมูลตัวอย่าง",
+      "score": 92.5,
+      "medal": "เหรียญทอง",
+      "rank": 1,
+      "award_title": "ชนะเลิศ",
+      "cert_code": "WYK74-2569-0004"
     },
     {
       "reg_id": "REG-74-0005",
@@ -2044,7 +2064,12 @@ window.TALENT69_DEFAULT_DATA = {
         }
       ],
       "coordinator_phone": "080-000-0003",
-      "status": "ข้อมูลตัวอย่าง"
+      "status": "ข้อมูลตัวอย่าง",
+      "score": 78.5,
+      "medal": "เหรียญเงิน",
+      "rank": 1,
+      "award_title": "ชนะเลิศ",
+      "cert_code": "WYK74-2569-0005"
     },
     {
       "reg_id": "REG-74-0006",
@@ -2069,7 +2094,127 @@ window.TALENT69_DEFAULT_DATA = {
         }
       ],
       "coordinator_phone": "080-000-0004",
-      "status": "ข้อมูลตัวอย่าง"
+      "status": "ข้อมูลตัวอย่าง",
+      "score": 85.0,
+      "medal": "เหรียญทอง",
+      "rank": 1,
+      "award_title": "ชนะเลิศ",
+      "cert_code": "WYK74-2569-0006"
+    }
+  ],
+  "sampleJudges": [
+    {
+      "judge_id": "JDG-74-001",
+      "comp_id": "AC11-MA01",
+      "learning_area": "11.2 ด้านการเรียนดี (คณิตศาสตร์)",
+      "comp_name": "การแข่งขันคิดเลขเร็ว",
+      "level": "ป.1–ป.3",
+      "prefix": "นาย",
+      "full_name": "เกียรติศักดิ์ คิดแม่น (ตัวอย่าง)",
+      "school_name": "โรงเรียนบ้านหนองสระพังโนนสะอาด",
+      "role": "ประธานกรรมการ",
+      "cert_code": "WYK74-JDG-0001"
+    },
+    {
+      "judge_id": "JDG-74-002",
+      "comp_id": "AC11-MA01",
+      "learning_area": "11.2 ด้านการเรียนดี (คณิตศาสตร์)",
+      "comp_name": "การแข่งขันคิดเลขเร็ว",
+      "level": "ป.1–ป.3",
+      "prefix": "นาง",
+      "full_name": "สุภาพร สอนดี (ตัวอย่าง)",
+      "school_name": "โรงเรียนบ้านวังยาววิทยายน",
+      "role": "กรรมการ",
+      "cert_code": "WYK74-JDG-0002"
+    },
+    {
+      "judge_id": "JDG-74-003",
+      "comp_id": "AC11-MA01",
+      "learning_area": "11.2 ด้านการเรียนดี (คณิตศาสตร์)",
+      "comp_name": "การแข่งขันคิดเลขเร็ว",
+      "level": "ป.1–ป.3",
+      "prefix": "นางสาว",
+      "full_name": "กมลชนก เลขานุการ (ตัวอย่าง)",
+      "school_name": "โรงเรียนดอนกลางนุกูลวิทย์",
+      "role": "กรรมการและเลขานุการ",
+      "cert_code": "WYK74-JDG-0003"
+    },
+    {
+      "judge_id": "JDG-74-004",
+      "comp_id": "EC09-01",
+      "learning_area": "9. กิจกรรมปฐมวัย",
+      "comp_name": "การปั้นดินน้ำมัน",
+      "level": "ปฐมวัย",
+      "prefix": "นาง",
+      "full_name": "ปราณี รักเด็ก (ตัวอย่าง)",
+      "school_name": "โรงเรียนบ้านโนนราษีโคกล่าม",
+      "role": "ประธานกรรมการ",
+      "cert_code": "WYK74-JDG-0004"
+    },
+    {
+      "judge_id": "JDG-74-005",
+      "comp_id": "EC09-01",
+      "learning_area": "9. กิจกรรมปฐมวัย",
+      "comp_name": "การปั้นดินน้ำมัน",
+      "level": "ปฐมวัย",
+      "prefix": "นางสาว",
+      "full_name": "ชลธิชา ปฐมวัย (ตัวอย่าง)",
+      "school_name": "โรงเรียนบ้านโคกกลาง",
+      "role": "กรรมการและเลขานุการ",
+      "cert_code": "WYK74-JDG-0005"
+    }
+  ],
+  "operationTimeline": [
+    {
+      "step": "1",
+      "title": "เปิดระบบลงทะเบียนนักเรียนและครูผู้ฝึกซ้อม (ระดับกลุ่มโรงเรียน)",
+      "period": "1 – 25 พฤศจิกายน 2569",
+      "status": "กำลังดำเนินการ"
+    },
+    {
+      "step": "2",
+      "title": "ตรวจสอบรายชื่อ / แก้ไขข้อมูล / พิมพ์บัตรประจำตัวผู้เข้าแข่งขัน",
+      "period": "26 – 28 พฤศจิกายน 2569",
+      "status": "กำหนดการ"
+    },
+    {
+      "step": "3",
+      "title": "จัดการแข่งขันและบันทึกคะแนนระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง",
+      "period": "ภายในวันที่ 30 พฤศจิกายน 2569",
+      "status": "กำหนดการ"
+    },
+    {
+      "step": "4",
+      "title": "ประกาศผลการแข่งขัน / พิมพ์เกียรติบัตรออนไลน์ / ส่งตัวแทนเข้าแข่งระดับเขตฯ",
+      "period": "1 – 10 ธันวาคม 2569",
+      "status": "กำหนดการ"
+    },
+    {
+      "step": "5",
+      "title": "การแข่งขันงานศิลปหัตถกรรมนักเรียน ระดับเขตพื้นที่การศึกษา (สพป.มหาสารคาม เขต 3)",
+      "period": "23 – 24 ธันวาคม 2569",
+      "status": "กำหนดการ"
     }
   ]
 };
+
+(function enrichDefaultCompetitions() {
+  const publishedSampleIds = { "AC11-MA01": true, "EC09-01": true, "AC11-SC01": true, "AC11-TH01": true, "LO13-03": true };
+  if (window.TALENT69_DEFAULT_DATA && Array.isArray(window.TALENT69_DEFAULT_DATA.competitions)) {
+    window.TALENT69_DEFAULT_DATA.competitions.forEach(function(c) {
+      const area = String(c.learning_area || '');
+      let room = 'อาคารเรียนรวม ห้อง 101';
+      if (area.indexOf('คอมพิวเตอร์') !== -1) room = 'ห้องปฏิบัติการคอมพิวเตอร์';
+      else if (area.indexOf('ปฐมวัย') !== -1) room = 'อาคารปฐมวัย ห้อง 1';
+      else if (area.indexOf('ดนตรี') !== -1 || area.indexOf('นาฏศิลป์') !== -1 || area.indexOf('ท้องถิ่น') !== -1) room = 'หอประชุมกลุ่มโรงเรียน';
+      else if (area.indexOf('วิทยาศาสตร์') !== -1) room = 'ห้องปฏิบัติการวิทยาศาสตร์';
+      else if (area.indexOf('คณิตศาสตร์') !== -1) room = 'อาคารวิชาการ ห้อง 201';
+      else if (area.indexOf('ภาษาไทย') !== -1) room = 'อาคารวิชาการ ห้อง 202';
+      c.comp_date = c.comp_date || '30 พฤศจิกายน 2569';
+      c.comp_time = c.comp_time || '09.00 - 12.00 น.';
+      c.venue_building = c.venue_building || 'สนามแข่งขันกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+      c.venue_room = c.venue_room || room;
+      c.result_status = c.result_status || (publishedSampleIds[c.comp_id] ? 'ประกาศผลแล้ว' : 'รอประกาศผล');
+    });
+  }
+})();

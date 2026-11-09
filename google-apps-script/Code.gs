@@ -1,8 +1,13 @@
 /**
- * ระบบลงทะเบียนและแดชบอร์ด งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569
+ * ระบบบริหารจัดการและรายงานผล งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569
  * กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (สพป.มหาสารคาม เขต 3)
  *
- * รองรับระบบตรวจสอบสิทธิ์แอดมิน (Admin PIN) และการยืนยันตัวตนด้วยเบอร์โทรผู้ประสานงานเมื่อแก้ไขรายชื่อ
+ * รองรับครบวงจร (เฟส 1 + เฟส 2 แนวทาง cm3art.com):
+ * - ลงทะเบียนนักเรียน/ครูผู้ฝึกซ้อม และแก้ไขรายชื่อด้วยเบอร์โทรผู้ประสานงาน (หรือ 4 ตัวท้าย)
+ * - ตารางวันเวลาและสถานที่จัดการแข่งขัน (Schedule & Venue)
+ * - ทำเนียบคณะกรรมการตัดสิน (Judges)
+ * - บันทึกคะแนน คำนวณเหรียญรางวัล และจัดลำดับที่อัตโนมัติ (Scores, Medals & Rankings)
+ * - ระบบออกเกียรติบัตรออนไลน์ (Online Certificates)
  */
 
 const SPREADSHEET_ID = '1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ';
@@ -46,7 +51,7 @@ function verifyPhoneMatch_(savedPhone, verifyInput) {
 }
 
 /**
- * ดึงข้อมูลทั้งหมด (Schools, Competitions, Registrations, Config) ส่งกลับให้หน้าเว็บ
+ * ดึงข้อมูลทั้งหมด (Schools, Competitions, Registrations, Judges, Config) ส่งกลับให้หน้าเว็บ
  */
 function doGet(e) {
   try {
@@ -54,6 +59,7 @@ function doGet(e) {
     const schools = readSchools_(ss);
     const competitions = readCompetitions_(ss);
     const registrations = readRegistrations_(ss);
+    const judges = readJudges_(ss);
 
     return jsonResponse_({
       ok: true,
@@ -63,7 +69,8 @@ function doGet(e) {
       },
       schools: schools,
       competitions: competitions,
-      registrations: registrations
+      registrations: registrations,
+      judges: judges
     });
   } catch (err) {
     return jsonResponse_({
@@ -107,6 +114,14 @@ function doPost(e) {
       return handleDeleteRegistration_(ss, body.reg_id);
     } else if (action === 'clear_sample_data') {
       return handleClearSampleData_(ss);
+    } else if (action === 'save_scores') {
+      return handleSaveScores_(ss, body);
+    } else if (action === 'update_schedule') {
+      return handleUpdateSchedule_(ss, body);
+    } else if (action === 'add_judge') {
+      return handleAddJudge_(ss, body.judge);
+    } else if (action === 'delete_judge') {
+      return handleDeleteJudge_(ss, body.judge_id);
     } else if (action === 'add_competition') {
       return handleAddCompetition_(ss, body.competition);
     } else if (action === 'add_school') {
@@ -155,19 +170,14 @@ function handleRegister_(ss, body, isAdmin) {
     return jsonResponse_({ ok: false, error: 'กรุณาระบุโรงเรียนและรายการแข่งขันให้ครบถ้วน' });
   }
 
-  // ตรวจกฎเหล็ก: 1 โรงเรียน ส่งได้แค่ 1 ทีม ต่อ 1 รายการแข่งขัน
   let existingRowIndex = -1;
-  let existingRegId = '';
-  let existingPhone = '';
-  let existingStatus = '';
+  let existingRow = null;
   for (let i = 1; i < data.length; i++) {
     const rowSchool = String(data[i][2] || '').trim();
     const rowCompId = String(data[i][3] || '').trim();
     if (rowSchool === schoolName && rowCompId === compId) {
       existingRowIndex = i + 1;
-      existingRegId = String(data[i][0] || '');
-      existingPhone = String(data[i][12] || '');
-      existingStatus = String(data[i][13] || '');
+      existingRow = data[i];
       break;
     }
   }
@@ -180,7 +190,8 @@ function handleRegister_(ss, body, isAdmin) {
         error: 'โรงเรียนนี้ได้ลงทะเบียนรายการนี้ไปแล้ว (กติกา: 1 โรงเรียน ส่งได้ 1 ทีมต่อรายการ)'
       });
     }
-    // ตรวจสอบสิทธิ์การแก้ไขรายชื่อเดิม: ต้องเป็นแอดมิน หรือเป็นข้อมูลตัวอย่าง หรือยืนยันเบอร์โทรผู้ประสานงานตรงกัน
+    const existingPhone = String(existingRow[12] || '');
+    const existingStatus = String(existingRow[13] || '');
     const isSampleRow = existingStatus.indexOf('ตัวอย่าง') !== -1;
     const phoneVerified = verifyPhoneMatch_(existingPhone, body.edit_verify_token || body.coordinator_phone);
     if (!isAdmin && !isSampleRow && !phoneVerified) {
@@ -201,9 +212,15 @@ function handleRegister_(ss, body, isAdmin) {
     return (idx + 1) + '. ' + (t.prefix || '') + (t.name || '');
   }).join('\n');
 
-  const regId = existingRegId || body.reg_id || ('REG-74-' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'MMddHHmmss'));
+  const regId = (existingRow ? String(existingRow[0] || '') : '') || body.reg_id || ('REG-74-' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'MMddHHmmss'));
   const timestamp = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss');
   const payloadJson = JSON.stringify({ students: students, teachers: teachers });
+
+  const scoreVal = body.score !== undefined ? body.score : (existingRow ? existingRow[14] : '');
+  const medalVal = body.medal !== undefined ? body.medal : (existingRow ? existingRow[15] : '');
+  const rankVal = body.rank !== undefined ? body.rank : (existingRow ? existingRow[16] : '');
+  const awardVal = body.award_title !== undefined ? body.award_title : (existingRow ? existingRow[17] : '');
+  const certVal = body.cert_code || (existingRow ? existingRow[18] : '') || ('WYK74-2569-' + regId.replace(/\D/g, '').slice(-4).padStart(4, '0'));
 
   const rowValues = [
     regId,
@@ -220,6 +237,11 @@ function handleRegister_(ss, body, isAdmin) {
     tchLines,
     String(body.coordinator_phone || ''),
     String(body.status || 'ลงทะเบียนแล้ว'),
+    scoreVal,
+    medalVal,
+    rankVal,
+    awardVal,
+    certVal,
     payloadJson
   ];
 
@@ -234,6 +256,115 @@ function handleRegister_(ss, body, isAdmin) {
     reg_id: regId,
     updated: existingRowIndex !== -1
   });
+}
+
+function handleSaveScores_(ss, body) {
+  const compId = String(body.comp_id || '').trim();
+  const entries = Array.isArray(body.entries) ? body.entries : [];
+  const resultStatus = String(body.result_status || 'ประกาศผลแล้ว');
+
+  const regSheet = ss.getSheetByName('Registrations');
+  const regData = regSheet.getDataRange().getValues();
+  const entryMap = {};
+  entries.forEach(function(item) {
+    if (item && item.reg_id) entryMap[String(item.reg_id)] = item;
+  });
+
+  let updatedCount = 0;
+  for (let i = 1; i < regData.length; i++) {
+    const rId = String(regData[i][0] || '');
+    if (entryMap[rId]) {
+      const item = entryMap[rId];
+      const rowNum = i + 1;
+      const certCode = item.cert_code || String(regData[i][18] || '') || ('WYK74-2569-' + String(rowNum - 1).padStart(4, '0'));
+      regSheet.getRange(rowNum, 15, 1, 5).setValues([[
+        item.score !== '' && item.score !== null && item.score !== undefined ? Number(item.score) : '',
+        String(item.medal || ''),
+        item.rank !== '' && item.rank !== null && item.rank !== undefined ? Number(item.rank) : '',
+        String(item.award_title || ''),
+        certCode
+      ]]);
+      updatedCount++;
+    }
+  }
+
+  if (compId) {
+    const compSheet = ss.getSheetByName('Competitions');
+    const compData = compSheet.getDataRange().getValues();
+    for (let j = 1; j < compData.length; j++) {
+      if (String(compData[j][0] || '').trim() === compId) {
+        compSheet.getRange(j + 1, 16).setValue(resultStatus);
+        break;
+      }
+    }
+  }
+
+  return jsonResponse_({ ok: true, updatedCount: updatedCount, result_status: resultStatus });
+}
+
+function handleUpdateSchedule_(ss, body) {
+  const compId = String(body.comp_id || '').trim();
+  if (!compId) return jsonResponse_({ ok: false, error: 'กรุณาระบุรหัสรายการแข่งขัน' });
+
+  const compSheet = ss.getSheetByName('Competitions');
+  const compData = compSheet.getDataRange().getValues();
+  for (let i = 1; i < compData.length; i++) {
+    if (String(compData[i][0] || '').trim() === compId) {
+      const rowNum = i + 1;
+      compSheet.getRange(rowNum, 12, 1, 5).setValues([[
+        String(body.comp_date || compData[i][11] || '30 พฤศจิกายน 2569'),
+        String(body.comp_time || compData[i][12] || '09.00 - 12.00 น.'),
+        String(body.venue_building || compData[i][13] || 'สนามแข่งขันกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง'),
+        String(body.venue_room || compData[i][14] || 'อาคารเรียนรวม ห้อง 101'),
+        String(body.result_status || compData[i][15] || 'รอประกาศผล')
+      ]]);
+      return jsonResponse_({ ok: true, comp_id: compId });
+    }
+  }
+  return jsonResponse_({ ok: false, error: 'ไม่พบรหัสรายการแข่งขันที่ระบุ' });
+}
+
+function handleAddJudge_(ss, judge) {
+  if (!judge || !judge.comp_id || !judge.full_name) {
+    return jsonResponse_({ ok: false, error: 'กรุณาระบุรายการแข่งขันและชื่อ-นามสกุลกรรมการ' });
+  }
+  let sheet = ss.getSheetByName('Judges');
+  if (!sheet) {
+    sheet = ss.insertSheet('Judges');
+    sheet.appendRow([
+      'รหัสกรรมการ (judge_id)', 'รหัสรายการ (comp_id)', 'หมวดกิจกรรม (learning_area)',
+      'ชื่อรายการแข่งขัน (comp_name)', 'ระดับช่วงชั้น (level)', 'คำนำหน้า (prefix)',
+      'ชื่อ-นามสกุล (full_name)', 'โรงเรียนต้นสังกัด (school_name)', 'ตำแหน่งกรรมการ (role)', 'เลขที่เกียรติบัตร (cert_code)'
+    ]);
+  }
+  const judgeId = judge.judge_id || ('JDG-74-' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'MMddHHmmss'));
+  const certCode = judge.cert_code || ('WYK74-JDG-' + String(sheet.getLastRow()).padStart(4, '0'));
+  sheet.appendRow([
+    judgeId,
+    String(judge.comp_id || ''),
+    String(judge.learning_area || ''),
+    String(judge.comp_name || ''),
+    String(judge.level || ''),
+    String(judge.prefix || ''),
+    String(judge.full_name || ''),
+    String(judge.school_name || ''),
+    String(judge.role || 'กรรมการ'),
+    certCode
+  ]);
+  return jsonResponse_({ ok: true, judge_id: judgeId, cert_code: certCode });
+}
+
+function handleDeleteJudge_(ss, judgeId) {
+  const sheet = ss.getSheetByName('Judges');
+  if (!sheet) return jsonResponse_({ ok: false, error: 'ไม่พบแผ่นงาน Judges' });
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0] || '') === String(judgeId || '')) {
+      sheet.deleteRow(i + 1);
+      return jsonResponse_({ ok: true, deleted_judge_id: judgeId });
+    }
+  }
+  return jsonResponse_({ ok: false, error: 'ไม่พบรหัสกรรมการที่ต้องการลบ' });
 }
 
 function handleDeleteRegistration_(ss, regId) {
@@ -258,6 +389,15 @@ function handleClearSampleData_(ss) {
       removed++;
     }
   }
+  const judgeSheet = ss.getSheetByName('Judges');
+  if (judgeSheet) {
+    const jData = judgeSheet.getDataRange().getValues();
+    for (let j = jData.length - 1; j >= 1; j--) {
+      if (String(jData[j][6] || '').indexOf('ตัวอย่าง') !== -1) {
+        judgeSheet.deleteRow(j + 1);
+      }
+    }
+  }
   return jsonResponse_({ ok: true, removedCount: removed });
 }
 
@@ -278,7 +418,12 @@ function handleAddCompetition_(ss, comp) {
     Number(comp.min_teachers || 1),
     Number(comp.max_teachers || 1),
     String(comp.status || 'เปิดรับสมัคร'),
-    '=COUNTIF(Registrations!$D$2:$D$1000, A' + nextRow + ')'
+    '=COUNTIF(Registrations!$D$2:$D$1000, A' + nextRow + ')',
+    String(comp.comp_date || '30 พฤศจิกายน 2569'),
+    String(comp.comp_time || '09.00 - 12.00 น.'),
+    String(comp.venue_building || 'สนามแข่งขันกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง'),
+    String(comp.venue_room || 'อาคารเรียนรวม ห้อง 101'),
+    String(comp.result_status || 'รอประกาศผล')
   ]);
   return jsonResponse_({ ok: true });
 }
@@ -298,7 +443,11 @@ function handleAddSchool_(ss, school) {
     String(school.network_group || 'กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง'),
     '=COUNTIF(Registrations!$C$2:$C$1000, B' + nextRow + ')',
     '=SUMIF(Registrations!$C$2:$C$1000, B' + nextRow + ', Registrations!$I$2:$I$1000)',
-    '=SUMIF(Registrations!$C$2:$C$1000, B' + nextRow + ', Registrations!$K$2:$K$1000)'
+    '=SUMIF(Registrations!$C$2:$C$1000, B' + nextRow + ', Registrations!$K$2:$K$1000)',
+    '=COUNTIFS(Registrations!$C$2:$C$1000, B' + nextRow + ', Registrations!$P$2:$P$1000, "เหรียญทอง")',
+    '=COUNTIFS(Registrations!$C$2:$C$1000, B' + nextRow + ', Registrations!$P$2:$P$1000, "เหรียญเงิน")',
+    '=COUNTIFS(Registrations!$C$2:$C$1000, B' + nextRow + ', Registrations!$P$2:$P$1000, "เหรียญทองแดง")',
+    '=COUNTIFS(Registrations!$C$2:$C$1000, B' + nextRow + ', Registrations!$Q$2:$Q$1000, 1)'
   ]);
   return jsonResponse_({ ok: true, school_id: schoolId });
 }
@@ -338,10 +487,43 @@ function readCompetitions_(ss) {
       max_students: Number(rows[i][6] || 1),
       min_teachers: Number(rows[i][7] || 1),
       max_teachers: Number(rows[i][8] || 1),
-      status: String(rows[i][9] || 'เปิดรับสมัคร')
+      status: String(rows[i][9] || 'เปิดรับสมัคร'),
+      comp_date: String(rows[i][11] || '30 พฤศจิกายน 2569'),
+      comp_time: String(rows[i][12] || '09.00 - 12.00 น.'),
+      venue_building: String(rows[i][13] || 'สนามแข่งขันกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง'),
+      venue_room: String(rows[i][14] || 'อาคารเรียนรวม ห้อง 101'),
+      result_status: String(rows[i][15] || 'รอประกาศผล')
     });
   }
   return result;
+}
+
+function parsePersonList_(rawText, hasGrade) {
+  if (!rawText) return [];
+  const lines = String(rawText).split(/\r?\n/).map(function(l) { return l.trim(); }).filter(Boolean);
+  const prefixes = ['นางสาว', 'ด.ช.', 'ด.ญ.', 'เด็กชาย', 'เด็กหญิง', 'นาย', 'นาง', 'ครู', 'ว่าที่ ร.ต.'];
+  return lines.map(function(line) {
+    let cleaned = line.replace(/^\d+[\.\)]\s*/, '').trim();
+    let grade = '';
+    if (hasGrade) {
+      const m = cleaned.match(/\(([^()]+)\)\s*$/);
+      if (m) {
+        grade = m[1].trim();
+        cleaned = cleaned.slice(0, m.index).trim();
+      }
+    }
+    let foundPrefix = '';
+    for (let i = 0; i < prefixes.length; i++) {
+      if (cleaned.indexOf(prefixes[i]) === 0) {
+        foundPrefix = prefixes[i];
+        cleaned = cleaned.slice(prefixes[i].length).trim();
+        break;
+      }
+    }
+    return hasGrade
+      ? { prefix: foundPrefix, name: cleaned, grade: grade }
+      : { prefix: foundPrefix, name: cleaned };
+  });
 }
 
 function readRegistrations_(ss) {
@@ -351,10 +533,21 @@ function readRegistrations_(ss) {
   const result = [];
   for (let i = 1; i < rows.length; i++) {
     if (!rows[i][0] || !rows[i][2]) continue;
-    let parsed = { students: [], teachers: [] };
+    let parsed = null;
     try {
-      if (rows[i][14]) parsed = JSON.parse(String(rows[i][14]));
+      const rawCol = rows[i][19] || '';
+      if (rawCol && String(rawCol).trim().indexOf('{') === 0) {
+        parsed = JSON.parse(String(rawCol));
+      }
     } catch (e) {}
+
+    const students = (parsed && Array.isArray(parsed.students) && parsed.students.length)
+      ? parsed.students
+      : parsePersonList_(rows[i][9], true);
+    const teachers = (parsed && Array.isArray(parsed.teachers) && parsed.teachers.length)
+      ? parsed.teachers
+      : parsePersonList_(rows[i][11], false);
+
     result.push({
       reg_id: String(rows[i][0] || ''),
       timestamp: String(rows[i][1] || ''),
@@ -364,10 +557,38 @@ function readRegistrations_(ss) {
       comp_name: String(rows[i][5] || ''),
       level: String(rows[i][6] || ''),
       team_type: String(rows[i][7] || ''),
-      students: parsed.students || [],
-      teachers: parsed.teachers || [],
+      students: students,
+      teachers: teachers,
       coordinator_phone: String(rows[i][12] || ''),
-      status: String(rows[i][13] || 'ลงทะเบียนแล้ว')
+      status: String(rows[i][13] || 'ลงทะเบียนแล้ว'),
+      score: rows[i][14] !== '' && rows[i][14] !== null && rows[i][14] !== undefined ? Number(rows[i][14]) : null,
+      medal: String(rows[i][15] || ''),
+      rank: rows[i][16] !== '' && rows[i][16] !== null && rows[i][16] !== undefined ? Number(rows[i][16]) : null,
+      award_title: String(rows[i][17] || ''),
+      cert_code: String(rows[i][18] || '')
+    });
+  }
+  return result;
+}
+
+function readJudges_(ss) {
+  const sheet = ss.getSheetByName('Judges');
+  if (!sheet) return [];
+  const rows = sheet.getDataRange().getValues();
+  const result = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (!rows[i][0] || !rows[i][6]) continue;
+    result.push({
+      judge_id: String(rows[i][0] || ''),
+      comp_id: String(rows[i][1] || ''),
+      learning_area: String(rows[i][2] || ''),
+      comp_name: String(rows[i][3] || ''),
+      level: String(rows[i][4] || ''),
+      prefix: String(rows[i][5] || ''),
+      full_name: String(rows[i][6] || ''),
+      school_name: String(rows[i][7] || ''),
+      role: String(rows[i][8] || 'กรรมการ'),
+      cert_code: String(rows[i][9] || '')
     });
   }
   return result;
