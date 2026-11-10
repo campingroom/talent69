@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="16" fill="#0f172a"/>
+  <!-- Minimalist Trophy -->
+  <path d="M22 17h20v13c0 5.523-4.477 10-10 10s-10-4.477-10-10V17z" fill="#f59e0b"/>
+  <path d="M16 20c-3.314 0-6 2.686-6 6 0 3.314 2.686 6 6 6h6v-4h-6c-1.105 0-2-.895-2-2 0-1.105.895-2 2-2h6v-4h-6z" fill="#f59e0b"/>
+  <path d="M48 20c3.314 0 6 2.686 6 6 0 3.314-2.686 6-6 6h-6v-4h6c1.105 0 2-.895 2-2 0-1.105-.895-2-2-2h-6v-4h6z" fill="#f59e0b"/>
+  <path d="M29 40h6v8h-6z" fill="#f59e0b"/>
+  <rect x="20" y="48" width="24" height="4" rx="2" fill="#f59e0b"/>
+  <polygon points="32,23 34,28 39,28 35,31 36,36 32,33 28,36 29,31 25,28 30,28" fill="#ffffff" opacity="0.95"/>
+</svg>
