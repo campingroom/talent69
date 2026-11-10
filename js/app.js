@@ -8,6 +8,8 @@
   const REG_OPEN_KEY = 'talent69_wangyao_reg_open_v1';
   const DEFAULT_ADMIN_PIN = '7469';
   const ENABLE_PHASE_2 = false;
+  // วันปิดรับสมัคร (นับถอยหลังบนแดชบอร์ด) — ตั้งเป็น null เพื่อซ่อนการ์ด เช่น '2026-11-20T23:59:59+07:00'
+  const REGISTRATION_DEADLINE = null;
   const DEFAULT_GAS_WEB_APP_URL =
     'https://script.google.com/macros/s/AKfycbxMnn_WoMLx83wa--6WcYMgBEmR1sqoxyKST1RxLaxFEHaEWjjuBQB1j47vd4U83eCqoQ/exec';
 
@@ -1385,6 +1387,104 @@
   // ==========================================
   // RENDER TAB 1: OVERALL DASHBOARD
   // ==========================================
+  // ---------- Graphic Dashboard Helpers ----------
+  function setTextById(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function majorAreaKey(area) {
+    const m = String(area || '').match(/^(\d+)/);
+    return m ? m[1] : String(area || '');
+  }
+
+  function cleanAreaText(area) {
+    return String(area || '')
+      .replace(/^[\d.]+\s*/, '')
+      .replace(/\(Soft Power\)/gi, '')
+      .replace(/^กิจกรรม/, '')
+      .trim();
+  }
+
+  function shortAreaLabel(area) {
+    const num = (String(area || '').match(/^([\d.]+)/) || [])[1];
+    return (num ? num + ' ' : '') + cleanAreaText(area);
+  }
+
+  function getMajorAreaGroups() {
+    const groups = [];
+    const seen = {};
+    getLearningAreas().forEach(function (area) {
+      const key = majorAreaKey(area);
+      if (seen[key]) return;
+      seen[key] = true;
+      const label = cleanAreaText(area).replace(/\s*\(.*\)\s*$/, '').trim() || key;
+      groups.push({ key: key, label: label });
+    });
+    groups.sort(function (a, b) {
+      return (parseInt(a.key, 10) || 0) - (parseInt(b.key, 10) || 0);
+    });
+    return groups;
+  }
+
+  function shortSchoolName(name) {
+    return String(name || '')
+      .replace(/^โรงเรียน/, '')
+      .replace(/^บ้าน/, '')
+      .trim();
+  }
+
+  function renderDashboardCountdown(emptyCompCount) {
+    const card = document.getElementById('dashCountdownCard');
+    if (!card) return;
+    const deadline = REGISTRATION_DEADLINE ? new Date(REGISTRATION_DEADLINE) : null;
+    if (!deadline || isNaN(deadline.getTime())) {
+      card.classList.add('hidden');
+      return;
+    }
+    card.classList.remove('hidden');
+    const diffMs = Math.max(0, deadline.getTime() - Date.now());
+    const days = Math.floor(diffMs / 86400000);
+    const hours = Math.floor((diffMs % 86400000) / 3600000);
+    setTextById('dashCountdownDays', String(days));
+    setTextById('dashCountdownHours', String(hours));
+    setTextById(
+      'dashCountdownDateText',
+      deadline.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
+    );
+    setTextById(
+      'dashCountdownNote',
+      diffMs === 0
+        ? 'ปิดรับสมัครแล้ว'
+        : emptyCompCount > 0
+          ? 'ยังเหลือ ' + emptyCompCount + ' รายการที่ยังไม่มีผู้สมัคร'
+          : 'ทุกรายการมีผู้สมัครครบแล้ว'
+    );
+  }
+
+  let dashTooltipBound = false;
+  function bindDashboardChartTooltip() {
+    if (dashTooltipBound) return;
+    const tip = document.getElementById('dashChartTip');
+    const host = document.getElementById('tab-dashboard');
+    if (!tip || !host) return;
+    dashTooltipBound = true;
+    host.addEventListener('mousemove', function (e) {
+      const target = e.target.closest ? e.target.closest('[data-tip]') : null;
+      if (!target) {
+        tip.classList.remove('show');
+        return;
+      }
+      tip.textContent = target.getAttribute('data-tip') || '';
+      tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 220) + 'px';
+      tip.style.top = e.clientY + 14 + 'px';
+      tip.classList.add('show');
+    });
+    host.addEventListener('mouseleave', function () {
+      tip.classList.remove('show');
+    });
+  }
+
   function renderDashboardTab() {
     const totalComp = state.competitions.length;
     const compRegMap = {};
@@ -1546,53 +1646,96 @@
     const elBronze = document.getElementById('dashBronzeCount');
     if (elBronze) elBronze.textContent = String(bronzeTotal);
 
-    // 1. Render By Learning Area Table
-    const areas = getLearningAreas();
-    const areaBody = document.getElementById('dashboardAreaTableBody');
-    if (areaBody) {
-      areaBody.innerHTML = areas
-        .map(function (area) {
-          const areaComps = state.competitions.filter((c) => c.learning_area === area);
-          const areaRegComps = areaComps.filter((c) => (compRegMap[c.comp_id] || 0) > 0);
-          const areaEmptyComps = areaComps.length - areaRegComps.length;
-          const areaTeams = state.registrations.filter((r) => r.learning_area === area).length;
+    // 1. Coverage Ring (outer = competitions, inner = schools)
+    const totalSchools = state.schools.length;
+    const activeSchoolCount = state.schools.filter(function (s) {
+      return activeSchoolSet.has(s.school_name);
+    }).length;
+    const ringComp = document.getElementById('dashRingComp');
+    const ringSchool = document.getElementById('dashRingSchool');
+    const RING_OUTER = 314.16;
+    const RING_INNER = 226.19;
+    if (ringComp) {
+      const outerLen = totalComp > 0 ? (RING_OUTER * regCompCount) / totalComp : 0;
+      ringComp.setAttribute('stroke-dasharray', outerLen.toFixed(2) + ' ' + RING_OUTER);
+    }
+    if (ringSchool) {
+      const innerLen = totalSchools > 0 ? (RING_INNER * activeSchoolCount) / totalSchools : 0;
+      ringSchool.setAttribute('stroke-dasharray', innerLen.toFixed(2) + ' ' + RING_INNER);
+    }
+    setTextById('dashRingPct', regPct + '%');
+    setTextById('dashRingCompText', String(regCompCount));
+    setTextById('dashRingCompTotal', String(totalComp));
+    setTextById('dashRingSchoolText', String(activeSchoolCount));
+    setTextById('dashRingSchoolTotal', String(totalSchools));
+    setTextById('dashRingEmptyText', String(emptyCompCount));
 
+    // 2. Countdown Card (hidden until REGISTRATION_DEADLINE is set)
+    renderDashboardCountdown(emptyCompCount);
+
+    // 3. Category Progress Bars (sorted by most empty first)
+    const areas = getLearningAreas();
+    const areaBars = document.getElementById('dashboardAreaBars');
+    if (areaBars) {
+      const areaStats = areas.map(function (area) {
+        const areaComps = state.competitions.filter((c) => c.learning_area === area);
+        const regCount = areaComps.filter((c) => (compRegMap[c.comp_id] || 0) > 0).length;
+        return { area: area, total: areaComps.length, reg: regCount, empty: areaComps.length - regCount };
+      });
+      const maxTotal = areaStats.reduce((m, a) => Math.max(m, a.total), 1);
+      areaStats.sort(function (a, b) {
+        if (b.empty !== a.empty) return b.empty - a.empty;
+        return b.total - a.total;
+      });
+
+      areaBars.innerHTML = areaStats
+        .map(function (st) {
+          const widthPct = ((st.total / maxTotal) * 100).toFixed(1);
+          const regPctArea = st.total > 0 ? ((st.reg / st.total) * 100).toFixed(1) : '0';
+          const label = shortAreaLabel(st.area);
           return (
-            '<tr class="hover:bg-[#F7F7F5] transition">' +
-            '<td class="py-2.5 px-3 font-heading font-medium text-[#37352F]">' +
-            escapeHtml(area) +
-            '</td>' +
-            '<td class="py-2.5 px-2 text-center font-heading text-slate-600">' +
-            areaComps.length +
-            '</td>' +
-            '<td class="py-2.5 px-2 text-center">' +
-            '<span class="inline-block px-2 py-0.5 rounded-md bg-[#EDF3EC] text-[#448361] font-heading font-semibold text-xs">' +
-            areaRegComps.length +
-            '</span>' +
-            '</td>' +
-            '<td class="py-2.5 px-2 text-center">' +
-            (areaEmptyComps > 0
-              ? '<button type="button" data-jump-area="' +
-                escapeHtml(area) +
-                '" data-jump-status="EMPTY" class="px-2 py-0.5 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] font-heading font-semibold text-xs transition">' +
-                areaEmptyComps +
-                ' รายการว่าง</button>'
-              : '<span class="text-xs text-slate-400">ครบแล้ว</span>') +
-            '</td>' +
-            '<td class="py-2.5 px-2 text-center font-heading font-semibold text-[#37352F]">' +
-            areaTeams +
-            ' ทีม</td>' +
-            '<td class="py-2.5 px-2 text-right">' +
+            '<div class="flex items-center gap-3">' +
             '<button type="button" data-jump-area="' +
-            escapeHtml(area) +
-            '" data-jump-status="ALL" class="text-xs font-heading text-[#787774] hover:text-[#37352F] underline">ดูรายการ</button>' +
-            '</td>' +
-            '</tr>'
+            escapeHtml(st.area) +
+            '" data-jump-status="ALL" title="' +
+            escapeHtml(st.area) +
+            '" class="dash-bar-row flex-1 min-w-0 flex items-center gap-2 sm:gap-3 text-left group">' +
+            '<span class="w-24 sm:w-44 shrink-0 text-[11px] sm:text-sm text-right text-[#37352F] truncate group-hover:font-semibold">' +
+            escapeHtml(label) +
+            '</span>' +
+            '<span class="flex-1 min-w-0">' +
+            '<span class="dash-bar flex h-5 rounded-md overflow-hidden" style="width:' +
+            widthPct +
+            '%">' +
+            '<span class="h-full bg-[#0F7B6C]" style="width:' +
+            regPctArea +
+            '%"></span>' +
+            '<span class="h-full bg-[#F4C7C3]" style="width:' +
+            (100 - parseFloat(regPctArea)).toFixed(1) +
+            '%"></span>' +
+            '</span>' +
+            '</span>' +
+            '</button>' +
+            '<span class="w-[4.5rem] sm:w-24 shrink-0 text-[11px] sm:text-xs text-[#787774] font-heading">' +
+            '<b class="text-[#37352F]">' +
+            st.reg +
+            '</b>/' +
+            st.total +
+            ' ' +
+            (st.empty > 0
+              ? '<button type="button" data-jump-area="' +
+                escapeHtml(st.area) +
+                '" data-jump-status="EMPTY" class="text-[#D44C47] hover:underline font-semibold">ว่าง ' +
+                st.empty +
+                '</button>'
+              : '<span class="text-[#448361] font-semibold">ครบ</span>') +
+            '</span>' +
+            '</div>'
           );
         })
         .join('');
 
-      areaBody.querySelectorAll('[data-jump-area]').forEach(function (btn) {
+      areaBars.querySelectorAll('[data-jump-area]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           const area = btn.getAttribute('data-jump-area');
           const status = btn.getAttribute('data-jump-status') || 'ALL';
@@ -1604,7 +1747,7 @@
       });
     }
 
-    // 2. Render By Level Grid
+    // 4. Render By Level Grid
     const levelGrid = document.getElementById('dashboardLevelGrid');
     if (levelGrid) {
       const levels = getLevels();
@@ -1645,69 +1788,146 @@
       });
     }
 
-    // 3. Render 13 Schools Table
-    const schoolBody = document.getElementById('dashboardSchoolTableBody');
-    if (schoolBody) {
-      const schoolStats = state.schools.map(function (s) {
-        const regs = state.registrations.filter((r) => r.school_name === s.school_name);
-        let stuCount = 0;
-        let tchCount = 0;
-        regs.forEach(function (r) {
-          stuCount += (r.students || []).length;
-          tchCount += (r.teachers || []).length;
-        });
-        return {
-          school_name: s.school_name,
-          subdistrict: s.subdistrict,
-          itemCount: regs.length,
-          stuCount: stuCount,
-          tchCount: tchCount
-        };
+    // 5. School x Category Heatmap & 6. Participation Leaderboard
+    const groups = getMajorAreaGroups();
+    const schoolStats = state.schools.map(function (s) {
+      const regs = state.registrations.filter((r) => r.school_name === s.school_name);
+      let stuCount = 0;
+      let tchCount = 0;
+      regs.forEach(function (r) {
+        stuCount += (r.students || []).length;
+        tchCount += (r.teachers || []).length;
       });
+      const perGroup = groups.map(function (g) {
+        return regs.filter((r) => majorAreaKey(r.learning_area) === g.key).length;
+      });
+      return {
+        school_name: s.school_name,
+        short: shortSchoolName(s.school_name),
+        itemCount: regs.length,
+        stuCount: stuCount,
+        tchCount: tchCount,
+        perGroup: perGroup
+      };
+    });
 
-      schoolStats.sort(function (a, b) {
+    const heatEl = document.getElementById('dashboardHeatmap');
+    if (heatEl) {
+      const heatColor = function (v) {
+        if (v <= 0) return '#F1F1EF';
+        if (v === 1) return '#CDE8E2';
+        if (v === 2) return '#7FC4B4';
+        if (v <= 4) return '#2E9A86';
+        return '#0B5E52';
+      };
+      let html =
+        '<div class="grid gap-1 items-center" style="grid-template-columns:128px repeat(' +
+        groups.length +
+        ',minmax(0,1fr)) 52px">' +
+        '<div></div>' +
+        groups
+          .map(function (g) {
+            return (
+              '<div class="text-[10px] leading-tight text-[#787774] text-center h-10 flex items-end justify-center" title="' +
+              escapeHtml(g.label) +
+              '">' +
+              escapeHtml(g.label) +
+              '</div>'
+            );
+          })
+          .join('') +
+        '<div class="text-[10px] text-[#787774] text-center self-end">รวม</div>';
+
+      schoolStats.forEach(function (st) {
+        const none = st.itemCount === 0;
+        html +=
+          '<button type="button" data-open-school="' +
+          escapeHtml(st.school_name) +
+          '" class="text-xs text-left truncate hover:underline ' +
+          (none ? 'text-[#D44C47] font-semibold' : 'text-[#37352F]') +
+          '" title="' +
+          escapeHtml(st.school_name) +
+          '">' +
+          escapeHtml(st.short) +
+          '</button>';
+        html += st.perGroup
+          .map(function (v, j) {
+            return (
+              '<button type="button" class="dash-heat-cell" data-open-school="' +
+              escapeHtml(st.school_name) +
+              '" data-tip="' +
+              escapeHtml(st.school_name + '\n' + groups[j].label + ': ' + v + ' รายการ') +
+              '" aria-label="' +
+              escapeHtml(st.school_name + ' ' + groups[j].label + ' ' + v + ' รายการ') +
+              '" style="background:' +
+              heatColor(v) +
+              '"></button>'
+            );
+          })
+          .join('');
+        html +=
+          '<div class="text-xs text-center font-heading font-semibold ' +
+          (none ? 'text-[#D44C47]' : 'text-[#37352F]') +
+          '">' +
+          (none ? 'ยังไม่ส่ง' : st.itemCount) +
+          '</div>';
+      });
+      html += '</div>';
+      heatEl.innerHTML = html;
+    }
+
+    const boardEl = document.getElementById('dashboardSchoolBoard');
+    if (boardEl) {
+      const ranked = schoolStats.slice().sort(function (a, b) {
         if (b.itemCount !== a.itemCount) return b.itemCount - a.itemCount;
+        if (b.stuCount !== a.stuCount) return b.stuCount - a.stuCount;
         return a.school_name.localeCompare(b.school_name, 'th');
       });
-
-      schoolBody.innerHTML = schoolStats
-        .map(function (st) {
-          const badgeClass =
-            st.itemCount > 0
-              ? 'bg-[#EDF3EC] text-[#448361] font-semibold'
-              : 'bg-[#F1F1EF] text-[#787774]';
-
+      const maxItems = ranked.length && ranked[0].itemCount > 0 ? ranked[0].itemCount : 1;
+      const medalCls = [
+        'bg-amber-400 text-white',
+        'bg-slate-300 text-slate-800',
+        'bg-orange-300 text-white'
+      ];
+      boardEl.innerHTML = ranked
+        .map(function (st, k) {
+          const none = st.itemCount === 0;
+          const badge = !none && k < 3 ? medalCls[k] : 'bg-[#F1F1EF] text-[#787774]';
           return (
-            '<tr class="hover:bg-[#F7F7F5] transition">' +
-            '<td class="py-2 px-2.5">' +
             '<button type="button" data-open-school="' +
             escapeHtml(st.school_name) +
-            '" class="text-left font-heading font-medium text-[#37352F] hover:underline">' +
+            '" title="' +
             escapeHtml(st.school_name) +
-            '</button>' +
-            '<div class="text-[11px] text-[#787774]">' +
-            escapeHtml(st.subdistrict || '') +
-            '</div>' +
-            '</td>' +
-            '<td class="py-2 px-2 text-center">' +
-            '<span class="inline-block px-2.5 py-0.5 rounded-md text-xs font-heading ' +
-            badgeClass +
+            '" class="w-full flex items-center gap-2 text-sm p-1.5 rounded-lg hover:bg-[#F7F7F5] transition text-left">' +
+            '<span class="w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[11px] font-heading font-bold ' +
+            badge +
             '">' +
-            st.itemCount +
-            ' รายการ</span>' +
-            '</td>' +
-            '<td class="py-2 px-2 text-center text-xs font-heading text-[#37352F]">' +
-            st.stuCount +
-            '</td>' +
-            '<td class="py-2 px-2 text-center text-xs font-heading text-[#37352F]">' +
-            st.tchCount +
-            '</td>' +
-            '</tr>'
+            (k + 1) +
+            '</span>' +
+            '<span class="w-28 shrink-0 truncate font-heading ' +
+            (none ? 'text-[#D44C47]' : 'text-[#37352F]') +
+            '">' +
+            escapeHtml(st.short) +
+            '</span>' +
+            '<span class="flex-1 h-2 rounded-full bg-[#F1F1EF] overflow-hidden">' +
+            '<span class="dash-bar block h-2 rounded-full bg-[#2F6FDB]" style="width:' +
+            ((st.itemCount / maxItems) * 100).toFixed(1) +
+            '%"></span>' +
+            '</span>' +
+            '<span class="w-20 shrink-0 text-right text-xs text-[#787774] font-heading">' +
+            (none
+              ? '<span class="text-[#D44C47]">ยังไม่ส่ง</span>'
+              : '<b class="text-[#37352F]">' + st.itemCount + '</b> · ' + st.stuCount + ' คน') +
+            '</span>' +
+            '</button>'
           );
         })
         .join('');
+    }
 
-      schoolBody.querySelectorAll('[data-open-school]').forEach(function (btn) {
+    document
+      .querySelectorAll('#dashboardHeatmap [data-open-school], #dashboardSchoolBoard [data-open-school]')
+      .forEach(function (btn) {
         btn.addEventListener('click', function () {
           const schoolName = btn.getAttribute('data-open-school');
           const select = document.getElementById('schoolViewSelect');
@@ -1715,9 +1935,10 @@
           switchTab('school');
         });
       });
-    }
 
-    // 4. Render Recent Registrations Live Table
+    bindDashboardChartTooltip();
+
+    // 7. Render Recent Registrations Live Table
     const recentBody = document.getElementById('recentRegistrationsBody');
     if (recentBody) {
       if (state.registrations.length === 0) {
@@ -4412,6 +4633,27 @@
     const kpiSchools = document.getElementById('kpiCardSchools');
     if (kpiSchools) {
       kpiSchools.addEventListener('click', function () {
+        switchTab('school');
+      });
+    }
+
+    // Coverage ring shortcuts
+    [
+      ['btnRingGoComp', 'REGISTERED'],
+      ['btnRingGoEmpty', 'EMPTY']
+    ].forEach(function (pair) {
+      const btn = document.getElementById(pair[0]);
+      if (!btn) return;
+      btn.addEventListener('click', function () {
+        document.getElementById('compViewAreaFilter').value = 'ALL';
+        document.getElementById('compViewLevelFilter').value = 'ALL';
+        state.compStatusFilter = pair[1];
+        switchTab('competition');
+      });
+    });
+    const btnRingGoSchool = document.getElementById('btnRingGoSchool');
+    if (btnRingGoSchool) {
+      btnRingGoSchool.addEventListener('click', function () {
         switchTab('school');
       });
     }
