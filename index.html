@@ -188,6 +188,27 @@
     </div>
   </header>
 
+  <!-- Top Milestones Announcement Bar (Zero Emojis, Notion Style) -->
+  <div id="topMilestonesBar" class="bg-amber-50/95 border-b border-amber-200/90 py-2.5 px-4 sm:px-6">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5 text-xs font-heading">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-700">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-200/90 text-amber-900 font-bold text-[11px] shadow-2xs">
+          กำหนดการสำคัญ
+        </span>
+        <span>ส่งรายชื่อวันสุดท้าย: <strong class="text-rose-700 font-bold">19 พ.ย. 2569</strong></span>
+        <span class="text-slate-300">•</span>
+        <span>สรุปรายชื่อ: <strong class="text-slate-900 font-semibold">20 พ.ย. 2569</strong></span>
+        <span class="text-slate-300">•</span>
+        <span>ประชุมกรรมการตัดสิน: <strong class="text-slate-900 font-semibold">23 พ.ย. (13.30 น.)</strong> ณ รร.บ้านวังยาววิทยายน</span>
+        <span class="text-slate-300">•</span>
+        <span>วันแข่งขันระดับกลุ่ม: <strong class="text-emerald-800 font-bold">24–25 พ.ย. 2569</strong></span>
+      </div>
+      <div class="text-[11px] text-amber-900/80 hidden lg:block font-medium">
+        แข่งขันระดับเขตพื้นที่ฯ: 23–24 ธ.ค. 2569
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full px-4 pointer-events-none"></div>
 
@@ -621,10 +642,13 @@
             </div>
           </div>
 
-          <!-- Countdown Card: นับถอยหลังสู่วันแข่งขันระดับกลุ่ม -->
+          <!-- Countdown Card: นับถอยหลัง 2 จังหวะอัตโนมัติ -->
           <div id="dashCountdownCard" class="bg-white rounded-xl border border-slate-200 p-5">
-            <h2 class="text-base font-bold font-heading text-slate-900">นับถอยหลังสู่วันแข่งขันระดับกลุ่ม</h2>
-            <p class="text-xs text-slate-500 mb-3">ถึงวันแข่งขัน <span id="dashCountdownDateText">24–25 พฤศจิกายน 2569</span></p>
+            <div class="flex items-center justify-between gap-2 mb-1">
+              <h2 id="dashCountdownTitle" class="text-base font-bold font-heading text-slate-900">นับถอยหลังปิดรับสมัครส่งรายชื่อ</h2>
+              <span id="dashCountdownPhaseBadge" class="text-[10px] font-heading font-semibold px-2 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-700">วันสุดท้าย 19 พ.ย.</span>
+            </div>
+            <p class="text-xs text-slate-500 mb-3"><span id="dashCountdownSubLabel">วันสุดท้ายของการส่งรายชื่อ</span>: <span id="dashCountdownDateText" class="font-semibold text-slate-800">19 พฤศจิกายน 2569</span></p>
             <div class="flex items-end gap-2">
               <div class="text-center">
                 <div id="dashCountdownDays" class="text-4xl font-bold font-heading text-slate-900 bg-[#F7F7F5] border border-slate-200 rounded-lg px-3 py-1 min-w-[4rem]">0</div>
@@ -676,6 +700,18 @@
           <p class="text-xs text-slate-500 mb-3">จำนวนรายการที่ส่ง · นักเรียน (กดชื่อโรงเรียนเพื่อดูใบสรุป)</p>
           <div id="dashboardSchoolBoard" class="space-y-1"></div>
         </div>
+      </div>
+
+      <!-- 5-Step Visual Timeline Stepper (Roadmap) -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3.5">
+          <div>
+            <h2 class="text-base font-bold font-heading text-slate-900">กำหนดการดำเนินงาน (Timeline Roadmap)</h2>
+            <p class="text-xs text-slate-500">ลำดับขั้นตอนการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 กลุ่มวังยาวเขวาไร่ดอนกลาง</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 font-heading shrink-0 self-start sm:self-auto">5 ขั้นตอนหลัก</span>
+        </div>
+        <div id="dashboardTimelineStepper" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"></div>
       </div>
 
       <!-- Breakdown by Grade Level -->

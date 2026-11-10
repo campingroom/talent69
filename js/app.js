@@ -8,8 +8,9 @@
   const REG_OPEN_KEY = 'talent69_wangyao_reg_open_v1';
   const DEFAULT_ADMIN_PIN = '7469';
   const ENABLE_PHASE_2 = false;
-  // วันแข่งขันระดับกลุ่มโรงเรียน (เป้าหมายนับถอยหลังบนแดชบอร์ด)
-  const REGISTRATION_DEADLINE = '2026-11-24T08:30:00+07:00';
+  // กำหนดการสำคัญสำหรับระบบนับถอยหลังและ Auto-Lock
+  const REGISTRATION_CLOSE_DATE = '2026-11-19T23:59:59+07:00';
+  const COMPETITION_START_DATE = '2026-11-24T08:30:00+07:00';
   const DEFAULT_GAS_WEB_APP_URL =
     'https://script.google.com/macros/s/AKfycbxMnn_WoMLx83wa--6WcYMgBEmR1sqoxyKST1RxLaxFEHaEWjjuBQB1j47vd4U83eCqoQ/exec';
 
@@ -256,6 +257,15 @@
     );
   }
 
+  function isRegistrationEffectivelyOpen() {
+    if (!state.registrationOpen) return false;
+    // Auto-lock for general users when deadline passed (after 19 Nov 2026 23:59:59)
+    if (!state.isAdmin && Date.now() > new Date(REGISTRATION_CLOSE_DATE).getTime()) {
+      return false;
+    }
+    return true;
+  }
+
   function updateAdminAndStatusUI() {
     // 1. Registration Open/Closed Pill & Form Banner
     const badge = document.getElementById('regOpenStatusBadge');
@@ -264,8 +274,14 @@
     const closedBanner = document.getElementById('registrationClosedBanner');
     const toggleBtn = document.getElementById('btnToggleRegistrationOpen');
 
+    const effectivelyOpen = isRegistrationEffectivelyOpen();
+    const isAutoLocked =
+      state.registrationOpen &&
+      !state.isAdmin &&
+      Date.now() > new Date(REGISTRATION_CLOSE_DATE).getTime();
+
     if (badge && dot && text) {
-      if (state.registrationOpen) {
+      if (effectivelyOpen) {
         badge.className =
           'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EDF3EC] border border-[#D7E6D5] text-[#448361] text-xs font-heading font-medium';
         dot.className = 'w-2 h-2 rounded-full bg-[#448361]';
@@ -274,15 +290,22 @@
         badge.className =
           'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDEBEC] border border-[#F5D0D2] text-[#D44C47] text-xs font-heading font-medium';
         dot.className = 'w-2 h-2 rounded-full bg-[#D44C47]';
-        text.textContent = 'ปิดรับสมัครแล้ว';
+        text.textContent = isAutoLocked
+          ? 'ปิดรับสมัครตามกำหนดการ (19 พ.ย.)'
+          : 'ปิดรับสมัครแล้ว';
       }
     }
 
     if (closedBanner) {
-      if (state.registrationOpen) {
+      if (effectivelyOpen) {
         closedBanner.classList.add('hidden');
       } else {
         closedBanner.classList.remove('hidden');
+        const closedText = closedBanner.querySelector('p');
+        if (closedText && isAutoLocked) {
+          closedText.textContent =
+            'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อตามกำหนดการแล้ว (สิ้นสุดวันที่ 19 พ.ย. 2569 เวลา 23.59 น.) อยู่ระหว่างสรุปรายชื่อผู้เข้าร่วมการแข่งขัน';
+        }
       }
     }
 
@@ -1139,8 +1162,11 @@
   async function handleRegistrationSubmit(e) {
     e.preventDefault();
 
-    if (!state.registrationOpen && !state.isAdmin) {
-      showToast('ขณะนี้ระบบปิดรับสมัครแล้ว กรุณาติดต่อผู้ดูแลระบบระดับกลุ่มโรงเรียน', 'error');
+    if (!isRegistrationEffectivelyOpen()) {
+      showToast(
+        'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อแล้ว (สิ้นสุดวันที่ 19 พ.ย. 2569 เวลา 23.59 น.) กรุณาติดต่อผู้ดูแลระบบ',
+        'error'
+      );
       return;
     }
 
@@ -1437,26 +1463,74 @@
   function renderDashboardCountdown(emptyCompCount) {
     const card = document.getElementById('dashCountdownCard');
     if (!card) return;
-    const deadline = REGISTRATION_DEADLINE ? new Date(REGISTRATION_DEADLINE) : null;
-    if (!deadline || isNaN(deadline.getTime())) {
-      card.classList.add('hidden');
-      return;
+    const now = Date.now();
+    const closeTime = new Date(REGISTRATION_CLOSE_DATE).getTime();
+    const compTime = new Date(COMPETITION_START_DATE).getTime();
+
+    const titleEl = document.getElementById('dashCountdownTitle');
+    const badgeEl = document.getElementById('dashCountdownPhaseBadge');
+    const subLabelEl = document.getElementById('dashCountdownSubLabel');
+    const dateTextEl = document.getElementById('dashCountdownDateText');
+    const noteEl = document.getElementById('dashCountdownNote');
+
+    if (now <= closeTime) {
+      // Phase 1: Countdown to Registration Deadline (19 Nov)
+      const diffMs = Math.max(0, closeTime - now);
+      const days = Math.floor(diffMs / 86400000);
+      const hours = Math.floor((diffMs % 86400000) / 3600000);
+      setTextById('dashCountdownDays', String(days));
+      setTextById('dashCountdownHours', String(hours));
+      if (titleEl) titleEl.textContent = 'นับถอยหลังปิดรับสมัครส่งรายชื่อ';
+      if (badgeEl) {
+        badgeEl.textContent = 'วันสุดท้าย 19 พ.ย.';
+        badgeEl.className =
+          'text-[10px] font-heading font-semibold px-2 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-700';
+      }
+      if (subLabelEl) subLabelEl.textContent = 'วันสุดท้ายของการส่งรายชื่อ';
+      if (dateTextEl) dateTextEl.textContent = '19 พฤศจิกายน 2569 (23:59 น.)';
+      if (noteEl) {
+        noteEl.textContent =
+          emptyCompCount > 0
+            ? 'ยังเหลือ ' +
+              emptyCompCount +
+              ' รายการที่ยังไม่มีผู้สมัคร (สรุปรายชื่อ 20 พ.ย. • แข่งขัน 24–25 พ.ย.)'
+            : 'ทุกรายการมีผู้สมัครครบแล้ว (สรุปรายชื่อ 20 พ.ย. • แข่งขัน 24–25 พ.ย.)';
+      }
+    } else if (now <= compTime) {
+      // Phase 2: Countdown to Competition Days (24 Nov)
+      const diffMs = Math.max(0, compTime - now);
+      const days = Math.floor(diffMs / 86400000);
+      const hours = Math.floor((diffMs % 86400000) / 3600000);
+      setTextById('dashCountdownDays', String(days));
+      setTextById('dashCountdownHours', String(hours));
+      if (titleEl) titleEl.textContent = 'นับถอยหลังสู่วันแข่งขันระดับกลุ่ม';
+      if (badgeEl) {
+        badgeEl.textContent = 'วันแข่ง 24–25 พ.ย.';
+        badgeEl.className =
+          'text-[10px] font-heading font-semibold px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800';
+      }
+      if (subLabelEl) subLabelEl.textContent = 'วันแข่งขันระดับกลุ่ม';
+      if (dateTextEl) dateTextEl.textContent = '24–25 พฤศจิกายน 2569';
+      if (noteEl) {
+        noteEl.textContent =
+          'ปิดรับสมัครแล้ว อยู่ระหว่างเตรียมการแข่งขัน (ประชุมกรรมการ 23 พ.ย. เวลา 13.30 น.)';
+      }
+    } else {
+      // Phase 3: During/After Competition
+      setTextById('dashCountdownDays', '0');
+      setTextById('dashCountdownHours', '0');
+      if (titleEl) titleEl.textContent = 'การแข่งขันระดับกลุ่มโรงเรียน';
+      if (badgeEl) {
+        badgeEl.textContent = 'กำลังแข่งขัน';
+        badgeEl.className =
+          'text-[10px] font-heading font-semibold px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800';
+      }
+      if (subLabelEl) subLabelEl.textContent = 'กำหนดแข่งขัน';
+      if (dateTextEl) dateTextEl.textContent = '24–25 พฤศจิกายน 2569';
+      if (noteEl) {
+        noteEl.textContent = 'เข้าสู่ช่วงการแข่งขันระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+      }
     }
-    card.classList.remove('hidden');
-    const diffMs = Math.max(0, deadline.getTime() - Date.now());
-    const days = Math.floor(diffMs / 86400000);
-    const hours = Math.floor((diffMs % 86400000) / 3600000);
-    setTextById('dashCountdownDays', String(days));
-    setTextById('dashCountdownHours', String(hours));
-    setTextById('dashCountdownDateText', '24–25 พฤศจิกายน 2569');
-    setTextById(
-      'dashCountdownNote',
-      diffMs === 0
-        ? 'เริ่มการแข่งขันแล้ว'
-        : emptyCompCount > 0
-          ? 'ยังเหลือ ' + emptyCompCount + ' รายการที่ยังไม่มีผู้สมัคร'
-          : 'ทุกรายการมีผู้สมัครครบแล้ว'
-    );
   }
 
   let dashTooltipBound = false;
@@ -1596,6 +1670,52 @@
             '">' +
             escapeHtml(it.status) +
             '</span>' +
+            '</div>'
+          );
+        })
+        .join('');
+    }
+
+    // 5-Step Visual Timeline Stepper Card on Dashboard
+    const stepperEl = document.getElementById('dashboardTimelineStepper');
+    if (stepperEl) {
+      const items = DEFAULT_DATA.operationTimeline || [];
+      stepperEl.innerHTML = items
+        .map(function (it) {
+          const isActive = String(it.status || '').indexOf('กำลัง') !== -1;
+          const cardCls = isActive
+            ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-200 shadow-2xs'
+            : 'bg-[#F7F7F5] border-slate-200/90';
+          const stepBadgeCls = isActive
+            ? 'bg-amber-600 text-white'
+            : 'bg-[#37352F] text-white';
+          const statusBadgeCls = isActive
+            ? 'bg-[#EDF3EC] text-[#448361] border-[#D7E6D5]'
+            : 'bg-[#F1F1EF] text-[#787774] border-slate-200';
+          return (
+            '<div class="flex flex-col justify-between p-3.5 rounded-xl border text-xs transition ' +
+            cardCls +
+            '">' +
+            '<div>' +
+            '<div class="flex items-center justify-between gap-2 mb-2">' +
+            '<span class="w-5 h-5 rounded-md font-heading font-bold flex items-center justify-center shrink-0 text-[11px] ' +
+            stepBadgeCls +
+            '">' +
+            escapeHtml(it.step) +
+            '</span>' +
+            '<span class="px-2 py-0.5 rounded border text-[10px] font-heading font-medium ' +
+            statusBadgeCls +
+            '">' +
+            escapeHtml(it.status) +
+            '</span>' +
+            '</div>' +
+            '<div class="font-heading font-semibold text-slate-900 leading-snug mb-1.5">' +
+            escapeHtml(it.title) +
+            '</div>' +
+            '</div>' +
+            '<div class="text-[11px] font-heading font-medium text-amber-900/90 pt-2 border-t border-slate-200/70 mt-1">' +
+            escapeHtml(it.period) +
+            '</div>' +
             '</div>'
           );
         })
@@ -2745,7 +2865,7 @@
       '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>เบอร์โทร ....................................................</td>' +
       '</tr>' +
       '</table>' +
-      '<div class="footer-note">หมายเหตุ ศูนย์พัฒนาวิชาการปรับใช้ได้ตามความเหมาะสม</div>' +
+      '<div class="footer-note">นัดหมายประชุมคณะกรรมการตัดสิน: วันจันทร์ที่ 23 พฤศจิกายน 2569 เวลา 13.30 น. ณ โรงเรียนบ้านวังยาววิทยายน • กำหนดการแข่งขัน 24–25 พ.ย. 2569 • หมายเหตุ ศูนย์พัฒนาวิชาการปรับใช้ได้ตามความเหมาะสม</div>' +
       '</div>' +
       '<script>window.onload=function(){window.print();};<\/script>' +
       '</body>' +
@@ -4334,7 +4454,7 @@
         comp_name: judge.comp_name || '',
         level: judge.level || '',
         comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
-        comp_time: comp.comp_time || '09.00 - 12.00 น.',
+        comp_time: (comp.comp_time || '09.00 - 12.00 น.') + ' (ประชุม 23 พ.ย. 13.30 น.)',
         venue_room: comp.venue_room || 'อาคารเรียนหลัก',
         ref_code: judge.judge_id
       }
