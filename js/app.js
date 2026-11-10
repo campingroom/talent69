@@ -8,8 +8,8 @@
   const REG_OPEN_KEY = 'talent69_wangyao_reg_open_v1';
   const DEFAULT_ADMIN_PIN = '7469';
   const ENABLE_PHASE_2 = false;
-  // วันปิดรับสมัคร (นับถอยหลังบนแดชบอร์ด) — ตั้งเป็น null เพื่อซ่อนการ์ด เช่น '2026-11-20T23:59:59+07:00'
-  const REGISTRATION_DEADLINE = null;
+  // วันแข่งขันระดับกลุ่มโรงเรียน (เป้าหมายนับถอยหลังบนแดชบอร์ด)
+  const REGISTRATION_DEADLINE = '2026-11-24T08:30:00+07:00';
   const DEFAULT_GAS_WEB_APP_URL =
     'https://script.google.com/macros/s/AKfycbxMnn_WoMLx83wa--6WcYMgBEmR1sqoxyKST1RxLaxFEHaEWjjuBQB1j47vd4U83eCqoQ/exec';
 
@@ -1448,14 +1448,11 @@
     const hours = Math.floor((diffMs % 86400000) / 3600000);
     setTextById('dashCountdownDays', String(days));
     setTextById('dashCountdownHours', String(hours));
-    setTextById(
-      'dashCountdownDateText',
-      deadline.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
-    );
+    setTextById('dashCountdownDateText', '24–25 พฤศจิกายน 2569');
     setTextById(
       'dashCountdownNote',
       diffMs === 0
-        ? 'ปิดรับสมัครแล้ว'
+        ? 'เริ่มการแข่งขันแล้ว'
         : emptyCompCount > 0
           ? 'ยังเหลือ ' + emptyCompCount + ' รายการที่ยังไม่มีผู้สมัคร'
           : 'ทุกรายการมีผู้สมัครครบแล้ว'
@@ -1684,8 +1681,12 @@
       });
       const maxTotal = areaStats.reduce((m, a) => Math.max(m, a.total), 1);
       areaStats.sort(function (a, b) {
-        if (b.empty !== a.empty) return b.empty - a.empty;
-        return b.total - a.total;
+        const ma = String(a.area || '').match(/^([\d.]+)/);
+        const mb = String(b.area || '').match(/^([\d.]+)/);
+        const numA = ma ? ma[1].split('.').map(Number) : [999];
+        const numB = mb ? mb[1].split('.').map(Number) : [999];
+        if (numA[0] !== numB[0]) return numA[0] - numB[0];
+        return (numA[1] || 0) - (numB[1] || 0);
       });
 
       areaBars.innerHTML = areaStats
@@ -1700,7 +1701,7 @@
             '" data-jump-status="ALL" title="' +
             escapeHtml(st.area) +
             '" class="dash-bar-row flex-1 min-w-0 flex items-center gap-2 sm:gap-3 text-left group">' +
-            '<span class="w-24 sm:w-44 shrink-0 text-[11px] sm:text-sm text-right text-[#37352F] truncate group-hover:font-semibold">' +
+            '<span class="w-24 sm:w-44 shrink-0 text-[11px] sm:text-sm text-left text-[#37352F] truncate group-hover:font-semibold">' +
             escapeHtml(label) +
             '</span>' +
             '<span class="flex-1 min-w-0">' +
@@ -2111,7 +2112,7 @@
       .map(function (r, idx) {
         const compObj = state.competitions.find((c) => c.comp_id === r.comp_id) || {};
         const roomInfo =
-          (compObj.comp_date || '30 พ.ย. 69') +
+          (compObj.comp_date || '24–25 พ.ย. 69') +
           ' • ' +
           (compObj.comp_time || '09.00 น.') +
           ' • ' +
@@ -2313,7 +2314,7 @@
             : c.min_students + '–' + c.max_students + ' คน';
 
         const scheduleInfo =
-          (c.comp_date || '30 พฤศจิกายน 2569') +
+          (c.comp_date || '24–25 พฤศจิกายน 2569') +
           ' • ' +
           (c.comp_time || '09.00 - 12.00 น.') +
           ' • ' +
@@ -3628,7 +3629,7 @@
                     </div>
                     <h3 class="text-sm sm:text-base font-bold font-heading text-slate-900">${escapeHtml(c.comp_name)}</h3>
                     <p class="text-[11px] text-slate-500 mt-0.5">
-                      วันเวลา: ${escapeHtml(c.comp_date || '30 พฤศจิกายน 2569')} (${escapeHtml(c.comp_time || '09.00 - 12.00 น.')}) • สถานที่: ${escapeHtml(c.venue_room || 'อาคารเรียนหลัก')}
+                      วันเวลา: ${escapeHtml(c.comp_date || '24–25 พฤศจิกายน 2569')} (${escapeHtml(c.comp_time || '09.00 - 12.00 น.')}) • สถานที่: ${escapeHtml(c.venue_room || 'อาคารเรียนหลัก')}
                     </p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2 shrink-0">
@@ -3967,7 +3968,7 @@
     document.getElementById('scheduleModalCompId').value = comp.comp_id;
     document.getElementById('scheduleModalCompDesc').textContent =
       '[' + comp.comp_id + '] ' + comp.comp_name + ' (' + comp.level + ')';
-    document.getElementById('scheduleDateInput').value = comp.comp_date || '30 พฤศจิกายน 2569';
+    document.getElementById('scheduleDateInput').value = comp.comp_date || '24–25 พฤศจิกายน 2569';
     document.getElementById('scheduleTimeInput').value = comp.comp_time || '09.00 - 12.00 น.';
     document.getElementById('scheduleBuildingInput').value =
       comp.venue_building || 'สนามแข่งขันกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
@@ -4198,7 +4199,7 @@
 
                 <div class="cert-event">
                   การแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ระดับกลุ่มโรงเรียน<br/>
-                  ให้ไว้ ณ วันที่ 30 พฤศจิกายน พุทธศักราช 2569
+                  ให้ไว้ ณ วันที่ 25 พฤศจิกายน พุทธศักราช 2569
                 </div>
 
                 <div class="cert-footer">
@@ -4292,7 +4293,7 @@
           comp_id: r.comp_id,
           comp_name: r.comp_name,
           level: r.level,
-          comp_date: comp.comp_date || '30 พฤศจิกายน 2569',
+          comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
           comp_time: comp.comp_time || '09.00 - 12.00 น.',
           venue_room: comp.venue_room || 'อาคารเรียนหลัก',
           ref_code: r.reg_id + '-S' + (idx + 1)
@@ -4308,7 +4309,7 @@
           comp_id: r.comp_id,
           comp_name: r.comp_name,
           level: r.level,
-          comp_date: comp.comp_date || '30 พฤศจิกายน 2569',
+          comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
           comp_time: comp.comp_time || '09.00 - 12.00 น.',
           venue_room: comp.venue_room || 'อาคารเรียนหลัก',
           ref_code: r.reg_id + '-T' + (idx + 1)
@@ -4332,7 +4333,7 @@
         comp_id: judge.comp_id || '',
         comp_name: judge.comp_name || '',
         level: judge.level || '',
-        comp_date: comp.comp_date || '30 พฤศจิกายน 2569',
+        comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
         comp_time: comp.comp_time || '09.00 - 12.00 น.',
         venue_room: comp.venue_room || 'อาคารเรียนหลัก',
         ref_code: judge.judge_id

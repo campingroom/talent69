@@ -3,7 +3,7 @@ window.TALENT69_DEFAULT_DATA = {
   "eventInfo": {
     "title": "งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569",
     "subtitle": "กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สังกัด สพป.มหาสารคาม เขต 3",
-    "scheduleGroup": "แข่งระดับกลุ่มโรงเรียน ภายในวันที่ 30 พฤศจิกายน 2569",
+    "scheduleGroup": "แข่งระดับกลุ่มโรงเรียน วันที่ 24–25 พฤศจิกายน 2569",
     "scheduleDistrict": "แข่งขันระดับเขตพื้นที่การศึกษา ระหว่างวันที่ 23–24 ธันวาคม 2569",
     "spreadsheetId": "1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ",
     "spreadsheetUrl": "https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit",
@@ -2180,7 +2180,7 @@ window.TALENT69_DEFAULT_DATA = {
     {
       "step": "3",
       "title": "จัดการแข่งขันและบันทึกคะแนนระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง",
-      "period": "ภายในวันที่ 30 พฤศจิกายน 2569",
+      "period": "24 – 25 พฤศจิกายน 2569",
       "status": "กำหนดการ"
     },
     {
@@ -2210,7 +2210,7 @@ window.TALENT69_DEFAULT_DATA = {
       else if (area.indexOf('วิทยาศาสตร์') !== -1) room = 'ห้องปฏิบัติการวิทยาศาสตร์';
       else if (area.indexOf('คณิตศาสตร์') !== -1) room = 'อาคารวิชาการ ห้อง 201';
       else if (area.indexOf('ภาษาไทย') !== -1) room = 'อาคารวิชาการ ห้อง 202';
-      c.comp_date = c.comp_date || '30 พฤศจิกายน 2569';
+      c.comp_date = c.comp_date || '24–25 พฤศจิกายน 2569';
       c.comp_time = c.comp_time || '09.00 - 12.00 น.';
       c.venue_building = c.venue_building || 'สนามแข่งขันกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
       c.venue_room = c.venue_room || room;
