@@ -132,43 +132,134 @@
   }
 
   function formatNowTimestamp() {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    return (
-      d.getFullYear() +
-      '-' +
-      pad(d.getMonth() + 1) +
-      '-' +
-      pad(d.getDate()) +
-      ' ' +
-      pad(d.getHours()) +
-      ':' +
-      pad(d.getMinutes()) +
-      ':' +
-      pad(d.getSeconds())
-    );
+    try {
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Bangkok',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      const parts = formatter.formatToParts(new Date());
+      const map = {};
+      parts.forEach((p) => {
+        map[p.type] = p.value;
+      });
+      return (
+        map.year +
+        '-' +
+        map.month +
+        '-' +
+        map.day +
+        ' ' +
+        map.hour +
+        ':' +
+        map.minute +
+        ':' +
+        map.second
+      );
+    } catch (e) {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return (
+        d.getFullYear() +
+        '-' +
+        pad(d.getMonth() + 1) +
+        '-' +
+        pad(d.getDate()) +
+        ' ' +
+        pad(d.getHours()) +
+        ':' +
+        pad(d.getMinutes()) +
+        ':' +
+        pad(d.getSeconds())
+      );
+    }
   }
 
   function formatDisplayTimestamp(ts) {
     const str = String(ts || '').trim();
     if (!str) return '-';
-    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str;
+
+    // 1. If it's a GAS-generated Date string with GMT+0700 (e.g. "Thu Nov 12 2026 22:34:10 GMT+0700 (เวลาอินโดจีน)")
+    // Google Sheets parsed the Bangkok local time string as UTC, so the Date object's UTC fields contain the TRUE Bangkok time!
+    if (/GMT\+07/i.test(str)) {
+      const cleanStr = str.replace(/\s*\([^)]*\)/g, '');
+      const d = new Date(cleanStr);
+      if (!isNaN(d.getTime())) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return (
+          d.getUTCFullYear() +
+          '-' +
+          pad(d.getUTCMonth() + 1) +
+          '-' +
+          pad(d.getUTCDate()) +
+          ' ' +
+          pad(d.getUTCHours()) +
+          ':' +
+          pad(d.getUTCMinutes()) +
+          ':' +
+          pad(d.getUTCSeconds())
+        );
+      }
+    }
+
+    // 2. If already in standard YYYY-MM-DD HH:mm:ss (or YYYY-MM-DDTHH:mm:ss)
+    if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}(:\d{2})?/.test(str)) {
+      return str.replace('T', ' ').slice(0, 19);
+    }
+
+    // 3. Fallback for other parseable date strings, format to Asia/Bangkok
     const parsed = new Date(str);
     if (!isNaN(parsed.getTime())) {
-      const pad = (n) => String(n).padStart(2, '0');
-      return (
-        parsed.getFullYear() +
-        '-' +
-        pad(parsed.getMonth() + 1) +
-        '-' +
-        pad(parsed.getDate()) +
-        ' ' +
-        pad(parsed.getHours()) +
-        ':' +
-        pad(parsed.getMinutes()) +
-        ':' +
-        pad(parsed.getSeconds())
-      );
+      try {
+        const formatter = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Bangkok',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
+        const parts = formatter.formatToParts(parsed);
+        const map = {};
+        parts.forEach((p) => {
+          map[p.type] = p.value;
+        });
+        return (
+          map.year +
+          '-' +
+          map.month +
+          '-' +
+          map.day +
+          ' ' +
+          map.hour +
+          ':' +
+          map.minute +
+          ':' +
+          map.second
+        );
+      } catch (e) {
+        const pad = (n) => String(n).padStart(2, '0');
+        return (
+          parsed.getFullYear() +
+          '-' +
+          pad(parsed.getMonth() + 1) +
+          '-' +
+          pad(parsed.getDate()) +
+          ' ' +
+          pad(parsed.getHours()) +
+          ':' +
+          pad(parsed.getMinutes()) +
+          ':' +
+          pad(parsed.getSeconds())
+        );
+      }
     }
     return str;
   }
@@ -228,7 +319,11 @@
             ? parsed.competitions
             : cloneDeep(DEFAULT_DATA.competitions);
         state.registrations = Array.isArray(parsed.registrations)
-          ? parsed.registrations
+          ? parsed.registrations.map(function (r) {
+              return Object.assign({}, r, {
+                timestamp: formatDisplayTimestamp(r.timestamp)
+              });
+            })
           : cloneDeep(DEFAULT_DATA.sampleRegistrations);
         state.judges = Array.isArray(parsed.judges)
           ? parsed.judges
@@ -415,7 +510,13 @@
         if (Array.isArray(data.competitions) && data.competitions.length) {
           state.competitions = data.competitions;
         }
-        if (Array.isArray(data.registrations)) state.registrations = data.registrations;
+        if (Array.isArray(data.registrations)) {
+          state.registrations = data.registrations.map(function (r) {
+            return Object.assign({}, r, {
+              timestamp: formatDisplayTimestamp(r.timestamp)
+            });
+          });
+        }
         if (Array.isArray(data.judges)) state.judges = data.judges;
         const regOpenFlag =
           data.config && typeof data.config.registrationOpen === 'boolean'
@@ -1293,6 +1394,7 @@
       verify_token: state.isAdmin ? state.adminPin : editVerifyToken || coordinatorPhone,
       admin_pin: state.isAdmin ? state.adminPin : '',
       reg_id: newRecord.reg_id,
+      timestamp: newRecord.timestamp,
       school_name: newRecord.school_name,
       comp_id: newRecord.comp_id,
       learning_area: newRecord.learning_area,
@@ -3092,7 +3194,7 @@
         .join(' | ');
       rows.push([
         r.reg_id,
-        r.timestamp,
+        formatDisplayTimestamp(r.timestamp),
         r.school_name,
         r.comp_id,
         r.learning_area,
@@ -4795,6 +4897,47 @@
     const btnClearSamplesAdmin = document.getElementById('btnClearSamplesAdmin');
     if (btnClearSamplesAdmin) {
       btnClearSamplesAdmin.addEventListener('click', clearSampleData);
+    }
+
+    const btnFixSheetTimestamps = document.getElementById('btnFixSheetTimestamps');
+    if (btnFixSheetTimestamps) {
+      btnFixSheetTimestamps.addEventListener('click', async function () {
+        if (!state.isAdmin) {
+          showToast('กรุณาเข้าสู่ระบบแอดมินก่อนดำเนินการ', 'warning');
+          return;
+        }
+        const confirmFix = confirm(
+          'ต้องการปรับปรุงเวลาใน Google Sheets (คอลัมน์ B) ให้เป็นเวลาจริงของกรุงเทพฯ (UTC+7) หรือไม่?\n\n* ระบบจะปรับเฉพาะคอลัมน์เวลาให้ถูกต้องตรงกับความเป็นจริง โดยไม่แตะต้องหรือแก้ไขรายชื่อนักเรียน ครู โรงเรียน หรือรายการแข่งขันใด ๆ ทั้งสิ้น 100%'
+        );
+        if (!confirmFix) return;
+
+        btnFixSheetTimestamps.disabled = true;
+        const originalText = btnFixSheetTimestamps.innerHTML;
+        btnFixSheetTimestamps.textContent = 'กำลังปรับปรุงเวลาใน Google Sheets...';
+
+        try {
+          const res = await postToGoogleSheets({
+            action: 'fix_timestamps',
+            admin_pin: state.adminPin
+          });
+
+          if (res && res.ok) {
+            showToast(res.message || 'ปรับปรุงเวลาใน Google Sheets เรียบร้อยแล้ว', 'success');
+            await syncFromGoogleSheets(false);
+          } else {
+            showToast(
+              'ไม่สามารถปรับปรุงเวลาใน Google Sheets: ' +
+                ((res && res.error) || 'ข้อผิดพลาดไม่ทราบสาเหตุ'),
+              'warning'
+            );
+          }
+        } catch (err) {
+          showToast('เกิดข้อผิดพลาด: ' + err.message, 'warning');
+        } finally {
+          btnFixSheetTimestamps.disabled = false;
+          btnFixSheetTimestamps.innerHTML = originalText;
+        }
+      });
     }
 
     const btnSyncNow = document.getElementById('btnSyncNow');

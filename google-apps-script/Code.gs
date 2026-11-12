@@ -14,11 +14,20 @@ const SPREADSHEET_ID = '1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ';
 const DEFAULT_ADMIN_PIN = '7469';
 
 function getSpreadsheet_() {
+  let ss = null;
   try {
-    return SpreadsheetApp.openById(SPREADSHEET_ID);
+    ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   } catch (err) {
-    return SpreadsheetApp.getActiveSpreadsheet();
+    ss = SpreadsheetApp.getActiveSpreadsheet();
   }
+  if (ss) {
+    try {
+      if (ss.getSpreadsheetTimeZone() !== 'Asia/Bangkok') {
+        ss.setSpreadsheetTimeZone('Asia/Bangkok');
+      }
+    } catch (e) {}
+  }
+  return ss;
 }
 
 function jsonResponse_(obj) {
@@ -114,6 +123,8 @@ function doPost(e) {
       return handleDeleteRegistration_(ss, body.reg_id);
     } else if (action === 'clear_sample_data') {
       return handleClearSampleData_(ss);
+    } else if (action === 'fix_timestamps') {
+      return handleFixTimestamps_(ss);
     } else if (action === 'save_scores') {
       return handleSaveScores_(ss, body);
     } else if (action === 'update_schedule') {
@@ -213,7 +224,7 @@ function handleRegister_(ss, body, isAdmin) {
   }).join('\n');
 
   const regId = (existingRow ? String(existingRow[0] || '') : '') || body.reg_id || ('REG-74-' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'MMddHHmmss'));
-  const timestamp = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss');
+  const timestamp = body.timestamp || Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss');
   const payloadJson = JSON.stringify({ students: students, teachers: teachers });
 
   const scoreVal = body.score !== undefined ? body.score : (existingRow ? existingRow[14] : '');
@@ -224,7 +235,7 @@ function handleRegister_(ss, body, isAdmin) {
 
   const rowValues = [
     regId,
-    timestamp,
+    "'" + timestamp,
     schoolName,
     compId,
     String(body.learning_area || ''),
@@ -548,9 +559,35 @@ function readRegistrations_(ss) {
       ? parsed.teachers
       : parsePersonList_(rows[i][11], false);
 
+    let tsVal = rows[i][1];
+    let tsFormatted = '';
+    if (tsVal instanceof Date) {
+      try {
+        const ssTz = ss.getSpreadsheetTimeZone();
+        if (ssTz === 'Asia/Bangkok') {
+          tsFormatted = Utilities.formatDate(tsVal, 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss');
+        } else {
+          tsFormatted = Utilities.formatDate(tsVal, 'UTC', 'yyyy-MM-dd HH:mm:ss');
+        }
+      } catch (errTz) {
+        tsFormatted = Utilities.formatDate(tsVal, 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss');
+      }
+    } else {
+      tsFormatted = String(tsVal || '').trim();
+      if (/GMT\+07/i.test(tsFormatted)) {
+        try {
+          const cleanTs = tsFormatted.replace(/\s*\([^)]*\)/g, '');
+          const d = new Date(cleanTs);
+          if (!isNaN(d.getTime())) {
+            tsFormatted = Utilities.formatDate(d, 'UTC', 'yyyy-MM-dd HH:mm:ss');
+          }
+        } catch (e) {}
+      }
+    }
+
     result.push({
       reg_id: String(rows[i][0] || ''),
-      timestamp: String(rows[i][1] || ''),
+      timestamp: tsFormatted,
       school_name: String(rows[i][2] || ''),
       comp_id: String(rows[i][3] || ''),
       learning_area: String(rows[i][4] || ''),
@@ -592,4 +629,66 @@ function readJudges_(ss) {
     });
   }
   return result;
+}
+
+/**
+ * ฟังก์ชันปรับปรุงเวลาใน Google Sheets คอลัมน์ B (Timestamp) ให้เป็นเวลาจริงของกรุงเทพฯ (UTC+7)
+ * กฎเหล็ก: แตะต้องเฉพาะคอลัมน์ B เท่านั้น ห้ามแตะต้องหรือแก้ไขข้อมูลอื่นใดทั้งสิ้น
+ */
+function handleFixTimestamps_(ss) {
+  try {
+    ss.setSpreadsheetTimeZone('Asia/Bangkok');
+  } catch (e) {}
+
+  const regSheet = ss.getSheetByName('Registrations');
+  if (!regSheet) {
+    return jsonResponse_({ ok: false, error: 'ไม่พบแผ่นงาน Registrations' });
+  }
+
+  const numRows = regSheet.getLastRow();
+  if (numRows <= 1) {
+    return jsonResponse_({ ok: true, updatedCount: 0, message: 'ไม่มีข้อมูลลงทะเบียน' });
+  }
+
+  // อ่านเฉพาะคอลัมน์ B (Timestamp) เท่านั้น ปลอดภัย 100% ต่อข้อมูลในคอลัมน์อื่น
+  const tsRange = regSheet.getRange(2, 2, numRows - 1, 1);
+  const rawValues = tsRange.getValues();
+  let updatedCount = 0;
+
+  for (let i = 0; i < rawValues.length; i++) {
+    const val = rawValues[i][0];
+    if (!val) continue;
+
+    let cleanTime = '';
+    if (val instanceof Date) {
+      // เซลล์ที่ถูกเก็บใน UTC sheet ค่า UTC คือเวลาจริงของกรุงเทพฯ
+      cleanTime = Utilities.formatDate(val, 'UTC', 'yyyy-MM-dd HH:mm:ss');
+    } else {
+      const str = String(val).trim();
+      if (/GMT\+07/i.test(str)) {
+        try {
+          const cleanStr = str.replace(/\s*\([^)]*\)/g, '');
+          const d = new Date(cleanStr);
+          if (!isNaN(d.getTime())) {
+            cleanTime = Utilities.formatDate(d, 'UTC', 'yyyy-MM-dd HH:mm:ss');
+          }
+        } catch (e) {}
+      } else if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(str)) {
+        cleanTime = str;
+      }
+    }
+
+    if (cleanTime) {
+      rawValues[i][0] = "'" + cleanTime;
+      updatedCount++;
+    }
+  }
+
+  tsRange.setValues(rawValues);
+
+  return jsonResponse_({
+    ok: true,
+    updatedCount: updatedCount,
+    message: 'ปรับปรุงเวลาใน Google Sheets เป็นเวลาจริงของกรุงเทพฯ สำเร็จ ' + updatedCount + ' รายการ'
+  });
 }
