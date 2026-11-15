@@ -486,6 +486,18 @@
     }, 2800);
   }
 
+  function normalizeSchoolsList(schools) {
+    if (!Array.isArray(schools)) return [];
+    return schools.map(function (s) {
+      if (!s) return s;
+      const copy = Object.assign({}, s);
+      if (copy.school_id === 'SCH-13' || copy.school_name === 'โรงเรียนหินแห่เสริมศิลป์') {
+        copy.subdistrict = 'ต.วังยาว';
+      }
+      return copy;
+    });
+  }
+
   // Load state from localStorage or initialize from mock-data.js
   function loadState() {
     state.gasWebAppUrl = localStorage.getItem(GAS_URL_KEY) || DEFAULT_GAS_WEB_APP_URL;
@@ -523,13 +535,7 @@
           state.config.featureVisibility = Object.assign({}, DEFAULT_CONFIG.featureVisibility, state.config.featureVisibility);
         }
         // Auto-migrate school SCH-13 subdistrict and default signer name if outdated
-        if (Array.isArray(state.schools)) {
-          state.schools.forEach(function (s) {
-            if (s.school_id === 'SCH-13' || s.school_name === 'โรงเรียนหินแห่เสริมศิลป์') {
-              s.subdistrict = 'ต.วังยาว';
-            }
-          });
-        }
+        state.schools = normalizeSchoolsList(state.schools);
         if (!state.config.certSignerName || state.config.certSignerName === 'นายวิทยา มโนการณ์') {
           state.config.certSignerName = 'นายกิจภูมิ บุญอบ';
         }
@@ -1038,7 +1044,9 @@
       const res = await fetch(state.gasWebAppUrl, { method: 'GET' });
       const data = await res.json();
       if (data && data.ok) {
-        if (Array.isArray(data.schools) && data.schools.length) state.schools = data.schools;
+        if (Array.isArray(data.schools) && data.schools.length) {
+          state.schools = normalizeSchoolsList(data.schools);
+        }
         if (Array.isArray(data.competitions) && data.competitions.length) {
           state.competitions = data.competitions;
         }

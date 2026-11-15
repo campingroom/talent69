@@ -471,10 +471,19 @@ function readSchools_(ss) {
   const result = [];
   for (let i = 1; i < rows.length; i++) {
     if (!rows[i][1]) continue;
+    const schoolId = String(rows[i][0] || '');
+    const schoolName = String(rows[i][1] || '');
+    let subdistrict = String(rows[i][2] || '');
+    if ((schoolId === 'SCH-13' || schoolName === 'โรงเรียนหินแห่เสริมศิลป์') && subdistrict !== 'ต.วังยาว') {
+      subdistrict = 'ต.วังยาว';
+      try {
+        sheet.getRange(i + 1, 3).setValue('ต.วังยาว');
+      } catch (e) {}
+    }
     result.push({
-      school_id: String(rows[i][0] || ''),
-      school_name: String(rows[i][1] || ''),
-      subdistrict: String(rows[i][2] || ''),
+      school_id: schoolId,
+      school_name: schoolName,
+      subdistrict: subdistrict,
       school_type: String(rows[i][3] || ''),
       network_group: String(rows[i][4] || '')
     });
