@@ -256,6 +256,8 @@
       const m = n.match(prefixRegex);
       if (m) {
         n = n.substring(m[0].length).trim();
+      } else if (n.indexOf(p) === 0) {
+        n = n.substring(p.length).trim();
       }
     }
     return { prefix: p, name: n };
@@ -1481,39 +1483,71 @@
 
     const row = document.createElement('div');
     row.className =
-      'teacher-input-row grid grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-lg border border-slate-200';
+      'teacher-input-row grid grid-cols-12 gap-2 items-start bg-white p-2.5 rounded-lg border border-slate-200';
+
+    const standardPrefixes = ['นาย', 'นาง', 'นางสาว', 'ดร.', 'ว่าที่ ร.ต.', 'ว่าที่ ร.ต.หญิง', 'สิบเอก'];
+    const isCustomPrefix = Boolean(prefixVal && standardPrefixes.indexOf(prefixVal) === -1);
+    const selectedPrefix = isCustomPrefix ? 'OTHER' : prefixVal;
+    const customPrefixVal = isCustomPrefix ? prefixVal : '';
 
     let prefixOptions = '';
-    ['นาย', 'นาง', 'นางสาว', 'ดร.', 'ว่าที่ ร.ต.', 'ว่าที่ ร.ต.หญิง', 'สิบเอก'].forEach(function (p) {
+    standardPrefixes.forEach(function (p) {
       prefixOptions +=
         '<option value="' +
         escapeHtml(p) +
         '"' +
-        (p === prefixVal ? ' selected' : '') +
+        (p === selectedPrefix ? ' selected' : '') +
         '>' +
         escapeHtml(p) +
         '</option>';
     });
+    prefixOptions +=
+      '<option value="OTHER"' +
+      (selectedPrefix === 'OTHER' ? ' selected' : '') +
+      '>อื่นๆ (ระบุ)</option>';
 
     row.innerHTML =
-      '<div class="col-span-12 sm:col-span-1 text-xs font-heading font-semibold text-slate-600 text-center tch-index-badge">ครู ' +
+      '<div class="col-span-12 sm:col-span-1 sm:pt-2 text-xs font-heading font-semibold text-slate-600 text-center tch-index-badge">ครู ' +
       (index + 1) +
       '</div>' +
       '<div class="col-span-4 sm:col-span-3">' +
       '<select class="tch-prefix w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm bg-[#F7F7F5]">' +
       prefixOptions +
       '</select>' +
+      '<input type="text" placeholder="ระบุคำนำหน้า (เช่น ว่าที่ ร.ท., จ.ส.อ.)" value="' +
+      escapeHtml(customPrefixVal) +
+      '" class="tch-prefix-custom mt-1.5 w-full rounded-md border border-amber-400 bg-amber-50/40 px-2.5 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-900 ' +
+      (selectedPrefix === 'OTHER' ? '' : 'hidden') +
+      '" />' +
       '</div>' +
       '<div class="col-span-8 sm:col-span-7">' +
       '<input type="text" required placeholder="ชื่อ - นามสกุล ครูผู้ฝึกซ้อม" value="' +
       escapeHtml(nameVal) +
       '" class="tch-name w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm" />' +
       '</div>' +
-      '<div class="col-span-12 sm:col-span-1 text-right">' +
+      '<div class="col-span-12 sm:col-span-1 sm:pt-1 text-right">' +
       (canRemove
         ? '<button type="button" class="btn-remove-tch px-2 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">ลบ</button>'
         : '<span class="text-xs text-slate-300">-</span>') +
       '</div>';
+
+    const prefixSelect = row.querySelector('.tch-prefix');
+    const customInput = row.querySelector('.tch-prefix-custom');
+    if (customInput) {
+      customInput.required = selectedPrefix === 'OTHER';
+    }
+    if (prefixSelect && customInput) {
+      prefixSelect.addEventListener('change', function () {
+        if (prefixSelect.value === 'OTHER') {
+          customInput.classList.remove('hidden');
+          customInput.required = true;
+          customInput.focus();
+        } else {
+          customInput.classList.add('hidden');
+          customInput.required = false;
+        }
+      });
+    }
 
     const removeBtn = row.querySelector('.btn-remove-tch');
     if (removeBtn) {
@@ -1888,8 +1922,18 @@
     const tchRows = document.querySelectorAll('#teachersInputContainer .teacher-input-row');
     const teachers = [];
     for (let j = 0; j < tchRows.length; j++) {
-      const prefix = tchRows[j].querySelector('.tch-prefix').value;
+      const rawPrefix = tchRows[j].querySelector('.tch-prefix').value;
+      const customPrefixInput = tchRows[j].querySelector('.tch-prefix-custom');
+      const prefix =
+        rawPrefix === 'OTHER'
+          ? (customPrefixInput ? customPrefixInput.value.trim() : '')
+          : rawPrefix;
       const name = tchRows[j].querySelector('.tch-name').value.trim();
+      if (rawPrefix === 'OTHER' && !prefix) {
+        showToast('กรุณาระบุคำนำหน้าครูผู้ฝึกซ้อมคนที่ ' + (j + 1), 'error');
+        if (customPrefixInput) customPrefixInput.focus();
+        return;
+      }
       if (!name) {
         showToast('กรุณากรอกชื่อ-นามสกุลครูผู้ฝึกซ้อมคนที่ ' + (j + 1) + ' ให้ครบถ้วน', 'error');
         tchRows[j].querySelector('.tch-name').focus();
@@ -7121,16 +7165,41 @@
       judgeSearchInput.addEventListener('input', renderJudgesTab);
     }
 
+    const judgeFormPrefix = document.getElementById('judgeFormPrefix');
+    const judgeFormPrefixCustom = document.getElementById('judgeFormPrefixCustom');
+    if (judgeFormPrefix && judgeFormPrefixCustom) {
+      judgeFormPrefix.addEventListener('change', function () {
+        if (judgeFormPrefix.value === 'OTHER') {
+          judgeFormPrefixCustom.classList.remove('hidden');
+          judgeFormPrefixCustom.required = true;
+          judgeFormPrefixCustom.focus();
+        } else {
+          judgeFormPrefixCustom.classList.add('hidden');
+          judgeFormPrefixCustom.required = false;
+        }
+      });
+    }
+
     const addJudgeForm = document.getElementById('addJudgeForm');
     if (addJudgeForm) {
       addJudgeForm.addEventListener('submit', async function (e) {
         e.preventDefault();
         if (!state.isAdmin) return;
         const compId = document.getElementById('judgeFormCompSelect').value;
-        const prefix = document.getElementById('judgeFormPrefix').value;
+        const rawPrefix = document.getElementById('judgeFormPrefix').value;
+        const customPrefixEl = document.getElementById('judgeFormPrefixCustom');
+        const prefix =
+          rawPrefix === 'OTHER'
+            ? (customPrefixEl ? customPrefixEl.value.trim() : '')
+            : rawPrefix;
         const name = document.getElementById('judgeFormName').value.trim();
         const schoolName = document.getElementById('judgeFormSchool').value;
         const role = document.getElementById('judgeFormRole').value;
+        if (rawPrefix === 'OTHER' && !prefix) {
+          showToast('กรุณาระบุคำนำหน้ากรรมการตัดสิน', 'error');
+          if (customPrefixEl) customPrefixEl.focus();
+          return;
+        }
         if (!compId || !name || !schoolName) return;
 
         const comp = state.competitions.find((c) => c.comp_id === compId) || {};
@@ -7155,6 +7224,12 @@
         });
         renderAll();
         document.getElementById('judgeFormName').value = '';
+        if (customPrefixEl) {
+          customPrefixEl.value = '';
+          customPrefixEl.classList.add('hidden');
+          customPrefixEl.required = false;
+        }
+        document.getElementById('judgeFormPrefix').value = 'นาย';
         showToast('เพิ่มรายชื่อกรรมการตัดสินเรียบร้อยแล้ว', 'success');
       });
     }
