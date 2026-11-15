@@ -97,7 +97,7 @@ window.TALENT69_DEFAULT_DATA = {
     {
       "school_id": "SCH-13",
       "school_name": "โรงเรียนหินแห่เสริมศิลป์",
-      "subdistrict": "ต.ดอนกลาง",
+      "subdistrict": "ต.วังยาว",
       "school_type": "ขยายโอกาส (อ.2–ม.3)",
       "network_group": "กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง"
     }
@@ -1904,7 +1904,7 @@ window.TALENT69_DEFAULT_DATA = {
       "team_type": "เดี่ยว",
       "students": [
         {
-          "prefix": "ด.ช.",
+          "prefix": "เด็กชาย",
           "name": "ธนกฤต คิดไว (ตัวอย่าง)",
           "grade": "ป.3"
         }
@@ -1934,17 +1934,17 @@ window.TALENT69_DEFAULT_DATA = {
       "team_type": "ทีม",
       "students": [
         {
-          "prefix": "ด.ช.",
+          "prefix": "เด็กชาย",
           "name": "ต้นกล้า พาสุข (ตัวอย่าง)",
           "grade": "อ.3"
         },
         {
-          "prefix": "ด.ญ.",
+          "prefix": "เด็กหญิง",
           "name": "ใบบัว สดใส (ตัวอย่าง)",
           "grade": "อ.3"
         },
         {
-          "prefix": "ด.ญ.",
+          "prefix": "เด็กหญิง",
           "name": "ทอฝัน รักเรียน (ตัวอย่าง)",
           "grade": "อ.2"
         }
@@ -1978,7 +1978,7 @@ window.TALENT69_DEFAULT_DATA = {
       "team_type": "เดี่ยว",
       "students": [
         {
-          "prefix": "ด.ญ.",
+          "prefix": "เด็กหญิง",
           "name": "ปภาวรินทร์ เก่งเลข (ตัวอย่าง)",
           "grade": "ป.3"
         }
@@ -2008,17 +2008,17 @@ window.TALENT69_DEFAULT_DATA = {
       "team_type": "ทีม",
       "students": [
         {
-          "prefix": "ด.ช.",
+          "prefix": "เด็กชาย",
           "name": "ณัฐพงศ์ นักวิทย์ (ตัวอย่าง)",
           "grade": "ป.6"
         },
         {
-          "prefix": "ด.ญ.",
+          "prefix": "เด็กหญิง",
           "name": "กัญญาณัฐ ช่างสังเกต (ตัวอย่าง)",
           "grade": "ป.6"
         },
         {
-          "prefix": "ด.ช.",
+          "prefix": "เด็กชาย",
           "name": "ภูริภัทร ทดลองดี (ตัวอย่าง)",
           "grade": "ป.5"
         }
@@ -2052,7 +2052,7 @@ window.TALENT69_DEFAULT_DATA = {
       "team_type": "เดี่ยว",
       "students": [
         {
-          "prefix": "ด.ญ.",
+          "prefix": "เด็กหญิง",
           "name": "พิมพ์ชนก ลายมือสวย (ตัวอย่าง)",
           "grade": "ป.2"
         }
@@ -2082,7 +2082,7 @@ window.TALENT69_DEFAULT_DATA = {
       "team_type": "เดี่ยว",
       "students": [
         {
-          "prefix": "ด.ช.",
+          "prefix": "เด็กชาย",
           "name": "ศิลปิน พิณม่วน (ตัวอย่าง)",
           "grade": "ป.6"
         }

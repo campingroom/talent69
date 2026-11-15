@@ -125,9 +125,9 @@ function doPost(e) {
       return handleClearSampleData_(ss);
     } else if (action === 'fix_timestamps') {
       return handleFixTimestamps_(ss);
-    } else if (action === 'save_scores') {
+    } else if (action === 'save_scores' || action === 'save_scores_batch') {
       return handleSaveScores_(ss, body);
-    } else if (action === 'update_schedule') {
+    } else if (action === 'update_schedule' || action === 'update_competition_schedule') {
       return handleUpdateSchedule_(ss, body);
     } else if (action === 'add_judge') {
       return handleAddJudge_(ss, body.judge);
@@ -137,12 +137,13 @@ function doPost(e) {
       return handleAddCompetition_(ss, body.competition);
     } else if (action === 'add_school') {
       return handleAddSchool_(ss, body.school);
-    } else if (action === 'set_registration_status') {
+    } else if (action === 'set_registration_status' || action === 'set_registration_open') {
+      const isOpen = body.registrationOpen !== undefined ? Boolean(body.registrationOpen) : (body.isOpen !== undefined ? Boolean(body.isOpen) : true);
       PropertiesService.getScriptProperties().setProperty(
         'REGISTRATION_OPEN',
-        body.registrationOpen ? 'true' : 'false'
+        isOpen ? 'true' : 'false'
       );
-      return jsonResponse_({ ok: true, registrationOpen: Boolean(body.registrationOpen) });
+      return jsonResponse_({ ok: true, registrationOpen: isOpen });
     } else if (action === 'change_admin_pin') {
       const newPin = String(body.new_pin || '').trim();
       if (newPin.length < 4) {
@@ -271,7 +272,7 @@ function handleRegister_(ss, body, isAdmin) {
 
 function handleSaveScores_(ss, body) {
   const compId = String(body.comp_id || '').trim();
-  const entries = Array.isArray(body.entries) ? body.entries : [];
+  const entries = Array.isArray(body.scores) ? body.scores : (Array.isArray(body.entries) ? body.entries : []);
   const resultStatus = String(body.result_status || 'ประกาศผลแล้ว');
 
   const regSheet = ss.getSheetByName('Registrations');

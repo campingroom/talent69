@@ -36,174 +36,230 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="css/style.css" />
 </head>
-<body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+<body class="min-h-screen flex bg-[#F7F7F5] text-[#37352F] antialiased overflow-x-hidden">
 
-  <!-- Minimalist Top Header -->
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 no-print">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <!-- Brand & Title -->
-        <div class="flex items-start gap-3.5">
-          <div class="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-            <!-- Trophy SVG Icon -->
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8 21h8m-4-4v4m-5.2-9.6A6 6 0 0112 15a6 6 0 015.2-3.6M6 4h12v3a6 6 0 01-12 0V4zM4 4h2v3a3 3 0 01-3-3h1zm16 0h-2v3a3 3 0 003-3h-1z" />
-            </svg>
+  <!-- Mobile Backdrop Overlay for Sidebar -->
+  <div id="sidebarBackdrop" class="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-40 hidden transition-opacity duration-200"></div>
+
+  <!-- Notion Collapsible Sidebar (Left) -->
+  <aside id="notionSidebar" class="fixed md:sticky top-0 inset-y-0 left-0 z-50 w-64 h-screen bg-[#F7F7F5] border-r border-[#E9E9E7] flex flex-col justify-between shrink-0 transition-transform duration-200 ease-in-out -translate-x-full md:translate-x-0 overflow-y-auto select-none no-print">
+    <!-- Sidebar Top: Workspace Header -->
+    <div class="p-3 border-b border-[#E9E9E7]/80">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+            ๗๔
           </div>
-          <div>
-            <div class="flex flex-wrap items-center gap-2 text-xs font-heading text-slate-500 mb-0.5">
-              <span class="font-semibold text-slate-700">สพป.มหาสารคาม เขต 3</span>
-              <span>•</span>
-              <span>แข่งระดับกลุ่มโรงเรียน: 24–25 พ.ย. 2569</span>
-              <span>•</span>
-              <span>ระดับเขตพื้นที่ฯ: 23–24 ธ.ค. 2569</span>
-            </div>
-            <h1 class="text-lg sm:text-xl lg:text-2xl font-bold font-heading text-slate-900 tracking-tight">
-              งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569
+          <div class="min-w-0">
+            <h1 class="text-xs font-bold font-heading text-[#37352F] truncate tracking-tight">
+              ศิลปหัตถกรรม ครั้งที่ 74
             </h1>
-            <div class="mt-1 flex flex-wrap items-center gap-2">
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200/90 font-heading font-bold text-xs sm:text-sm shadow-2xs">
-                กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง
-              </span>
-              <span class="text-xs sm:text-sm font-heading font-medium text-slate-600">
-                (13 โรงเรียน • 13 หมวดกิจกรรม 149 รายการ)
-              </span>
+            <div class="text-[10px] text-[#787774] truncate font-medium">
+              กลุ่มวังยาวเขวาไร่ดอนกลาง
             </div>
           </div>
         </div>
-
-        <!-- Top Right Action Bar -->
-        <div class="flex flex-wrap items-center gap-2">
-          <!-- Registration Open/Closed Status Pill -->
-          <div id="regOpenStatusBadge" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-heading font-medium">
-            <span id="regOpenStatusDot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span id="regOpenStatusText">เปิดรับสมัคร</span>
-          </div>
-
-          <!-- Link to Competition Rules (Google Drive Folder) -->
-          <a href="https://drive.google.com/drive/folders/1hIdXcgsOqNt5plNqRizfp9YbHzgjpRwv"
-             target="_blank"
-             rel="noopener noreferrer"
-             class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-heading text-xs font-medium transition">
-            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <span>เกณฑ์การแข่งขัน</span>
-          </a>
-
-          <!-- Google Sheets Link (ADMIN ONLY — hidden for general users) -->
-          <a id="headerSheetLink"
-             href="https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit"
-             target="_blank"
-             rel="noopener noreferrer"
-             class="hidden items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-medium transition">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            <span>ตาราง Google Sheets</span>
-          </a>
-
-          <!-- Refresh Data Button -->
-          <button id="btnSyncNow"
-                  type="button"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-heading text-xs font-medium transition">
-            <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span>รีเฟรช</span>
-          </button>
-
-          <!-- Admin Login / Logout Button -->
-          <button id="btnAdminToggle"
-                  type="button"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-heading text-xs font-medium transition">
-            <svg id="adminBtnIcon" class="w-4 h-4 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span id="adminBtnText">สำหรับแอดมิน</span>
-          </button>
-        </div>
+        <!-- Sidebar Collapse Button -->
+        <button type="button" id="btnCloseSidebar" class="p-1.5 rounded-md hover:bg-[#E9E9E7] text-[#787774] hover:text-[#37352F] transition cursor-pointer" title="พับแถบข้าง (Collapse Sidebar)">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+        </button>
       </div>
+    </div>
 
-      <!-- Navigation Bar -->
-      <nav class="mt-4 flex flex-wrap gap-1.5 pt-3 border-t border-slate-100" aria-label="เมนูหลัก">
-        <button type="button" data-tab="dashboard" class="nav-tab-btn active px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-100">
-          <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <!-- Sidebar Navigation Menu Items (Grouped like Notion) -->
+    <div class="flex-1 px-2.5 py-3 space-y-4 overflow-y-auto">
+      <!-- Group 1: เมนูหลัก (Phase 1) -->
+      <div class="space-y-0.5">
+        <div class="px-2 py-1 text-[10px] font-heading font-semibold text-[#787774] uppercase tracking-wider">
+          เมนูหลัก
+        </div>
+
+        <button type="button" data-tab="dashboard" class="nav-tab-btn active w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
-          <span>แดชบอร์ดภาพรวม</span>
+          <span class="truncate">แดชบอร์ดภาพรวม</span>
         </button>
 
-        <button type="button" data-tab="register" class="nav-tab-btn px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-100">
-          <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <button type="button" data-tab="register" class="nav-tab-btn w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
-          <span>ลงทะเบียนเข้าแข่งขัน</span>
+          <span class="truncate">ลงทะเบียนเข้าแข่งขัน</span>
         </button>
 
-        <button type="button" data-tab="school" class="nav-tab-btn px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-100">
-          <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <button type="button" data-tab="school" class="nav-tab-btn w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
           </svg>
-          <span>ข้อมูลรายโรงเรียน</span>
+          <span class="truncate">ข้อมูลรายโรงเรียน</span>
         </button>
 
-        <button type="button" data-tab="competition" class="nav-tab-btn px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium flex items-center gap-2 text-slate-600 hover:bg-slate-100">
-          <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <button type="button" data-tab="competition" class="nav-tab-btn w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
-          <span>ดูรายรายการแข่งขัน</span>
+          <span class="truncate">ดูรายการแข่งขัน (149)</span>
+        </button>
+      </div>
+
+      <!-- Group 2: จัดการแข่งขัน (Phase 2) -->
+      <div id="sidebarGroupPhase2" class="space-y-0.5">
+        <div id="sidebarHeaderPhase2" class="px-2 py-1 text-[10px] font-heading font-semibold text-[#787774] uppercase tracking-wider">
+          จัดการแข่งขัน
+        </div>
+
+        <button type="button" id="navTabJudges" data-tab="judges" class="nav-tab-btn phase2-only w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span class="truncate">กรรมการตัดสิน</span>
+          </div>
+          <span id="navBadgeJudges" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-normal shrink-0">แอดมิน</span>
         </button>
 
-        <button type="button" data-tab="judges" class="nav-tab-btn phase2-only hidden px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium items-center gap-2 text-slate-600 hover:bg-slate-100">
-          <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <span>กรรมการตัดสิน</span>
+        <button type="button" id="navTabResults" data-tab="results" class="nav-tab-btn phase2-only w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 21h8m-4-4v4m-5.2-9.6A6 6 0 0112 15a6 6 0 015.2-3.6M6 4h12v3a6 6 0 01-12 0V4zM4 4h2v3a3 3 0 01-3-3h1zm16 0h-2v3a3 3 0 003-3h-1z" />
+            </svg>
+            <span class="truncate">ผลการแข่งขัน / เหรียญ</span>
+          </div>
+          <span id="navBadgeResults" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-normal shrink-0">แอดมิน</span>
         </button>
 
-        <button type="button" data-tab="results" class="nav-tab-btn phase2-only hidden px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium items-center gap-2 text-slate-600 hover:bg-slate-100">
-          <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8 21h8m-4-4v4m-5.2-9.6A6 6 0 0112 15a6 6 0 015.2-3.6M6 4h12v3a6 6 0 01-12 0V4zM4 4h2v3a3 3 0 01-3-3h1zm16 0h-2v3a3 3 0 003-3h-1z" />
-          </svg>
-          <span>ผลการแข่งขัน / เหรียญรางวัล</span>
+        <button type="button" id="navTabCerts" data-tab="certificates" class="nav-tab-btn phase2-only w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+            </svg>
+            <span class="truncate">เกียรติบัตรออนไลน์</span>
+          </div>
+          <span id="navBadgeCerts" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-normal shrink-0">แอดมิน</span>
         </button>
+      </div>
 
-        <button type="button" data-tab="certificates" class="nav-tab-btn phase2-only hidden px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium items-center gap-2 text-slate-600 hover:bg-slate-100">
-          <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-          </svg>
-          <span>เกียรติบัตรออนไลน์</span>
-        </button>
+      <!-- Group 3: แอดมิน (Admin Only) -->
+      <div class="space-y-0.5">
+        <div class="px-2 py-1 text-[10px] font-heading font-semibold text-[#787774] uppercase tracking-wider">
+          ระบบ
+        </div>
 
-        <!-- Admin Only Tab -->
-        <button type="button" id="navTabSettings" data-tab="settings" class="nav-tab-btn hidden px-3.5 py-2 rounded-lg font-heading text-xs sm:text-sm font-medium items-center gap-2 text-amber-800 bg-amber-50/80 hover:bg-amber-100">
-          <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <button type="button" id="navTabSettings" data-tab="settings" class="nav-tab-btn hidden w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-amber-900 bg-amber-50/70 hover:bg-amber-100/80 transition cursor-pointer">
+          <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          <span>จัดการระบบ (แอดมิน)</span>
+          <span class="truncate">จัดการระบบ (แอดมิน)</span>
         </button>
-      </nav>
+      </div>
     </div>
-  </header>
 
-  <!-- Top Milestones Announcement Bar (Zero Emojis, Notion Style) -->
-  <div id="topMilestonesBar" class="bg-amber-50/95 border-b border-amber-200/90 py-2.5 px-4 sm:px-6">
-    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5 text-xs font-heading">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-700">
-        <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-200/90 text-amber-900 font-bold text-[11px] shadow-2xs">
+    <!-- Sidebar Bottom Footer -->
+    <div class="p-3 border-t border-[#E9E9E7]/80 space-y-2">
+      <!-- Google Drive Rules Link -->
+      <a href="https://drive.google.com/drive/folders/1hIdXcgsOqNt5plNqRizfp9YbHzgjpRwv" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-[#EBEBEA] text-xs font-heading text-[#787774] hover:text-[#37352F] transition">
+        <svg class="w-3.5 h-3.5 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span class="truncate">เกณฑ์การแข่งขัน (Drive)</span>
+      </a>
+      <div class="px-2.5 text-[10px] text-[#787774]">
+        สพป.มหาสารคาม เขต 3
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right Canvas Area (Main Content) -->
+  <div id="notionMainArea" class="flex-1 flex flex-col min-w-0 min-h-screen">
+    <!-- Minimalist Notion Topbar -->
+    <header id="notionTopbar" class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E9E9E7] px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 no-print shadow-2xs">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <!-- Toggle Sidebar Button -->
+        <button type="button" id="btnToggleSidebar" class="p-1.5 rounded-lg hover:bg-[#EBEBEA] text-[#37352F] transition cursor-pointer" title="เปิด/ปิดแถบข้าง (Toggle Sidebar)">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        <!-- Notion Breadcrumb Title -->
+        <div class="flex items-center gap-1.5 text-xs font-heading text-[#787774] min-w-0 truncate">
+          <span class="hidden sm:inline font-medium text-[#37352F]">กลุ่มวังยาวเขวาไร่ดอนกลาง</span>
+          <span class="hidden sm:inline text-slate-300">/</span>
+          <span id="topbarActiveTabTitle" class="font-bold text-[#37352F] truncate">แดชบอร์ดภาพรวม</span>
+        </div>
+      </div>
+
+      <!-- Right Action Icons (Notion Minimalist) -->
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <!-- Registration Open/Closed Status Pill -->
+        <div id="regOpenStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] sm:text-xs font-heading font-medium">
+          <span id="regOpenStatusDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="regOpenStatusText">เปิดรับสมัคร</span>
+        </div>
+
+        <!-- Google Sheets Link (ADMIN ONLY) -->
+        <a id="headerSheetLink"
+           href="https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="hidden items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-heading font-medium transition shadow-2xs">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <span class="hidden sm:inline">Sheets</span>
+        </a>
+
+        <!-- Refresh Data Button -->
+        <button id="btnSyncNow"
+                type="button"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white hover:bg-slate-50 text-[#37352F] border border-[#E9E9E7] text-xs font-heading font-medium transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 text-[#787774]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span class="hidden sm:inline">รีเฟรช</span>
+        </button>
+
+        <!-- Admin Login / Logout Button -->
+        <button id="btnAdminToggle"
+                type="button"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#37352F] hover:bg-[#201F1D] text-white text-xs font-heading font-medium transition shadow-2xs cursor-pointer">
+          <svg id="adminBtnIcon" class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <span id="adminBtnText" class="hidden sm:inline">แอดมิน</span>
+        </button>
+      </div>
+    </header>
+
+  <!-- Top Milestones Announcement Bar (Modern Pill Strip, Natural Horizontal Swipe on Mobile) -->
+  <div id="topMilestonesBar" class="bg-amber-50/90 border-b border-amber-200/80 py-1.5 px-4 sm:px-6">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2 text-[11px] sm:text-xs font-heading">
+      <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto whitespace-nowrap scrollbar-none py-0.5 w-full lg:w-auto">
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-bold text-[10px] shrink-0 shadow-2xs">
           กำหนดการสำคัญ
         </span>
-        <span>ส่งรายชื่อวันสุดท้าย: <strong class="text-rose-700 font-bold">19 พ.ย. 2569</strong></span>
-        <span class="text-slate-300">•</span>
-        <span>สรุปรายชื่อ: <strong class="text-slate-900 font-semibold">20 พ.ย. 2569</strong></span>
-        <span class="text-slate-300">•</span>
-        <span>ประชุมกรรมการตัดสิน: <strong class="text-slate-900 font-semibold">23 พ.ย. (13.30 น.)</strong> ณ รร.บ้านวังยาววิทยายน</span>
-        <span class="text-slate-300">•</span>
-        <span>วันแข่งขันระดับกลุ่ม: <strong class="text-emerald-800 font-bold">24–25 พ.ย. 2569</strong></span>
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-[11px] shrink-0 font-medium">
+          <span>ส่งรายชื่อวันสุดท้าย:</span>
+          <strong class="text-rose-700 font-bold">19 พ.ย. 2569</strong>
+        </span>
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white text-slate-700 border border-slate-200 text-[11px] shrink-0 font-medium hidden sm:inline-flex">
+          <span>สรุปรายชื่อ:</span>
+          <strong class="text-slate-900 font-semibold">20 พ.ย. 2569</strong>
+        </span>
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white text-slate-700 border border-slate-200 text-[11px] shrink-0 font-medium hidden md:inline-flex">
+          <span>ประชุมกรรมการตัดสิน:</span>
+          <strong class="text-slate-900 font-semibold">23 พ.ย. (13.30 น.)</strong>
+        </span>
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] shrink-0 font-medium">
+          <span>วันแข่งขันระดับกลุ่ม:</span>
+          <strong class="text-emerald-800 font-bold">24–25 พ.ย. 2569</strong>
+        </span>
       </div>
-      <div class="text-[11px] text-amber-900/80 hidden lg:block font-medium">
+      <div class="text-[11px] text-amber-900/80 hidden lg:block font-medium shrink-0">
         แข่งขันระดับเขตพื้นที่ฯ: 23–24 ธ.ค. 2569
       </div>
     </div>
@@ -406,6 +462,72 @@
     </div>
   </div>
 
+  <!-- ==========================================
+       MODAL 5: CERTIFICATE VERIFICATION MODAL (ตรวจสอบเกียรติบัตรออนไลน์)
+       ========================================== -->
+  <div id="certVerificationModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-6 space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-heading text-[11px] font-semibold">ตรวจสอบถูกต้องตามสารบบ</span>
+            <h3 class="text-base font-bold font-heading text-slate-900">เกียรติบัตรออนไลน์ฉบับจริง</h3>
+          </div>
+        </div>
+        <button type="button" id="btnCloseCertModal" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-3 text-xs">
+        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+          <span class="text-slate-500">เลขที่เกียรติบัตร:</span>
+          <span id="certModalCode" class="font-mono font-bold text-slate-900 text-sm">-</span>
+        </div>
+        <div class="flex justify-between items-start border-b border-slate-200 pb-2">
+          <span class="text-slate-500">มอบให้แก่:</span>
+          <span id="certModalRecipient" class="font-heading font-bold text-slate-900 text-sm text-right">-</span>
+        </div>
+        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+          <span class="text-slate-500">ประเภท:</span>
+          <span id="certModalRole" class="font-heading font-medium text-slate-800">-</span>
+        </div>
+        <div class="flex justify-between items-start border-b border-slate-200 pb-2">
+          <span class="text-slate-500">โรงเรียน / สังกัด:</span>
+          <span id="certModalSchool" class="font-heading font-semibold text-slate-900 text-right">-</span>
+        </div>
+        <div class="flex justify-between items-start border-b border-slate-200 pb-2">
+          <span class="text-slate-500">รายการแข่งขัน:</span>
+          <span id="certModalComp" class="font-heading text-slate-800 text-right max-w-xs">-</span>
+        </div>
+        <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+          <span class="text-slate-500">รางวัลที่ได้รับ:</span>
+          <span id="certModalAward" class="font-heading font-bold text-amber-700">-</span>
+        </div>
+        <div class="text-[11px] text-slate-500 pt-1 leading-relaxed">
+          งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สังกัดสำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3 (ให้ไว้ ณ วันที่ 25 พฤศจิกายน 2569)
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-1">
+        <button type="button" id="btnPrintCertFromModal" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold flex items-center gap-1.5 transition">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          <span>พิมพ์เกียรติบัตรฉบับนี้</span>
+        </button>
+        <button type="button" id="btnDismissCertModal" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-heading text-xs font-medium hover:bg-slate-50 transition">
+          ปิดหน้าต่าง
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Content Container -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
@@ -413,6 +535,96 @@
          TAB 1: OVERALL DASHBOARD (แดชบอร์ดภาพรวม)
          ========================================== -->
     <section id="tab-dashboard" class="tab-panel space-y-6">
+
+      <!-- ==========================================
+           HERO SECTION: Modern SolaceUI & Porvix Inspired
+           ========================================== -->
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-8 lg:p-10 shadow-xs hero-dot-mesh">
+        <!-- Subtle Glow Background -->
+        <div class="absolute -top-20 left-1/2 -translate-x-1/2 w-[320px] sm:w-[600px] h-[220px] bg-gradient-to-b from-blue-100/60 via-indigo-50/40 to-transparent rounded-full blur-2xl pointer-events-none -z-0"></div>
+
+        <div class="relative z-10 max-w-4xl mx-auto text-center space-y-3 sm:space-y-4">
+          <!-- Eyebrow Pill -->
+          <div class="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1 rounded-full bg-slate-900/5 border border-slate-900/10 text-slate-800 text-[11px] sm:text-xs font-heading font-medium">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>ระบบออนไลน์ ศิลปหัตถกรรมนักเรียน ครั้งที่ 74 • สพป.มหาสารคาม เขต 3</span>
+          </div>
+
+          <!-- Main Title -->
+          <h2 class="text-xl sm:text-3xl lg:text-4xl font-extrabold font-heading text-slate-900 tracking-tight leading-tight">
+            งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74
+            <br />
+            <span class="text-blue-900">
+              กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง
+            </span>
+          </h2>
+
+          <!-- Subtitle -->
+          <p class="text-xs sm:text-sm lg:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
+            ระบบลงทะเบียน ตรวจสอบรายชื่อโรงเรียน จัดการแข่งขัน 149 รายการ และคัดเลือกตัวแทนกลุ่มส่งต่อระดับเขตพื้นที่การศึกษา อำเภอโกสุมพิสัย จังหวัดมหาสารคาม
+          </p>
+
+          <!-- Core Action Buttons (4 Core Phase 1 Pillars) -->
+          <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3 pt-2">
+            <button type="button" data-hero-tab="register" class="inline-flex items-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs sm:text-sm font-semibold shadow-xs transition-all transform hover:-translate-y-0.5">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span>ลงทะเบียนเข้าแข่งขัน</span>
+            </button>
+
+            <button type="button" data-hero-tab="competition" class="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-heading text-xs sm:text-sm font-semibold transition-all">
+              <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              <span>ดูรายการแข่งขัน (149 รายการ)</span>
+            </button>
+
+            <button type="button" data-hero-tab="school" class="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-heading text-xs sm:text-sm font-semibold transition-all">
+              <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span>ข้อมูล 13 โรงเรียน</span>
+            </button>
+          </div>
+
+          <!-- 4 Core Pillars Grid (Phase 1 Highlights) -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 pt-3 text-left">
+            <div data-hero-tab="dashboard" class="cursor-pointer p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition">
+              <div class="text-xs font-heading font-bold text-slate-900 flex items-center justify-between">
+                <span>1. แดชบอร์ดภาพรวม</span>
+                <span class="text-slate-400 text-xs">→</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5">KPI สด 6 ช่อง และสถิติ 13 รร.</p>
+            </div>
+
+            <div data-hero-tab="register" class="cursor-pointer p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition">
+              <div class="text-xs font-heading font-bold text-slate-900 flex items-center justify-between">
+                <span>2. ลงทะเบียนแข่งขัน</span>
+                <span class="text-slate-400 text-xs">→</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5">กฎเหล็ก 1 โรงเรียน 1 ทีมต่อรายการ</p>
+            </div>
+
+            <div data-hero-tab="school" class="cursor-pointer p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition">
+              <div class="text-xs font-heading font-bold text-slate-900 flex items-center justify-between">
+                <span>3. ข้อมูลรายโรงเรียน</span>
+                <span class="text-slate-400 text-xs">→</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5">พิมพ์บัตรพับครึ่ง A5 & เอกสาร รร.</p>
+            </div>
+
+            <div data-hero-tab="competition" class="cursor-pointer p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition">
+              <div class="text-xs font-heading font-bold text-slate-900 flex items-center justify-between">
+                <span>4. ดูรายการแข่งขัน</span>
+                <span class="text-slate-400 text-xs">→</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5">149 รายการ & ใบหน้าห้องสอบ A4</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Sample Data Notice Banner -->
       <div id="sampleDataBanner" class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-2xs">
         <div class="flex items-start gap-3">
@@ -529,24 +741,22 @@
         </div>
       </div>
 
-      <!-- cm3art-style Highlight Row: Timeline + Score Progress & Medals + QR Share (Phase 2 Hidden by Default) -->
-      <div id="phase2DashboardHighlightRow" class="phase2-only hidden grid-cols-1 lg:grid-cols-12 gap-5">
-        <!-- Left 5 cols: กำหนดการดำเนินงาน (Operation Timeline) -->
-        <div class="lg:col-span-5 bg-white rounded-xl border border-slate-200 p-5 flex flex-col justify-between">
+      <!-- 5-Step Visual Timeline Stepper (Roadmap) -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3.5">
           <div>
-            <div class="flex items-center justify-between gap-2 mb-3">
-              <div>
-                <h2 class="text-sm sm:text-base font-bold font-heading text-slate-900">กำหนดการดำเนินงาน</h2>
-                <p class="text-xs text-slate-500">ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง และระดับเขตพื้นที่ฯ</p>
-              </div>
-              <span class="px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 font-heading text-[11px] font-medium">ปีการศึกษา 2569</span>
-            </div>
-            <div id="dashboardTimelineList" class="space-y-2.5"></div>
+            <h2 class="text-base font-bold font-heading text-slate-900">กำหนดการดำเนินงาน (Timeline Roadmap)</h2>
+            <p class="text-xs text-slate-500">ลำดับขั้นตอนการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 กลุ่มวังยาวเขวาไร่ดอนกลาง</p>
           </div>
+          <span class="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 font-heading shrink-0 self-start sm:self-auto">5 ขั้นตอนหลัก</span>
         </div>
+        <div id="dashboardTimelineStepper" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"></div>
+      </div>
 
-        <!-- Middle 4 cols: ความก้าวหน้าการประกาศผลและสรุปเหรียญรางวัล -->
-        <div class="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-5 flex flex-col justify-between">
+      <!-- cm3art-style Highlight Row: Score Progress & Medals + QR Share (Phase 2) -->
+      <div id="phase2DashboardHighlightRow" class="phase2-only grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- Left 8 cols: ความก้าวหน้าการประกาศผลและสรุปเหรียญรางวัล -->
+        <div class="lg:col-span-8 bg-white rounded-xl border border-slate-200 p-5 flex flex-col justify-between">
           <div>
             <div class="flex items-center justify-between gap-2 mb-3">
               <div>
@@ -590,8 +800,8 @@
           </div>
         </div>
 
-        <!-- Right 3 cols: QR Code สำหรับแชร์หน้าเว็บ -->
-        <div class="lg:col-span-3 bg-white rounded-xl border border-slate-200 p-5 flex flex-col items-center justify-between text-center">
+        <!-- Right 4 cols: QR Code สำหรับแชร์หน้าเว็บ -->
+        <div class="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-5 flex flex-col items-center justify-between text-center">
           <div>
             <h2 class="text-sm font-bold font-heading text-slate-900">QR Code ประชาสัมพันธ์</h2>
             <p class="text-[11px] text-slate-500 mt-0.5">สแกนเพื่อเข้าสู่ระบบลงทะเบียนและตรวจสอบผลการแข่งขัน</p>
@@ -700,18 +910,6 @@
           <p class="text-xs text-slate-500 mb-3">จำนวนรายการที่ส่ง · นักเรียน (กดชื่อโรงเรียนเพื่อดูใบสรุป)</p>
           <div id="dashboardSchoolBoard" class="space-y-1"></div>
         </div>
-      </div>
-
-      <!-- 5-Step Visual Timeline Stepper (Roadmap) -->
-      <div class="bg-white rounded-xl border border-slate-200 p-5">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3.5">
-          <div>
-            <h2 class="text-base font-bold font-heading text-slate-900">กำหนดการดำเนินงาน (Timeline Roadmap)</h2>
-            <p class="text-xs text-slate-500">ลำดับขั้นตอนการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 กลุ่มวังยาวเขวาไร่ดอนกลาง</p>
-          </div>
-          <span class="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 font-heading shrink-0 self-start sm:self-auto">5 ขั้นตอนหลัก</span>
-        </div>
-        <div id="dashboardTimelineStepper" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"></div>
       </div>
 
       <!-- Breakdown by Grade Level -->
@@ -922,30 +1120,65 @@
          TAB 3: SCHOOL VIEW (มุมมองรายโรงเรียน)
          ========================================== -->
     <section id="tab-school" class="tab-panel hidden space-y-6">
-      <div class="bg-white rounded-xl border border-slate-200 p-5 no-print">
-        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div class="flex-1 max-w-xl">
-            <label for="schoolViewSelect" class="block text-xs font-heading font-semibold text-slate-600 mb-1.5">
-              เลือกดูข้อมูลเฉพาะโรงเรียน (กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง)
+      <div class="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 space-y-4 no-print shadow-2xs">
+        <!-- Tier 1: Wide School Selector & Primary Register CTA -->
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+          <div class="flex-1 w-full sm:max-w-xl">
+            <label for="schoolViewSelect" class="block text-xs font-heading font-semibold text-slate-700 mb-1.5">
+              เลือกดูข้อมูลเฉพาะโรงเรียน (กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง 13 โรงเรียน)
             </label>
-            <select id="schoolViewSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium focus:border-slate-900 focus:outline-none">
-            </select>
+            <div class="relative">
+              <select id="schoolViewSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-heading font-semibold text-slate-900 focus:border-slate-900 focus:outline-none shadow-2xs">
+              </select>
+            </div>
           </div>
+          <div class="shrink-0">
+            <button type="button" id="btnRegisterForThisSchool" class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold shadow-2xs transition">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>ลงทะเบียนเพิ่มให้โรงเรียนนี้</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tier 2: Action Buttons cleanly organized into 2 groups -->
+        <div class="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100 text-xs">
+          <!-- Group 1: Documents & Badges -->
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="btnRegisterForThisSchool" class="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition">
-              ลงทะเบียนเพิ่มให้โรงเรียนนี้
+            <button type="button" id="btnPrintSchoolIdCards" class="phase2-only inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="w-3.5 h-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+              </svg>
+              <span>พิมพ์บัตรประจำตัว (พับครึ่ง A5)</span>
             </button>
-            <button type="button" id="btnPrintSchoolIdCards" class="phase2-only hidden px-3.5 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition">
-              พิมพ์บัตรประจำตัวผู้เข้าแข่งขัน
+            <button type="button" id="btnPrintSubstitutionFormSchool" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <span>พิมพ์แบบคำร้องขอเปลี่ยนตัว</span>
             </button>
-            <button type="button" id="btnExportSchoolExcel" class="px-3.5 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition">
-              ดาวน์โหลด Excel โรงเรียนนี้
+            <button type="button" onclick="window.print()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>พิมพ์ใบสรุปโรงเรียน</span>
             </button>
-            <button type="button" id="btnExportSchoolCsv" class="px-3.5 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition">
-              ดาวน์โหลด CSV โรงเรียนนี้
+          </div>
+
+          <!-- Group 2: Data Exports -->
+          <div class="flex items-center gap-2">
+            <button type="button" id="btnExportSchoolExcel" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              <span>Excel (.xlsx)</span>
             </button>
-            <button type="button" onclick="window.print()" class="px-3.5 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition">
-              พิมพ์ใบสรุปโรงเรียน
+            <button type="button" id="btnExportSchoolCsv" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+              </svg>
+              <span>CSV</span>
             </button>
           </div>
         </div>
@@ -959,7 +1192,7 @@
             <h2 id="schoolViewHeaderName" class="text-xl font-bold font-heading text-slate-900 mt-0.5">-</h2>
             <p id="schoolViewHeaderMeta" class="text-xs text-slate-500">-</p>
           </div>
-          <div id="schoolViewMedalSummary" class="phase2-only hidden flex-wrap gap-1.5 text-xs font-heading"></div>
+          <div id="schoolViewMedalSummary" class="phase2-only flex flex-wrap gap-1.5 text-xs font-heading"></div>
         </div>
 
         <!-- 4 Mini KPI Cards for Selected School -->
@@ -993,7 +1226,7 @@
                 <th class="py-2.5 px-2 text-center">ระดับช่วงชั้น</th>
                 <th class="py-2.5 px-3">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
                 <th class="py-2.5 px-3">รายชื่อครูผู้ฝึกซ้อม</th>
-                <th class="py-2.5 px-2 text-center">สถานะ</th>
+                <th class="py-2.5 px-2 text-center">สถานะ / ผลคะแนน</th>
                 <th class="py-2.5 px-2 text-right no-print">จัดการ</th>
               </tr>
             </thead>
@@ -1032,6 +1265,12 @@
               </svg>
               <span>พิมพ์สารบัญรายการแข่งขัน</span>
             </button>
+            <button type="button" id="btnPrintSubstitutionFormComp" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>พิมพ์แบบคำร้องขอเปลี่ยนตัว</span>
+            </button>
           </div>
         </div>
 
@@ -1063,6 +1302,8 @@
          TAB 5: JUDGES DIRECTORY (คณะกรรมการตัดสิน)
          ========================================== -->
     <section id="tab-judges" class="tab-panel hidden space-y-5">
+      <div id="featureBannerJudges" class="no-print"></div>
+      <div id="lockedNoticeJudges" class="hidden"></div>
       <!-- Admin Only: Add Judge Form -->
       <div id="adminAddJudgeCard" class="hidden bg-white rounded-xl border border-slate-200 p-5 space-y-3 no-print">
         <div class="flex items-center justify-between">
@@ -1084,6 +1325,8 @@
               <option value="นางสาว">นางสาว</option>
               <option value="ดร.">ดร.</option>
               <option value="ว่าที่ ร.ต.">ว่าที่ ร.ต.</option>
+              <option value="ว่าที่ ร.ต.หญิง">ว่าที่ ร.ต.หญิง</option>
+              <option value="สิบเอก">สิบเอก</option>
             </select>
           </div>
           <div class="sm:col-span-3">
@@ -1165,23 +1408,47 @@
     <!-- ==========================================
          TAB 6: RESULTS & MEDAL SUMMARY (ผลการแข่งขัน / สรุปเหรียญรางวัล)
          ========================================== -->
-    <section id="tab-results" class="tab-panel hidden space-y-5">
+    <section id="tab-results" class="tab-panel hidden space-y-4 sm:space-y-5">
+      <div id="featureBannerResults" class="no-print"></div>
+      <div id="lockedNoticeResults" class="hidden"></div>
       <!-- Sub-view Switcher Bar (cm3art.com style: 3 sub-views) -->
-      <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div class="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-2xs">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3">
           <div>
-            <h2 class="text-base font-bold font-heading text-slate-900">รายงานผลการแข่งขัน สรุปอันดับตัวแทนกลุ่ม และสรุปเหรียญรางวัล</h2>
-            <p class="text-xs text-slate-500">คำนวณระดับเหรียญรางวัล (ทอง 80–100, เงิน 70–79.99, ทองแดง 60–69.99, เข้าร่วม) และจัดลำดับที่ 1–3 อัตโนมัติ</p>
+            <h2 class="text-sm sm:text-base font-bold font-heading text-slate-900">รายงานผลการแข่งขัน สรุปอันดับตัวแทนกลุ่ม และสรุปเหรียญรางวัล</h2>
+            <p class="text-[11px] sm:text-xs text-slate-500 hidden sm:block">คำนวณระดับเหรียญรางวัล (ทอง 80–100, เงิน 70–79.99, ทองแดง 60–69.99, เข้าร่วม) และจัดลำดับที่ 1–3 อัตโนมัติ</p>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" data-result-subview="by-comp" class="result-subview-btn px-3.5 py-2 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white transition">
-              1. ประกาศผลรายกิจกรรม
+          <div class="grid grid-cols-3 gap-1 sm:gap-2 sm:flex sm:flex-wrap">
+            <button type="button" data-result-subview="by-comp" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-semibold bg-slate-900 text-white transition">
+              <span class="sm:hidden">1. รายกิจกรรม</span>
+              <span class="hidden sm:inline">1. ประกาศผลรายกิจกรรม</span>
             </button>
-            <button type="button" data-result-subview="by-rank" class="result-subview-btn px-3.5 py-2 rounded-lg font-heading text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
-              2. สรุปอันดับรายโรงเรียน (ตัวแทนกลุ่ม)
+            <button type="button" data-result-subview="by-rank" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+              <span class="sm:hidden">2. ตัวแทนกลุ่ม</span>
+              <span class="hidden sm:inline">2. สรุปอันดับรายโรงเรียน (ตัวแทนกลุ่ม)</span>
             </button>
-            <button type="button" data-result-subview="by-medal" class="result-subview-btn px-3.5 py-2 rounded-lg font-heading text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
-              3. สรุปเหรียญรางวัลรวม
+            <button type="button" data-result-subview="by-medal" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+              <span class="sm:hidden">3. สรุปเหรียญ</span>
+              <span class="hidden sm:inline">3. สรุปเหรียญรางวัลรวม</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Official District Representatives Action Bar -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2.5 sm:pt-3 border-t border-slate-100 text-xs">
+          <div class="flex items-center gap-1.5 text-slate-700 flex-wrap">
+            <span class="inline-block w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+            <span class="font-heading font-semibold text-slate-900">ตัวแทนส่งต่อระดับเขตฯ:</span>
+            <span id="resDistrictCriteriaText" class="text-slate-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-medium">เฉพาะทีมชนะเลิศ (อันดับ 1)</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5 sm:gap-2">
+            <button type="button" id="btnExportDistrictRepsExcel" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              <span>ส่งออกตัวแทน (.xlsx)</span>
+            </button>
+            <button type="button" id="btnPrintDistrictRepsReport" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+              <span>พิมพ์รายงานตัวแทน (A4 แนวนอน)</span>
             </button>
           </div>
         </div>
@@ -1277,6 +1544,8 @@
          TAB 7: ONLINE CERTIFICATES (เกียรติบัตรออนไลน์)
          ========================================== -->
     <section id="tab-certificates" class="tab-panel hidden space-y-5">
+      <div id="featureBannerCerts" class="no-print"></div>
+      <div id="lockedNoticeCerts" class="hidden"></div>
       <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
@@ -1373,14 +1642,232 @@
         </form>
       </div>
 
+      <!-- Card: Feature Visibility Controls (Public vs Admin) (Full Width) -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-2xs">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-heading text-[11px] font-semibold">ระบบจัดการสิทธิ์เข้าชม</span>
+              <h3 class="text-base font-bold font-heading text-slate-900">การเปิดเผยฟีเจอร์จัดการแข่งขันต่อสาธารณะ</h3>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+              คนทั่วไปจะเห็นอัตโนมัติตามกำหนดการแข่งขัน • แอดมินมองเห็นและจัดการได้ตลอดเวลา และสามารถกด <strong>เปิดทันที</strong> ได้ทุกเมื่อ
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2 shrink-0">
+            <button type="button" id="btnUnlockAllFeaturesNow" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-semibold transition shadow-2xs cursor-pointer">
+              เปิดทุกฟีเจอร์ต่อสาธารณะทันที
+            </button>
+            <button type="button" id="btnResetFeaturesToAuto" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer">
+              รีเซ็ตตามกำหนดการเดิม
+            </button>
+          </div>
+        </div>
+
+        <!-- 3 Rows: Judges, Results, Certificates -->
+        <div class="space-y-3 text-xs">
+          <!-- Item 1: Judges -->
+          <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="font-heading font-semibold text-slate-900 text-sm">1. ระบบกรรมการตัดสิน</span>
+                <span id="badgeVisibilityJudges" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700">ตามกำหนดการ</span>
+              </div>
+              <p class="text-slate-500 text-[11px]">กำหนดการอัตโนมัติ: วันที่ 23 พ.ย. 2569 (วันประชุมคณะกรรมการตัดสิน)</p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" data-feature-toggle="judges" data-action="open" class="btn-vis-toggle-judges px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                เปิดทันที
+              </button>
+              <button type="button" data-feature-toggle="judges" data-action="auto" class="btn-vis-toggle-judges px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                ตามกำหนดการ
+              </button>
+              <button type="button" data-feature-toggle="judges" data-action="hidden" class="btn-vis-toggle-judges px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                ซ่อนเฉพาะแอดมิน
+              </button>
+            </div>
+          </div>
+
+          <!-- Item 2: Results -->
+          <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="font-heading font-semibold text-slate-900 text-sm">2. ผลการแข่งขันและเหรียญรางวัล</span>
+                <span id="badgeVisibilityResults" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700">ตามกำหนดการ</span>
+              </div>
+              <p class="text-slate-500 text-[11px]">กำหนดการอัตโนมัติ: วันที่ 24 พ.ย. 2569 (วันแข่งขันระดับกลุ่มโรงเรียน)</p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" data-feature-toggle="results" data-action="open" class="btn-vis-toggle-results px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                เปิดทันที
+              </button>
+              <button type="button" data-feature-toggle="results" data-action="auto" class="btn-vis-toggle-results px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                ตามกำหนดการ
+              </button>
+              <button type="button" data-feature-toggle="results" data-action="hidden" class="btn-vis-toggle-results px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                ซ่อนเฉพาะแอดมิน
+              </button>
+            </div>
+          </div>
+
+          <!-- Item 3: Certificates -->
+          <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="font-heading font-semibold text-slate-900 text-sm">3. เกียรติบัตรออนไลน์</span>
+                <span id="badgeVisibilityCerts" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700">ตามกำหนดการ</span>
+              </div>
+              <p class="text-slate-500 text-[11px]">กำหนดการอัตโนมัติ: วันที่ 25 พ.ย. 2569 (วันสรุปผลการแข่งขัน)</p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" data-feature-toggle="certificates" data-action="open" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                เปิดทันที
+              </button>
+              <button type="button" data-feature-toggle="certificates" data-action="auto" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                ตามกำหนดการ
+              </button>
+              <button type="button" data-feature-toggle="certificates" data-action="hidden" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                ซ่อนเฉพาะแอดมิน
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <!-- Left 6 cols: Google Sheets Connection & 1-Click Code.gs Copy -->
+        <!-- Left 6 cols: Schedule, Reports & Connection -->
         <div class="lg:col-span-6 space-y-6">
+
+          <!-- Card 1: Auto-Lock Registration Schedule -->
+          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold font-heading text-slate-900">กำหนดเวลาปิดรับสมัครอัตโนมัติ (Auto-Lock)</h3>
+                  <p class="text-xs text-slate-500">ตั้งวัน-เวลาสิ้นสุดการส่งรายชื่อ เมื่อถึงเวลาระบบจะล็อกอัตโนมัติ</p>
+                </div>
+              </div>
+              <span id="cfgScheduleBadge" class="px-2.5 py-1 rounded-md text-xs font-heading font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                เปิดรับสมัคร
+              </span>
+            </div>
+
+            <div class="space-y-3 text-xs">
+              <div>
+                <label for="cfgRegCloseDateTimeInput" class="block font-medium text-slate-700 mb-1">
+                  วันและเวลาปิดรับสมัคร (เวลาประเทศไทย):
+                </label>
+                <div class="flex flex-col sm:flex-row gap-2">
+                  <input type="datetime-local" id="cfgRegCloseDateTimeInput" class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-slate-900 focus:outline-none" />
+                  <button type="button" id="btnSaveRegCloseDate" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition shrink-0">
+                    บันทึกกำหนดเวลา
+                  </button>
+                </div>
+              </div>
+
+              <div class="p-3 rounded-lg bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <div class="font-heading font-semibold text-slate-800" id="cfgScheduleStatusText">
+                    สถานะ: กำลังเปิดรับสมัคร
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">
+                    เมื่อปิดรับสมัคร ครูจะดูสรุปได้ตามปกติแต่จะไม่สามารถกดส่งรายชื่อใหม่ได้ (ยกเว้นแอดมิน)
+                  </div>
+                </div>
+                <button type="button" id="btnToggleRegistrationOpenSchedule" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-heading text-xs font-medium shrink-0 transition">
+                  สลับสถานะทันที
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Official District Reports & Forms -->
+          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+            <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <div class="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold font-heading text-slate-900">รายงานทางการและเอกสารส่งต่อระดับเขตพื้นที่ฯ</h3>
+                <p class="text-xs text-slate-500">สรุปตัวแทนกลุ่มฯ ชนะเลิศ และแบบฟอร์มขอเปลี่ยนตัวตามระเบียบ สพฐ.</p>
+              </div>
+            </div>
+
+            <div class="space-y-3 text-xs">
+              <!-- Item 1: District Reps -->
+              <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <div class="font-heading font-semibold text-slate-900">1. บัญชีรายชื่อตัวแทนกลุ่มโรงเรียนส่งต่อระดับเขตฯ</div>
+                  <span class="px-2 py-0.5 rounded text-[11px] font-heading font-semibold bg-amber-100 text-amber-800">ส่ง สพป.มหาสารคาม เขต 3</span>
+                </div>
+                <p class="text-[11px] text-slate-500">
+                  รวบรวมรายชื่อทีมตัวแทนกลุ่มโรงเรียนตามเกณฑ์ที่กำหนด พร้อมรายชื่อนักเรียนและครูผู้ฝึกสอน เพื่อนำส่งระดับเขตพื้นที่การศึกษา
+                </p>
+
+                <!-- Representative Criteria Selector -->
+                <div class="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1.5">
+                  <label for="cfgDistrictRepCriteriaSelect" class="block text-xs font-heading font-semibold text-slate-700">
+                    เกณฑ์กำหนดการคัดเลือกตัวแทนกลุ่มโรงเรียนไปแข่งระดับเขตฯ:
+                  </label>
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <select id="cfgDistrictRepCriteriaSelect" class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
+                      <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1) [มาตรฐาน]</option>
+                      <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1)</option>
+                      <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
+                      <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
+                    </select>
+                    <button type="button" id="btnSaveDistrictRepCriteria" class="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition shrink-0">
+                      บันทึกเกณฑ์ตัวแทน
+                    </button>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 pt-1">
+                  <button type="button" id="btnAdminExportDistrictRepsExcel" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-medium transition shadow-2xs">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <span>ส่งออกตัวแทนกลุ่มฯ (.xlsx)</span>
+                  </button>
+                  <button type="button" id="btnAdminPrintDistrictRepsReport" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    <span>พิมพ์บัญชีรายชื่อตัวแทนกลุ่มฯ (A4 แนวนอน)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Item 2: Substitution Form -->
+              <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="font-heading font-semibold text-slate-900">2. แบบคำร้องขอเปลี่ยนแปลงผู้เข้าแข่งขัน / ครูผู้ฝึกสอน</div>
+                  <span class="px-2 py-0.5 rounded text-[11px] font-heading font-medium bg-slate-200 text-slate-700">แบบฟอร์ม สพฐ.</span>
+                </div>
+                <p class="text-[11px] text-slate-500">
+                  แบบฟอร์มราชการขนาด A4 แนวตั้ง สำหรับโรงเรียนที่ประสงค์ขอเปลี่ยนตัวนักเรียนหรือครูผู้ฝึกสอน พร้อมช่องลงนามความเห็นผู้อำนวยการโรงเรียนและการอนุมัติของประธานกลุ่มฯ
+                </p>
+                <div class="pt-1">
+                  <button type="button" id="btnPrintSubstitutionFormAdmin" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    <span>พิมพ์แบบคำร้องขอเปลี่ยนตัว (A4 แนวตั้ง)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+
+
+          <!-- Card 3: Google Sheets Connection & 1-Click Code.gs Copy -->
           <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div>
               <h3 class="text-base font-bold font-heading text-slate-900">เชื่อมต่อฐานข้อมูล Google Sheets</h3>
               <p class="text-xs text-slate-500 mt-0.5">
-                ลิงก์ตารางฐานข้อมูล Google Sheets (แสดงเฉพาะแอดมิน) พร้อมปุ่มคัดลอกโค้ดหลังบ้าน <code>Code.gs</code> ฉบับเต็ม
+                ลิงก์ตารางฐานข้อมูล Google Sheets พร้อมปุ่มคัดลอกโค้ดหลังบ้าน <code>Code.gs</code> ฉบับเต็ม
               </p>
             </div>
 
@@ -1408,15 +1895,15 @@
             <!-- 1-Click Copy Code.gs Helper Box -->
             <div class="p-3.5 rounded-lg bg-amber-50/70 border border-amber-200 space-y-2 text-xs text-slate-700">
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="font-heading font-semibold text-slate-900">ขั้นตอนติดตั้งโค้ดหลังบ้าน Apps Script (ป้องกันโค้ดขาดบรรทัด)</div>
+                <div class="font-heading font-semibold text-slate-900">ขั้นตอนติดตั้งโค้ดหลังบ้าน Apps Script</div>
                 <button type="button" id="btnCopyCodeGs" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition">
                   คัดลอกโค้ด Code.gs ทั้งหมด
                 </button>
               </div>
               <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
                 <li>กดปุ่ม <strong>"คัดลอกโค้ด Code.gs ทั้งหมด"</strong> ด้านบน</li>
-                <li>ในหน้า Google Apps Script กด <code>Cmd + A</code> ลบของเก่าออกทั้งหมด แล้วกด <code>Cmd + V</code> เพื่อวางโค้ด และกด <strong>บันทึก (Save)</strong></li>
-                <li>กดปุ่ม <strong>การทำให้ใช้งานได้ (Deploy) &gt; การทำให้ใช้งานได้รายการใหม่ &gt; เว็บแอป</strong> (เลือกผู้มีสิทธิ์เข้าถึง: <strong>ทุกคน / Anyone</strong>) แล้วนำลิงก์ <code>/exec</code> มาวางด้านล่าง</li>
+                <li>ในหน้า Google Apps Script กด <code>Cmd + A</code> ลบของเก่าออกทั้งหมด แล้วกด <code>Cmd + V</code> วางโค้ด และกด <strong>บันทึก (Save)</strong></li>
+                <li>กดปุ่ม <strong>Deploy &gt; การทำให้ใช้งานได้รายการใหม่ &gt; เว็บแอป</strong> (ผู้มีสิทธิ์เข้าถึง: <strong>ทุกคน / Anyone</strong>) แล้วนำลิงก์ <code>/exec</code> มาวางด้านล่าง</li>
               </ol>
             </div>
 
@@ -1438,25 +1925,140 @@
               </div>
             </div>
           </div>
-
-          <!-- Future Phase 2 Roadmap Card (Saved Project Plan) -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-2.5">
-            <div class="flex items-center justify-between">
-              <span class="px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 font-heading text-xs font-medium">
-                โครงการระยะที่ 2 (บันทึกไว้สำหรับพัฒนาต่อ)
-              </span>
-              <span class="text-xs text-slate-400">Phase 2 Roadmap</span>
-            </div>
-            <h3 class="text-sm font-bold font-heading text-slate-900">ระบบบันทึกคะแนน จัดอันดับเหรียญรางวัล และพิมพ์เกียรติบัตรออนไลน์</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">
-              อ้างอิงแนวทางการทำงานจากระบบตัวอย่าง (<code>ed-network01.sillapa-kan3.scm.in.th</code>) สำหรับขยายผลหลังปิดรับสมัคร (30 พ.ย. 2569):
-              เพิ่มแผ่นงานบันทึกคะแนนกรรมการ (0–100 คะแนน), คำนวณระดับเหรียญอัตโนมัติ (ทอง 80–100, เงิน 70–79, ทองแดง 60–69, เข้าร่วม), จัดลำดับที่ 1–3 เพื่อคัดตัวแทนกลุ่มไปแข่งระดับเขตพื้นที่ฯ (23–24 ธ.ค. 2569) และระบบออกเกียรติบัตรออนไลน์
-            </p>
-          </div>
         </div>
 
-        <!-- Right 6 cols: Add New Competition or School -->
+        <!-- Right 6 cols: Certificate Customizer, Official Documents & Add Items -->
         <div class="lg:col-span-6 space-y-6">
+
+          <!-- Card 4: Certificate & Canva Template Customizer -->
+          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+            <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <div class="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-bold font-heading text-slate-900">ปรับแต่งเกียรติบัตรออนไลน์และแม่แบบ Canva</h3>
+                <p class="text-xs text-slate-500">ปรับเลขที่รัน วันที่ออก นามผู้ลงนาม ลายมือชื่อ และภาพพื้นหลัง</p>
+              </div>
+            </div>
+
+            <form id="certConfigForm" class="space-y-3.5 text-xs">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="cfgCertPrefixInput" class="block font-medium text-slate-700 mb-1">รหัสขึ้นต้นเกียรติบัตร</label>
+                  <input type="text" id="cfgCertPrefixInput" placeholder="เช่น WYK74-2569-" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
+                </div>
+                <div>
+                  <label for="cfgCertIssueDateInput" class="block font-medium text-slate-700 mb-1">วันที่ออกเกียรติบัตร (ภาษาไทย)</label>
+                  <input type="text" id="cfgCertIssueDateInput" placeholder="เช่น 25 พฤศจิกายน พุทธศักราช 2569" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="cfgCertSignerNameInput" class="block font-medium text-slate-700 mb-1">ชื่อ-นามสกุล ผู้ลงนาม</label>
+                  <input type="text" id="cfgCertSignerNameInput" placeholder="เช่น นายกิจภูมิ บุญอบ" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
+                </div>
+                <div>
+                  <label for="cfgCertSignerPosInput" class="block font-medium text-slate-700 mb-1">ตำแหน่งผู้ลงนาม</label>
+                  <input type="text" id="cfgCertSignerPosInput" placeholder="เช่น ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
+                </div>
+              </div>
+
+              <div>
+                <label for="cfgCertSignerOrgInput" class="block font-medium text-slate-700 mb-1">สังกัด / หน่วยงาน</label>
+                <input type="text" id="cfgCertSignerOrgInput" placeholder="สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
+              </div>
+
+              <!-- Digital Signature Upload -->
+              <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="font-heading font-semibold text-slate-800">ลายมือชื่อดิจิทัล (PNG พื้นหลังโปร่งใส)</div>
+                  <button type="button" id="btnClearCertSig" class="hidden text-[11px] text-rose-600 hover:underline">ลบลายเซ็น</button>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div id="cfgCertSigPreview" class="w-24 h-12 rounded border border-dashed border-slate-300 bg-white flex items-center justify-center text-[10px] text-slate-400 overflow-hidden shrink-0">
+                    ไม่มีลายเซ็น
+                  </div>
+                  <div class="flex-1">
+                    <input type="file" id="cfgCertSigFileInput" accept="image/png,image/jpeg" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-white hover:file:bg-slate-800" />
+                    <p class="text-[10px] text-slate-400 mt-1">แนะนำ: ไฟล์ PNG โปร่งใส ไม่มีพื้นหลัง</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Canva Background Image Upload -->
+              <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="font-heading font-semibold text-slate-800">รูปแบบพื้นหลังเกียรติบัตร (Canva Template)</div>
+                  <button type="button" id="btnClearCertBg" class="hidden text-[11px] text-rose-600 hover:underline">ใช้กรอบมาตรฐาน</button>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3 text-xs">
+                  <label class="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name="certBgMode" value="standard" id="certBgModeStandard" checked class="text-slate-900" />
+                    <span>กรอบมาตรฐานระบบ (Notion Gold)</span>
+                  </label>
+                  <label class="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name="certBgMode" value="canva" id="certBgModeCanva" class="text-slate-900" />
+                    <span>ใช้ภาพพื้นหลัง Canva ที่อัปโหลด</span>
+                  </label>
+                </div>
+                <div id="certBgUploadRow" class="hidden items-center gap-3 pt-1 border-t border-slate-200">
+                  <div id="cfgCertBgPreview" class="w-24 h-16 rounded border border-dashed border-slate-300 bg-white flex items-center justify-center text-[10px] text-slate-400 overflow-hidden shrink-0">
+                    ไม่มีรูปภาพ
+                  </div>
+                  <div class="flex-1">
+                    <input type="file" id="cfgCertBgFileInput" accept="image/png,image/jpeg" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-white hover:file:bg-slate-800" />
+                    <p class="text-[10px] text-slate-400 mt-1">แนะนำ: สัดส่วน A4 แนวนอน 297 x 210 มม. (3508 x 2480 px)</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2 pt-1">
+                <button type="submit" id="btnSaveCertConfig" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition">
+                  บันทึกการตั้งค่าเกียรติบัตร
+                </button>
+                <button type="button" id="btnPreviewCertSample" class="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition">
+                  ทดลองดูตัวอย่างเกียรติบัตร
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Card 5: Official Download Center & Resources -->
+          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+            <div class="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+              <div class="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold font-heading text-slate-900">ศูนย์ดาวน์โหลดเอกสารและลิงก์ทางการ</h3>
+                <p class="text-[11px] text-slate-500">เกณฑ์การแข่งขันและเอกสารประกอบ</p>
+              </div>
+            </div>
+            <div class="space-y-2 text-xs">
+              <a href="https://drive.google.com/drive/folders/1hIdXcgsOqNt5plNqRizfp9YbHzgjpRwv"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 class="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-100 transition text-slate-800">
+                <span class="font-medium">เกณฑ์การแข่งขันศิลปหัตถกรรมนักเรียน ครั้งที่ 74 (Google Drive)</span>
+                <span class="text-blue-600 text-[11px] font-semibold">เปิดดู &rarr;</span>
+              </a>
+              <a href="https://drive.google.com/drive/folders/1cskJzZ8Tz-oZN0sUjBSDE3_vXZQl_tE4"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 class="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-100 transition text-slate-800">
+                <span class="font-medium">โฟลเดอร์เก็บเอกสารหลังบ้านกลุ่มโรงเรียน (Google Drive เฉพาะแอดมิน)</span>
+                <span class="text-blue-600 text-[11px] font-semibold">เปิดดู &rarr;</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Card 6: Add New Competition -->
           <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div>
               <h3 class="text-base font-bold font-heading text-slate-900">เพิ่มรายการแข่งขันใหม่ (เฉพาะแอดมิน)</h3>
@@ -1513,6 +2115,7 @@
             </form>
           </div>
 
+          <!-- Card 7: Add New School -->
           <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
             <h3 class="text-base font-bold font-heading text-slate-900">เพิ่มรายชื่อโรงเรียนเพิ่มเติม (เฉพาะแอดมิน)</h3>
             <form id="addSchoolForm" class="flex flex-col sm:flex-row gap-2">
@@ -1536,6 +2139,8 @@
       <span>สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</span>
     </div>
   </footer>
+
+  </div><!-- end #notionMainArea -->
 
   <script src="js/mock-data.js"></script>
   <script src="js/app.js"></script>

@@ -1,0 +1,222 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
+  <defs>
+    <!-- Luxury 24K Multi-Stop Metallic Gold Foil Gradients -->
+    <linearGradient id="hyGoldMain" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#78350f" />
+      <stop offset="16%" stop-color="#b45309" />
+      <stop offset="32%" stop-color="#eab308" />
+      <stop offset="48%" stop-color="#fef08a" />
+      <stop offset="62%" stop-color="#d97706" />
+      <stop offset="76%" stop-color="#92400e" />
+      <stop offset="90%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#78350f" />
+    </linearGradient>
+    <linearGradient id="hyGoldBright" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fffbeb" />
+      <stop offset="28%" stop-color="#fef08a" />
+      <stop offset="56%" stop-color="#facc15" />
+      <stop offset="82%" stop-color="#ca8a04" />
+      <stop offset="100%" stop-color="#854d0e" />
+    </linearGradient>
+    <linearGradient id="hyRibbonGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#78350f" />
+      <stop offset="15%" stop-color="#b45309" />
+      <stop offset="34%" stop-color="#d97706" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="66%" stop-color="#d97706" />
+      <stop offset="85%" stop-color="#b45309" />
+      <stop offset="100%" stop-color="#78350f" />
+    </linearGradient>
+    <radialGradient id="hyLuxAura" cx="50%" cy="46%" r="36%">
+      <stop offset="0%" stop-color="#fde047" stop-opacity="0.18" />
+      <stop offset="55%" stop-color="#f59e0b" stop-opacity="0.06" />
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Curved Path inside the Ribbon for 'กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง' -->
+    <path id="hyRibbonArc" d="M 118,412 Q 300,444 482,412" fill="none" />
+  </defs>
+
+  <!-- Subtle Golden Glow Behind Torch & Open Book -->
+  <circle cx="300" cy="270" r="215" fill="url(#hyLuxAura)" />
+
+  <!-- 1. Radiant Champagne-Gold Sunburst & Fine Sparkles -->
+  <g stroke="url(#hyGoldMain)" stroke-linecap="round" opacity="0.72">
+    <line x1="300" y1="210" x2="300" y2="104" stroke-width="1.8" />
+    <line x1="286" y1="213" x2="258" y2="114" stroke-width="1.5" />
+    <line x1="314" y1="213" x2="342" y2="114" stroke-width="1.5" />
+    <line x1="273" y1="219" x2="222" y2="132" stroke-width="1.4" />
+    <line x1="327" y1="219" x2="378" y2="132" stroke-width="1.4" />
+    <line x1="262" y1="227" x2="190" y2="158" stroke-width="1.25" />
+    <line x1="338" y1="227" x2="410" y2="158" stroke-width="1.25" />
+    <line x1="252" y1="237" x2="165" y2="190" stroke-width="1.15" />
+    <line x1="348" y1="237" x2="435" y2="190" stroke-width="1.15" />
+    <line x1="246" y1="249" x2="152" y2="225" stroke-width="1.05" />
+    <line x1="354" y1="249" x2="448" y2="225" stroke-width="1.05" />
+  </g>
+  <g stroke="#fef08a" stroke-linecap="round" opacity="0.75">
+    <line x1="293" y1="211" x2="278" y2="128" stroke-width="0.9" stroke-dasharray="3 3" />
+    <line x1="307" y1="211" x2="322" y2="128" stroke-width="0.9" stroke-dasharray="3 3" />
+    <line x1="279" y1="215" x2="241" y2="140" stroke-width="0.95" stroke-dasharray="4 3" />
+    <line x1="321" y1="215" x2="359" y2="140" stroke-width="0.95" stroke-dasharray="4 3" />
+    <line x1="267" y1="223" x2="208" y2="162" stroke-width="0.9" stroke-dasharray="4 3" />
+    <line x1="333" y1="223" x2="392" y2="162" stroke-width="0.9" stroke-dasharray="4 3" />
+  </g>
+  <!-- 4-Point Champagne Sparkles around Top Chada -->
+  <g fill="url(#hyGoldBright)" stroke="#92400e" stroke-width="0.4" opacity="0.9">
+    <path d="M268,68 Q268,75 275,75 Q268,75 268,82 Q268,75 261,75 Q268,75 268,68 Z" />
+    <path d="M332,68 Q332,75 339,75 Q332,75 332,82 Q332,75 325,75 Q332,75 332,68 Z" />
+    <path d="M242,96 Q242,101 247,101 Q242,101 242,106 Q242,101 237,101 Q242,101 242,96 Z" />
+    <path d="M358,96 Q358,101 363,101 Q358,101 358,106 Q358,101 353,101 Q358,101 358,96 Z" />
+  </g>
+
+  <!-- 2. Luxury Thai Chada / Educational Crown with Inner Champagne Highlights -->
+  <g fill="url(#hyGoldBright)" stroke="#78350f" stroke-width="1" stroke-linejoin="round">
+    <path d="M300,50 L306,95 L294,95 Z" />
+    <circle cx="300" cy="46" r="3.4" fill="#fffbeb" />
+    <circle cx="300" cy="73" r="2.4" fill="#fef08a" />
+    <path d="M286,95 Q300,87 314,95 L322,115 Q300,107 278,115 Z" />
+    <path d="M273,115 Q300,105 327,115 L335,134 Q300,125 265,134 Z" />
+    <path d="M262,134 Q300,123 338,134 L342,144 Q300,135 258,144 Z" fill="url(#hyGoldMain)" />
+    <path d="M264,136 C250,132 238,142 244,158 C249,150 256,148 262,152 Z" />
+    <path d="M336,136 C350,132 362,142 356,158 C351,150 344,148 338,152 Z" />
+    <!-- Crown Inner Metallic Trim Lines -->
+    <path d="M281,113 Q300,106 319,113" fill="none" stroke="#fffbeb" stroke-width="0.9" opacity="0.85" />
+    <path d="M269,132 Q300,123 331,132" fill="none" stroke="#fffbeb" stroke-width="0.9" opacity="0.85" />
+    <polygon points="300,117 305.5,126 300,135 294.5,126" fill="#fffbeb" stroke="#b45309" stroke-width="0.7" />
+  </g>
+
+  <!-- 3. Symmetrical 24K Golden Rice Wreath (Two-Tone Outer/Inner Grains + Midrib Veins + Awns) -->
+  <g stroke="#78350f" stroke-width="0.6">
+    <!-- Left Stem -->
+    <path d="M235,388 C140,350 112,240 162,155 C166,149 172,155 168,162 C122,242 148,342 238,380 Z" fill="url(#hyGoldMain)" />
+    <!-- Left Outer Grains (Metallic Main Gold) -->
+    <g fill="url(#hyGoldMain)">
+      <ellipse cx="152" cy="176" rx="8" ry="16" transform="rotate(-38 152 176)" />
+      <ellipse cx="136" cy="204" rx="8.5" ry="17" transform="rotate(-28 136 204)" />
+      <ellipse cx="126" cy="234" rx="9" ry="18" transform="rotate(-18 126 234)" />
+      <ellipse cx="122" cy="266" rx="9" ry="18" transform="rotate(-8 122 266)" />
+      <ellipse cx="126" cy="298" rx="9" ry="18" transform="rotate(4 126 298)" />
+      <ellipse cx="138" cy="328" rx="9" ry="18" transform="rotate(18 138 328)" />
+      <ellipse cx="158" cy="354" rx="8.5" ry="17" transform="rotate(32 158 354)" />
+      <path d="M180,368 C142,366 115,340 105,305 C128,332 152,350 185,360 Z" />
+    </g>
+    <!-- Left Inner Grains (Champagne Foil Highlight) -->
+    <g fill="url(#hyGoldBright)">
+      <ellipse cx="176" cy="178" rx="7" ry="15" transform="rotate(-10 176 178)" />
+      <ellipse cx="162" cy="208" rx="7.5" ry="16" transform="rotate(2 162 208)" />
+      <ellipse cx="154" cy="238" rx="8" ry="16.5" transform="rotate(12 154 238)" />
+      <ellipse cx="152" cy="270" rx="8" ry="16.5" transform="rotate(22 152 270)" />
+      <ellipse cx="156" cy="300" rx="8" ry="16.5" transform="rotate(34 156 300)" />
+      <ellipse cx="168" cy="328" rx="8" ry="16" transform="rotate(46 168 328)" />
+      <ellipse cx="188" cy="352" rx="7.5" ry="15" transform="rotate(58 188 352)" />
+    </g>
+
+    <!-- Right Stem -->
+    <path d="M365,388 C460,350 488,240 438,155 C434,149 428,155 432,162 C478,242 452,342 362,380 Z" fill="url(#hyGoldMain)" />
+    <!-- Right Outer Grains (Metallic Main Gold) -->
+    <g fill="url(#hyGoldMain)">
+      <ellipse cx="448" cy="176" rx="8" ry="16" transform="rotate(38 448 176)" />
+      <ellipse cx="464" cy="204" rx="8.5" ry="17" transform="rotate(28 464 204)" />
+      <ellipse cx="474" cy="234" rx="9" ry="18" transform="rotate(18 474 234)" />
+      <ellipse cx="478" cy="266" rx="9" ry="18" transform="rotate(8 478 266)" />
+      <ellipse cx="474" cy="298" rx="9" ry="18" transform="rotate(-4 474 298)" />
+      <ellipse cx="462" cy="328" rx="9" ry="18" transform="rotate(-18 462 328)" />
+      <ellipse cx="442" cy="354" rx="8.5" ry="17" transform="rotate(-32 442 354)" />
+      <path d="M420,368 C458,366 485,340 495,305 C472,332 448,350 415,360 Z" />
+    </g>
+    <!-- Right Inner Grains (Champagne Foil Highlight) -->
+    <g fill="url(#hyGoldBright)">
+      <ellipse cx="424" cy="178" rx="7" ry="15" transform="rotate(10 424 178)" />
+      <ellipse cx="438" cy="208" rx="7.5" ry="16" transform="rotate(-2 438 208)" />
+      <ellipse cx="446" cy="238" rx="8" ry="16.5" transform="rotate(-12 446 238)" />
+      <ellipse cx="448" cy="270" rx="8" ry="16.5" transform="rotate(-22 448 270)" />
+      <ellipse cx="444" cy="300" rx="8" ry="16.5" transform="rotate(-34 444 300)" />
+      <ellipse cx="432" cy="328" rx="8" ry="16" transform="rotate(-46 432 328)" />
+      <ellipse cx="412" cy="352" rx="7.5" ry="15" transform="rotate(-58 412 352)" />
+    </g>
+
+    <!-- Fine Golden Rice Midribs & Delicate Whiskers (หนวดรวงข้าวและเส้นสันเมล็ดข้าว) -->
+    <g stroke="url(#hyGoldBright)" stroke-width="0.85" stroke-linecap="round" fill="none" opacity="0.9">
+      <!-- Left Midribs & Outer Awns -->
+      <line x1="147" y1="169" x2="136" y2="152" />
+      <line x1="152" y1="166" x2="152" y2="186" />
+      <line x1="131" y1="194" x2="121" y2="177" />
+      <line x1="136" y1="194" x2="136" y2="214" />
+      <line x1="122" y1="222" x2="112" y2="205" />
+      <line x1="126" y1="224" x2="126" y2="244" />
+      <line x1="119" y1="252" x2="110" y2="236" />
+      <line x1="122" y1="256" x2="122" y2="276" />
+      <line x1="126" y1="288" x2="126" y2="308" />
+      <line x1="138" y1="318" x2="138" y2="338" />
+      <!-- Right Midribs & Outer Awns -->
+      <line x1="453" y1="169" x2="464" y2="152" />
+      <line x1="448" y1="166" x2="448" y2="186" />
+      <line x1="469" y1="194" x2="479" y2="177" />
+      <line x1="464" y1="194" x2="464" y2="214" />
+      <line x1="478" y1="222" x2="488" y2="205" />
+      <line x1="474" y1="224" x2="474" y2="244" />
+      <line x1="481" y1="252" x2="490" y2="236" />
+      <line x1="478" y1="256" x2="478" y2="276" />
+      <line x1="474" y1="288" x2="474" y2="308" />
+      <line x1="462" y1="318" x2="462" y2="338" />
+    </g>
+  </g>
+
+  <!-- 4. Central Torch of Learning & Open Book of Wisdom -->
+  <path d="M300,162 C311,181 327,196 319,216 C312,208 306,206 300,212 C294,206 288,208 281,216 C273,196 289,181 300,162 Z" fill="url(#hyGoldBright)" stroke="#78350f" stroke-width="0.9" />
+  <path d="M300,180 C306,192 313,200 309,212 C305,208 302,207 300,210 C298,207 295,208 291,212 C287,200 294,192 300,180 Z" fill="#fffbeb" />
+
+  <path d="M284,218 L316,218 L310,234 L290,234 Z" fill="url(#hyGoldMain)" stroke="#78350f" stroke-width="0.9" />
+  <rect x="294" y="234" width="12" height="120" rx="3" fill="url(#hyGoldMain)" stroke="#78350f" stroke-width="0.9" />
+  <circle cx="300" cy="358" r="6.2" fill="url(#hyGoldBright)" stroke="#78350f" stroke-width="0.9" />
+
+  <g fill="#fffbeb" fill-opacity="0.78" stroke="url(#hyGoldMain)" stroke-width="3.6" stroke-linejoin="round">
+    <path d="M300,262 C255,250 212,254 196,268 L196,334 C212,320 255,316 300,328 Z" />
+    <path d="M196,334 L190,339 C208,325 253,322 300,336 L300,328 C255,316 212,320 196,334 Z" fill="url(#hyGoldMain)" stroke-width="1.5" />
+    <path d="M300,262 C345,250 388,254 404,268 L404,334 C388,320 345,316 300,328 Z" />
+    <path d="M404,334 L410,339 C392,325 347,322 300,336 L300,328 C345,316 388,320 404,334 Z" fill="url(#hyGoldMain)" stroke-width="1.5" />
+    <line x1="300" y1="262" x2="300" y2="336" stroke-width="4" />
+  </g>
+  <!-- Champagne Gold Inner Book Frame Lines & Gleaming Script Lines -->
+  <g fill="none" stroke="url(#hyGoldBright)" stroke-width="1.1" opacity="0.9">
+    <path d="M293,267 C254,257 217,260 202,272 L202,326 C217,315 254,312 293,322" />
+    <path d="M307,267 C346,257 383,260 398,272 L398,326 C383,315 346,312 307,322" />
+  </g>
+  <g stroke="url(#hyGoldMain)" stroke-width="2" stroke-linecap="round" opacity="0.88">
+    <line x1="214" y1="282" x2="282" y2="276" />
+    <line x1="214" y1="295" x2="282" y2="289" />
+    <line x1="214" y1="308" x2="282" y2="302" />
+    <line x1="318" y1="276" x2="386" y2="282" />
+    <line x1="318" y1="289" x2="386" y2="295" />
+    <line x1="318" y1="302" x2="386" y2="308" />
+  </g>
+
+  <!-- 5. Intricate Double-Layer Thai Kanok Filigree Supporting Book Base -->
+  <g fill="url(#hyGoldBright)" stroke="#78350f" stroke-width="0.9">
+    <path d="M294,350 C272,340 245,342 225,360 C238,358 248,362 256,372 C242,374 228,368 214,358 C206,372 222,388 248,384 C266,381 280,368 294,356 Z" />
+    <path d="M306,350 C328,340 355,342 375,360 C362,358 352,362 344,372 C358,374 372,368 386,358 C394,372 378,388 352,384 C334,381 320,368 306,356 Z" />
+  </g>
+  <!-- Inner Filigree Curl Highlights inside Kanok -->
+  <g fill="none" stroke="#fffbeb" stroke-width="0.85" stroke-linecap="round" opacity="0.85">
+    <path d="M286,353 C268,346 250,348 236,358" />
+    <path d="M314,353 C332,346 350,348 364,358" />
+  </g>
+
+  <!-- 6. Luxury Metallic Gold Ribbon Banner: กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง -->
+  <g>
+    <path d="M120,398 L72,390 L92,414 L68,436 L128,438 Z" fill="#78350f" stroke="#451a03" stroke-width="1" />
+    <path d="M480,398 L528,390 L508,414 L532,436 L472,438 Z" fill="#78350f" stroke="#451a03" stroke-width="1" />
+    <path d="M112,386 Q300,420 488,386 L480,432 Q300,466 120,432 Z" fill="url(#hyRibbonGrad)" stroke="#78350f" stroke-width="1.5" />
+    <!-- Champagne Double Border Rims -->
+    <path d="M118,392 Q300,425 482,392" fill="none" stroke="#fef08a" stroke-width="1.5" opacity="0.92" />
+    <path d="M124,426 Q300,459 476,426" fill="none" stroke="#fef08a" stroke-width="1.5" opacity="0.92" />
+
+    <!-- Embossed Champagne-Ivory Ribbon Text -->
+    <text fill="#fffbeb" font-family="'Niramit', 'TH Niramit AS', 'Sarabun', sans-serif" font-size="22" font-weight="800" letter-spacing="1.2">
+      <textPath href="#hyRibbonArc" startOffset="50%" text-anchor="middle">
+        กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง
+      </textPath>
+    </text>
+  </g>
+</svg>

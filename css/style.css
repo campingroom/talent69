@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Niramit:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Prompt:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap');
 
 :root {
   --font-heading: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -53,21 +53,34 @@ h1, h2, h3, h4, .font-heading {
   border-color: var(--notion-border-strong) !important;
 }
 
-/* Notion Database View Tabs */
+/* Notion Sidebar Styles */
+#notionSidebar {
+  background-color: var(--notion-bg);
+  border-right: 1px solid var(--notion-border);
+}
+.sidebar-collapsed #notionSidebar {
+  display: none !important;
+}
+
+/* Notion Database View / Sidebar Tabs */
 .nav-tab-btn {
-  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
-  border: 1px solid transparent;
-  color: var(--notion-muted);
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  color: var(--notion-text);
+  border-radius: 8px;
 }
 .nav-tab-btn:hover {
-  background-color: var(--notion-hover);
-  color: var(--notion-text);
+  background-color: #EBEBEA;
+  color: #201F1D;
 }
 .nav-tab-btn.active {
-  background-color: var(--notion-text) !important;
-  color: #FFFFFF !important;
-  border-color: var(--notion-text) !important;
-  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.08);
+  background-color: #E3E2DE !important;
+  color: #201F1D !important;
+  font-weight: 600 !important;
+  border-color: transparent !important;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.04);
+}
+.nav-tab-btn.active svg {
+  color: #201F1D !important;
 }
 
 /* Notion KPI Card Hover */
@@ -119,6 +132,10 @@ textarea:focus {
     box-shadow: none !important;
     border: 1px solid #D3D1CB !important;
   }
+  .cert-page {
+    page-break-after: always;
+    margin: 0 !important;
+  }
 }
 
 /* Graphic Dashboard (ring, bars, heatmap, tooltip) */
@@ -162,3 +179,16 @@ textarea:focus {
 .dash-tip.show {
   opacity: 1;
 }
+
+/* Modern Hero Dot Mesh Pattern (Porvix / SolaceUI Trend) */
+.hero-dot-mesh {
+  background-image: radial-gradient(#cbd5e1 0.85px, transparent 0.85px);
+  background-size: 16px 16px;
+}
+
+/* Feature Lock State */
+.hidden-by-lock {
+  display: none !important;
+}
+
+

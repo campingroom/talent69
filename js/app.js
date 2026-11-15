@@ -14,6 +14,100 @@
   const DEFAULT_GAS_WEB_APP_URL =
     'https://script.google.com/macros/s/AKfycbxMnn_WoMLx83wa--6WcYMgBEmR1sqoxyKST1RxLaxFEHaEWjjuBQB1j47vd4U83eCqoQ/exec';
 
+  const DEFAULT_CONFIG = {
+    regCloseDate: '2026-11-19T23:59',
+    districtRepCriteria: 'rank_1', // 'rank_1', 'rank_1_2', 'rank_1_3', 'gold_only'
+    certPrefix: 'WYK74-2569-',
+    certSignerName: 'นายกิจภูมิ บุญอบ',
+    certSignerPos: 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
+    certSignerOrg: 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3',
+    certIssueDate: '25 พฤศจิกายน พุทธศักราช 2569',
+    certSignatureUrl: '',
+    certBgMode: 'standard', // 'standard' or 'canva'
+    certBgImageUrl: '',
+    featureVisibility: {
+      judges: 'auto',
+      results: 'auto',
+      certificates: 'auto'
+    }
+  };
+
+  const FEATURE_MILESTONES = {
+    judges: {
+      key: 'judges',
+      name: 'คณะกรรมการตัดสิน',
+      openDateStr: '2026-11-23T00:00:00+07:00',
+      dateLabel: '23 พฤศจิกายน 2569 (วันประชุมคณะกรรมการตัดสิน)'
+    },
+    results: {
+      key: 'results',
+      name: 'ผลการแข่งขันและเหรียญรางวัล',
+      openDateStr: '2026-11-24T00:00:00+07:00',
+      dateLabel: '24 พฤศจิกายน 2569 (วันแข่งขันระดับกลุ่มโรงเรียน)'
+    },
+    certificates: {
+      key: 'certificates',
+      name: 'เกียรติบัตรออนไลน์',
+      openDateStr: '2026-11-25T00:00:00+07:00',
+      dateLabel: '25 พฤศจิกายน 2569 (วันสรุปผลการแข่งขัน)'
+    }
+  };
+
+  function getFeatureVisibilitySetting(featureKey) {
+    const cfg = state.config || DEFAULT_CONFIG;
+    if (cfg.featureVisibility && cfg.featureVisibility[featureKey]) {
+      return cfg.featureVisibility[featureKey];
+    }
+    return 'auto';
+  }
+
+  function isFeatureOpenToPublic(featureKey) {
+    const setting = getFeatureVisibilitySetting(featureKey);
+    if (setting === 'open') return true;
+    if (setting === 'hidden') return false;
+    const meta = FEATURE_MILESTONES[featureKey];
+    if (!meta) return false;
+    return Date.now() >= new Date(meta.openDateStr).getTime();
+  }
+
+  function canUserAccessFeature(featureKey) {
+    if (state.isAdmin) return true;
+    return isFeatureOpenToPublic(featureKey);
+  }
+
+  function getDistrictRepCriteriaLabel(criteria) {
+    switch (criteria) {
+      case 'rank_1_2':
+        return 'อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1)';
+      case 'rank_1_3':
+        return 'อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)';
+      case 'gold_only':
+        return 'เฉพาะทีมที่ได้เหรียญทอง อันดับ 1';
+      case 'rank_1':
+      default:
+        return 'เฉพาะทีมชนะเลิศ (อันดับ 1)';
+    }
+  }
+
+  function isDistrictRepresentative(r) {
+    if (!r) return false;
+    const rank = Number(r.rank);
+    const award = r.award_title || '';
+    const medal = r.medal || '';
+    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
+
+    if (criteria === 'rank_1_2') {
+      return (rank >= 1 && rank <= 2) || award.includes('ชนะเลิศ');
+    }
+    if (criteria === 'rank_1_3') {
+      return (rank >= 1 && rank <= 3) || award.includes('ชนะเลิศ');
+    }
+    if (criteria === 'gold_only') {
+      return (rank === 1 || award === 'ชนะเลิศ') && medal.includes('ทอง');
+    }
+    return rank === 1 || award === 'ชนะเลิศ';
+  }
+
   const DEFAULT_DATA = window.TALENT69_DEFAULT_DATA || {
     eventInfo: {},
     schools: [],
@@ -63,8 +157,17 @@
     gasWebAppUrl: '',
     isAdmin: false,
     adminPin: DEFAULT_ADMIN_PIN,
-    registrationOpen: true
+    registrationOpen: true,
+    config: Object.assign({}, DEFAULT_CONFIG)
   };
+
+  function getEffectiveRegistrationCloseDate() {
+    const raw = (state.config && state.config.regCloseDate) || '2026-11-19T23:59';
+    if (raw.length === 16) {
+      return new Date(raw + ':59+07:00');
+    }
+    return new Date(raw);
+  }
 
   function calculateMedalFromScore(scoreVal) {
     if (scoreVal === '' || scoreVal === null || scoreVal === undefined) return '';
@@ -110,6 +213,89 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  // Prefix Normalization Helpers
+  // แปลงคำนำหน้าชื่อเป็นคำเต็มทางการ สำหรับงานพิมพ์ เกียรติบัตร บัตรประจำตัว และหน้าจอขนาดปกติ
+  function toFullPrefix(prefix) {
+    if (!prefix) return '';
+    const p = String(prefix).trim();
+    if (/^(ด\.ช\.|ด\.ช|ดช\.|ดช|เด็กชาย)$/.test(p)) return 'เด็กชาย';
+    if (/^(ด\.ญ\.|ด\.ญ|ดญ\.|ดญ|เด็กหญิง)$/.test(p)) return 'เด็กหญิง';
+    if (/^(น\.ส\.|น\.ส|นส\.|นส|นางสาว)$/.test(p)) return 'นางสาว';
+    if (/^(นาย)$/.test(p)) return 'นาย';
+    if (/^(นาง)$/.test(p)) return 'นาง';
+    return p;
+  }
+
+  // แปลงคำนำหน้าชื่อเป็นตัวย่อ สำหรับหน้าจอมือถือ/จอแคบ เพื่อไม่ให้คอลัมน์ตารางโดนบีบ
+  function toShortPrefix(prefix) {
+    if (!prefix) return '';
+    const p = String(prefix).trim();
+    if (/^(เด็กชาย|ด\.ช\.|ด\.ช|ดช\.|ดช)$/.test(p)) return 'ด.ช.';
+    if (/^(เด็กหญิง|ด\.ญ\.|ด\.ญ|ดญ\.|ดญ)$/.test(p)) return 'ด.ญ.';
+    if (/^(นางสาว|น\.ส\.|น\.ส|นส\.|นส)$/.test(p)) return 'น.ส.';
+    if (/^(นาย)$/.test(p)) return 'นาย';
+    if (/^(นาง)$/.test(p)) return 'นาง';
+    return p;
+  }
+
+  // แยกคำนำหน้าออกจากชื่อ กรณีชื่อมีการใส่คำนำหน้าติดมาด้วย
+  function parsePrefixAndName(rawPrefix, rawName) {
+    let p = (rawPrefix || '').trim();
+    let n = (rawName || '').trim();
+    const prefixRegex = /^(เด็กชาย|เด็กหญิง|นางสาว|นาย|นาง|ด\.ช\.|ด\.ช|ด\.ญ\.|ด\.ญ|น\.ส\.|น\.ส)\s*/;
+    if (!p && n) {
+      const m = n.match(prefixRegex);
+      if (m) {
+        p = m[1];
+        n = n.substring(m[0].length).trim();
+      }
+    } else if (p && n) {
+      // ถ้า p มีอยู่แล้ว แต่ใน n ยังพิมพ์คำนำหน้าซ้ำมาด้วย
+      const m = n.match(prefixRegex);
+      if (m) {
+        n = n.substring(m[0].length).trim();
+      }
+    }
+    return { prefix: p, name: n };
+  }
+
+  // คืนค่าชื่อเต็มทางการสำหรับงานพิมพ์ (เกียรติบัตร, บัตรประจำตัว, เอกสารราชการ)
+  function formatFullNameForPrint(rawPrefix, rawName) {
+    const parsed = parsePrefixAndName(rawPrefix, rawName);
+    const fullP = toFullPrefix(parsed.prefix);
+    if (!fullP) return parsed.name;
+    return fullP + parsed.name;
+  }
+
+  // คืนค่า HTML แสดงชื่อแบบ Responsive: จอมือถือ/จอแคบ (< 640px) แสดงตัวย่อ, จอคอม/แท็บเล็ต (>= 640px) แสดงคำเต็ม
+  function formatResponsiveNameHtml(rawPrefix, rawName, grade) {
+    const parsed = parsePrefixAndName(rawPrefix, rawName);
+    const fullP = toFullPrefix(parsed.prefix);
+    const shortP = toShortPrefix(parsed.prefix);
+    const cleanN = escapeHtml(parsed.name);
+    const gradeHtml = grade ? ' <span class="text-slate-400 font-normal">(' + escapeHtml(grade) + ')</span>' : '';
+
+    if (!fullP && !shortP) {
+      return cleanN + gradeHtml;
+    }
+
+    if (fullP === shortP) {
+      return escapeHtml(fullP) + cleanN + gradeHtml;
+    }
+
+    return (
+      '<span class="inline sm:hidden">' +
+      escapeHtml(shortP) +
+      cleanN +
+      '</span>' +
+      '<span class="hidden sm:inline">' +
+      escapeHtml(fullP) +
+      cleanN +
+      '</span>' +
+      gradeHtml
+    );
   }
 
   function cloneDeep(obj) {
@@ -328,6 +514,23 @@
         state.judges = Array.isArray(parsed.judges)
           ? parsed.judges
           : cloneDeep(DEFAULT_DATA.sampleJudges || []);
+        state.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
+        if (!state.config.featureVisibility) {
+          state.config.featureVisibility = Object.assign({}, DEFAULT_CONFIG.featureVisibility);
+        } else {
+          state.config.featureVisibility = Object.assign({}, DEFAULT_CONFIG.featureVisibility, state.config.featureVisibility);
+        }
+        // Auto-migrate school SCH-13 subdistrict and default signer name if outdated
+        if (Array.isArray(state.schools)) {
+          state.schools.forEach(function (s) {
+            if (s.school_id === 'SCH-13' || s.school_name === 'โรงเรียนหินแห่เสริมศิลป์') {
+              s.subdistrict = 'ต.วังยาว';
+            }
+          });
+        }
+        if (!state.config.certSignerName || state.config.certSignerName === 'นายวิทยา มโนการณ์') {
+          state.config.certSignerName = 'นายกิจภูมิ บุญอบ';
+        }
         return;
       } catch (e) {
         // Fallback to default data
@@ -337,6 +540,7 @@
     state.competitions = cloneDeep(DEFAULT_DATA.competitions);
     state.registrations = cloneDeep(DEFAULT_DATA.sampleRegistrations);
     state.judges = cloneDeep(DEFAULT_DATA.sampleJudges || []);
+    state.config = Object.assign({}, DEFAULT_CONFIG);
     saveState();
   }
 
@@ -347,15 +551,16 @@
         schools: state.schools,
         competitions: state.competitions,
         registrations: state.registrations,
-        judges: state.judges
+        judges: state.judges,
+        config: state.config
       })
     );
   }
 
   function isRegistrationEffectivelyOpen() {
     if (!state.registrationOpen) return false;
-    // Auto-lock for general users when deadline passed (after 19 Nov 2026 23:59:59)
-    if (!state.isAdmin && Date.now() > new Date(REGISTRATION_CLOSE_DATE).getTime()) {
+    const closeTime = getEffectiveRegistrationCloseDate().getTime();
+    if (!state.isAdmin && !isNaN(closeTime) && Date.now() > closeTime) {
       return false;
     }
     return true;
@@ -370,10 +575,16 @@
     const toggleBtn = document.getElementById('btnToggleRegistrationOpen');
 
     const effectivelyOpen = isRegistrationEffectivelyOpen();
+    const closeDateObj = getEffectiveRegistrationCloseDate();
+    const closeTime = closeDateObj.getTime();
     const isAutoLocked =
       state.registrationOpen &&
       !state.isAdmin &&
-      Date.now() > new Date(REGISTRATION_CLOSE_DATE).getTime();
+      !isNaN(closeTime) &&
+      Date.now() > closeTime;
+
+    const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    const closeDateStr = closeDateObj.getDate() + ' ' + thaiMonths[closeDateObj.getMonth()] + ' ' + (closeDateObj.getFullYear() + 543) + ' เวลา ' + String(closeDateObj.getHours()).padStart(2, '0') + '.' + String(closeDateObj.getMinutes()).padStart(2, '0') + ' น.';
 
     if (badge && dot && text) {
       if (effectivelyOpen) {
@@ -386,7 +597,7 @@
           'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDEBEC] border border-[#F5D0D2] text-[#D44C47] text-xs font-heading font-medium';
         dot.className = 'w-2 h-2 rounded-full bg-[#D44C47]';
         text.textContent = isAutoLocked
-          ? 'ปิดรับสมัครตามกำหนดการ (19 พ.ย.)'
+          ? 'ปิดรับสมัครตามกำหนดการ (' + closeDateObj.getDate() + ' ' + thaiMonths[closeDateObj.getMonth()] + ')'
           : 'ปิดรับสมัครแล้ว';
       }
     }
@@ -399,7 +610,7 @@
         const closedText = closedBanner.querySelector('p');
         if (closedText && isAutoLocked) {
           closedText.textContent =
-            'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อตามกำหนดการแล้ว (สิ้นสุดวันที่ 19 พ.ย. 2569 เวลา 23.59 น.) อยู่ระหว่างสรุปรายชื่อผู้เข้าร่วมการแข่งขัน';
+            'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อตามกำหนดการแล้ว (สิ้นสุด ' + closeDateStr + ') อยู่ระหว่างสรุปรายชื่อผู้เข้าร่วมการแข่งขัน';
         }
       }
     }
@@ -409,6 +620,36 @@
         ? 'ปิดรับสมัครชั่วคราว'
         : 'เปิดรับสมัครอีกครั้ง';
     }
+
+    // Auto-Lock Schedule Card in Admin Settings
+    const cfgScheduleBadge = document.getElementById('cfgScheduleBadge');
+    const cfgScheduleStatusText = document.getElementById('cfgScheduleStatusText');
+    const cfgDateTimeInput = document.getElementById('cfgRegCloseDateTimeInput');
+    const btnToggleSchedule = document.getElementById('btnToggleRegistrationOpenSchedule');
+
+    if (cfgDateTimeInput && document.activeElement !== cfgDateTimeInput) {
+      cfgDateTimeInput.value = (state.config && state.config.regCloseDate) || '2026-11-19T23:59';
+    }
+
+    if (cfgScheduleBadge && cfgScheduleStatusText) {
+      if (effectivelyOpen) {
+        cfgScheduleBadge.className = 'px-2.5 py-1 rounded-md text-xs font-heading font-medium bg-emerald-50 text-emerald-700 border border-emerald-200';
+        cfgScheduleBadge.textContent = 'เปิดรับสมัคร';
+        cfgScheduleStatusText.textContent = 'สถานะ: กำลังเปิดรับสมัคร (สิ้นสุด ' + closeDateStr + ')';
+      } else {
+        cfgScheduleBadge.className = 'px-2.5 py-1 rounded-md text-xs font-heading font-medium bg-rose-50 text-rose-700 border border-rose-200';
+        cfgScheduleBadge.textContent = 'ปิดรับสมัครแล้ว';
+        cfgScheduleStatusText.textContent = isAutoLocked
+          ? 'สถานะ: ปิดรับสมัครตามกำหนดการแล้ว (' + closeDateStr + ')'
+          : 'สถานะ: ปิดรับสมัครชั่วคราวโดยแอดมิน';
+      }
+    }
+
+    if (btnToggleSchedule) {
+      btnToggleSchedule.textContent = state.registrationOpen ? 'ปิดรับสมัครทันที' : 'เปิดรับสมัครอีกครั้ง';
+    }
+
+    updateCertConfigUI();
 
     // 2. Admin-only Controls Visibility
     const headerSheetLink = document.getElementById('headerSheetLink');
@@ -490,6 +731,295 @@
 
     const urlInput = document.getElementById('gasWebAppUrlInput');
     if (urlInput) urlInput.value = state.gasWebAppUrl;
+    updateFeatureVisibilityUI();
+  }
+
+  function updateCertConfigUI() {
+    const cfg = state.config || DEFAULT_CONFIG;
+    const prefixInput = document.getElementById('cfgCertPrefixInput');
+    const issueDateInput = document.getElementById('cfgCertIssueDateInput');
+    const signerNameInput = document.getElementById('cfgCertSignerNameInput');
+    const signerPosInput = document.getElementById('cfgCertSignerPosInput');
+    const signerOrgInput = document.getElementById('cfgCertSignerOrgInput');
+
+    if (prefixInput && document.activeElement !== prefixInput) prefixInput.value = cfg.certPrefix || 'WYK74-2569-';
+    if (issueDateInput && document.activeElement !== issueDateInput) issueDateInput.value = cfg.certIssueDate || '25 พฤศจิกายน พุทธศักราช 2569';
+    if (signerNameInput && document.activeElement !== signerNameInput) signerNameInput.value = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
+    if (signerPosInput && document.activeElement !== signerPosInput) signerPosInput.value = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+    if (signerOrgInput && document.activeElement !== signerOrgInput) signerOrgInput.value = cfg.certSignerOrg || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3';
+
+    // Signature Preview
+    const sigPreview = document.getElementById('cfgCertSigPreview');
+    const btnClearSig = document.getElementById('btnClearCertSig');
+    if (sigPreview) {
+      if (cfg.certSignatureUrl) {
+        sigPreview.innerHTML = '<img src="' + escapeHtml(cfg.certSignatureUrl) + '" class="max-h-10 max-w-full object-contain" alt="Signature" />';
+        if (btnClearSig) btnClearSig.classList.remove('hidden');
+      } else {
+        sigPreview.innerHTML = '<span class="text-[10px] text-slate-400">ไม่มีลายเซ็น</span>';
+        if (btnClearSig) btnClearSig.classList.add('hidden');
+      }
+    }
+
+    // Canva Background Mode & Preview
+    const rStandard = document.getElementById('certBgModeStandard');
+    const rCanva = document.getElementById('certBgModeCanva');
+    const bgUploadRow = document.getElementById('certBgUploadRow');
+    const bgPreview = document.getElementById('cfgCertBgPreview');
+    const btnClearBg = document.getElementById('btnClearCertBg');
+
+    const isCanvaMode = cfg.certBgMode === 'canva';
+    if (rStandard) rStandard.checked = !isCanvaMode;
+    if (rCanva) rCanva.checked = isCanvaMode;
+
+    if (bgUploadRow) {
+      if (isCanvaMode) {
+        bgUploadRow.classList.remove('hidden');
+        bgUploadRow.classList.add('flex');
+      } else {
+        bgUploadRow.classList.add('hidden');
+        bgUploadRow.classList.remove('flex');
+      }
+    }
+
+    if (bgPreview) {
+      if (cfg.certBgImageUrl) {
+        bgPreview.innerHTML = '<img src="' + escapeHtml(cfg.certBgImageUrl) + '" class="max-h-14 max-w-full object-cover" alt="Canva BG" />';
+        if (btnClearBg) btnClearBg.classList.remove('hidden');
+      } else {
+        bgPreview.innerHTML = '<span class="text-[10px] text-slate-400">ไม่มีรูปภาพ</span>';
+        if (btnClearBg) btnClearBg.classList.add('hidden');
+      }
+    }
+
+    // District Representatives Criteria in Admin
+    const repCriteriaSelect = document.getElementById('cfgDistrictRepCriteriaSelect');
+    if (repCriteriaSelect && document.activeElement !== repCriteriaSelect) {
+      repCriteriaSelect.value = cfg.districtRepCriteria || 'rank_1';
+    }
+  }
+
+  function updateFeatureVisibilityUI() {
+    const keys = ['judges', 'results', 'certificates'];
+    const idMap = {
+      judges: {
+        tabId: 'tab-judges',
+        btnId: 'navTabJudges',
+        badgeId: 'navBadgeJudges',
+        bannerId: 'featureBannerJudges',
+        lockedId: 'lockedNoticeJudges',
+        badgeVisId: 'badgeVisibilityJudges'
+      },
+      results: {
+        tabId: 'tab-results',
+        btnId: 'navTabResults',
+        badgeId: 'navBadgeResults',
+        bannerId: 'featureBannerResults',
+        lockedId: 'lockedNoticeResults',
+        badgeVisId: 'badgeVisibilityResults'
+      },
+      certificates: {
+        tabId: 'tab-certificates',
+        btnId: 'navTabCerts',
+        badgeId: 'navBadgeCerts',
+        bannerId: 'featureBannerCerts',
+        lockedId: 'lockedNoticeCerts',
+        badgeVisId: 'badgeVisibilityCerts'
+      }
+    };
+
+    let visibleBtnCount = 0;
+
+    keys.forEach(function (key) {
+      const isPublic = isFeatureOpenToPublic(key);
+      const canAccess = canUserAccessFeature(key);
+      const ids = idMap[key];
+      const btn = document.getElementById(ids.btnId);
+      const badge = document.getElementById(ids.badgeId);
+      const banner = document.getElementById(ids.bannerId);
+      const lockedEl = document.getElementById(ids.lockedId);
+      const meta = FEATURE_MILESTONES[key];
+      const setting = getFeatureVisibilitySetting(key);
+
+      // 1. Sidebar Button Visibility
+      if (btn) {
+        if (canAccess) {
+          btn.classList.remove('hidden');
+          visibleBtnCount++;
+          if (badge) {
+            if (state.isAdmin && !isPublic) {
+              badge.classList.remove('hidden');
+              badge.textContent = 'แอดมิน';
+            } else {
+              badge.classList.add('hidden');
+            }
+          }
+        } else {
+          btn.classList.add('hidden');
+          if (badge) badge.classList.add('hidden');
+        }
+      }
+
+      // 2. Banner inside tab (when viewing as admin)
+      if (banner) {
+        if (state.isAdmin) {
+          banner.classList.remove('hidden');
+          if (isPublic) {
+            banner.innerHTML =
+              '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-emerald-900 mb-4 shadow-2xs">' +
+                '<div class="flex items-center gap-2">' +
+                  '<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>' +
+                  '<span class="font-heading font-semibold">สถานะการแสดงผล: เปิดให้คนทั่วไปเข้าชมแล้ว</span>' +
+                  '<span class="text-emerald-700 text-[11px]">(' + (setting === 'open' ? 'แอดมินสั่งเปิดทันที' : 'ตามกำหนดการ') + ')</span>' +
+                '</div>' +
+                '<button type="button" data-banner-feature="' + key + '" data-action="auto" class="px-3 py-1 rounded-md bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-heading text-[11px] font-medium transition cursor-pointer shrink-0">' +
+                  'ล็อกกลับตามกำหนดการเดิม' +
+                '</button>' +
+              '</div>';
+          } else {
+            banner.innerHTML =
+              '<div class="p-3 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900 mb-4 shadow-2xs">' +
+                '<div class="flex items-center gap-2">' +
+                  '<span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>' +
+                  '<span class="font-heading font-semibold">สถานะการแสดงผล: มองเห็นเฉพาะแอดมิน</span>' +
+                  '<span class="text-amber-700 text-[11px]">(คนทั่วไปจะเห็นอัตโนมัติ ' + meta.dateLabel + ')</span>' +
+                '</div>' +
+                '<button type="button" data-banner-feature="' + key + '" data-action="open" class="px-3.5 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-heading text-[11px] font-semibold transition shadow-2xs cursor-pointer shrink-0">' +
+                  'เปิดให้คนทั่วไปดูทันที' +
+                '</button>' +
+              '</div>';
+          }
+          const bBtn = banner.querySelector('[data-banner-feature]');
+          if (bBtn) {
+            bBtn.addEventListener('click', function () {
+              setFeatureVisibility(key, bBtn.getAttribute('data-action'));
+            });
+          }
+        } else {
+          banner.classList.add('hidden');
+          banner.innerHTML = '';
+        }
+      }
+
+      // 3. Tab children locking (for non-admin when feature is not yet public)
+      const tabEl = document.getElementById(ids.tabId);
+      if (tabEl) {
+        Array.from(tabEl.children).forEach(function (child) {
+          if (child.id === ids.bannerId || child.id === ids.lockedId) return;
+          if (canAccess) {
+            child.classList.remove('hidden-by-lock');
+          } else {
+            child.classList.add('hidden-by-lock');
+          }
+        });
+      }
+
+      // 4. Locked Notice inside Tab (when viewed by non-admin before unlock)
+      if (lockedEl) {
+        if (!state.isAdmin && !isPublic) {
+          lockedEl.classList.remove('hidden');
+          renderLockedNotice(key, lockedEl);
+        } else {
+          lockedEl.classList.add('hidden');
+          lockedEl.innerHTML = '';
+        }
+      }
+
+      // 5. Badges & Toggle Buttons in Settings
+      const badgeVis = document.getElementById(ids.badgeVisId);
+      if (badgeVis) {
+        if (setting === 'open') {
+          badgeVis.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-100 text-emerald-800';
+          badgeVis.textContent = 'เปิดทันที (สาธารณะ)';
+        } else if (setting === 'hidden') {
+          badgeVis.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-rose-100 text-rose-800';
+          badgeVis.textContent = 'ซ่อนเฉพาะแอดมิน';
+        } else {
+          if (isPublic) {
+            badgeVis.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200';
+            badgeVis.textContent = 'เปิดตามกำหนดการแล้ว';
+          } else {
+            badgeVis.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700';
+            badgeVis.textContent = 'ตามกำหนดการ (รอเปิด)';
+          }
+        }
+      }
+
+      document.querySelectorAll('[data-feature-toggle="' + key + '"]').forEach(function (b) {
+        const action = b.getAttribute('data-action');
+        if (action === setting) {
+          b.className = 'px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white border border-slate-900 transition cursor-pointer';
+        } else {
+          b.className = 'px-3 py-1.5 rounded-lg font-heading text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition cursor-pointer';
+        }
+      });
+    });
+
+    // 6. Sidebar Group Header (Hide if no buttons visible)
+    const sbGroup = document.getElementById('sidebarGroupPhase2');
+    if (sbGroup) {
+      if (visibleBtnCount > 0) {
+        sbGroup.classList.remove('hidden');
+      } else {
+        sbGroup.classList.add('hidden');
+      }
+    }
+
+    // 7. Dashboard Announcement Card
+    const dashRow = document.getElementById('phase2DashboardHighlightRow');
+    if (dashRow) {
+      const showDash = isFeatureOpenToPublic('results') || state.isAdmin;
+      if (showDash) {
+        dashRow.classList.remove('hidden');
+      } else {
+        dashRow.classList.add('hidden');
+      }
+    }
+  }
+
+  function renderLockedNotice(featureKey, containerEl) {
+    if (!containerEl) return;
+    const meta = FEATURE_MILESTONES[featureKey];
+    containerEl.className = 'bg-white rounded-2xl border border-slate-200 p-8 text-center max-w-lg mx-auto my-8 space-y-4 shadow-sm';
+    containerEl.innerHTML =
+      '<div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">' +
+        '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />' +
+        '</svg>' +
+      '</div>' +
+      '<div class="space-y-1.5">' +
+        '<h3 class="text-base font-bold font-heading text-slate-900">ยังไม่ถึงกำหนดเปิดให้บริการ</h3>' +
+        '<p class="text-xs text-slate-600">ระบบ' + escapeHtml(meta.name) + ' มีกำหนดเปิดให้เข้าชมในวันที่</p>' +
+        '<div class="font-heading font-semibold text-amber-800 bg-amber-50 border border-amber-200 py-1.5 px-3 rounded-lg inline-block text-xs">' +
+          escapeHtml(meta.dateLabel) +
+        '</div>' +
+      '</div>' +
+      '<div class="pt-1 text-xs text-slate-500">' +
+        'หากท่านเป็นคณะกรรมการหรือผู้ดูแลระบบ กรุณาเข้าสู่ระบบเพื่อจัดการข้อมูล' +
+      '</div>' +
+      '<div>' +
+        '<button type="button" class="btn-goto-admin px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer">' +
+          'เข้าสู่ระบบแอดมิน' +
+        '</button>' +
+      '</div>';
+
+    const btn = containerEl.querySelector('.btn-goto-admin');
+    if (btn) {
+      btn.addEventListener('click', openAdminModal);
+    }
+  }
+
+  function setFeatureVisibility(featureKey, action) {
+    if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+    if (!state.config.featureVisibility) {
+      state.config.featureVisibility = Object.assign({}, DEFAULT_CONFIG.featureVisibility);
+    }
+    state.config.featureVisibility[featureKey] = action;
+    saveState();
+    updateFeatureVisibilityUI();
+    const meta = FEATURE_MILESTONES[featureKey];
+    const label = action === 'open' ? 'เปิดให้คนทั่วไปดูทันทีแล้ว' : action === 'hidden' ? 'ซ่อนเฉพาะแอดมินแล้ว' : 'ตั้งค่าตามกำหนดการแข่งขันแล้ว';
+    showToast(`${meta.name}: ${label}`, 'success');
   }
 
   // Optional sync with Google Apps Script Web App API
@@ -558,7 +1088,40 @@
     }
   }
 
-  // Navigation Tabs
+  // Navigation Tabs & Sidebar Handlers (Notion Style)
+  const TAB_TITLES = {
+    dashboard: 'แดชบอร์ดภาพรวม',
+    register: 'ลงทะเบียนเข้าแข่งขัน',
+    school: 'ข้อมูลรายโรงเรียน',
+    competition: 'ดูรายการแข่งขัน (149)',
+    judges: 'กรรมการตัดสิน',
+    results: 'ผลการแข่งขัน / เหรียญ',
+    certificates: 'เกียรติบัตรออนไลน์',
+    settings: 'จัดการระบบ (แอดมิน)'
+  };
+
+  function openMobileSidebar() {
+    const sb = document.getElementById('notionSidebar');
+    const bd = document.getElementById('sidebarBackdrop');
+    if (sb) sb.classList.remove('-translate-x-full');
+    if (bd) bd.classList.remove('hidden');
+  }
+
+  function closeMobileSidebar() {
+    const sb = document.getElementById('notionSidebar');
+    const bd = document.getElementById('sidebarBackdrop');
+    if (sb) sb.classList.add('-translate-x-full');
+    if (bd) bd.classList.add('hidden');
+  }
+
+  function toggleDesktopSidebar() {
+    document.body.classList.toggle('sidebar-collapsed');
+    const isCol = document.body.classList.contains('sidebar-collapsed');
+    try {
+      localStorage.setItem('talent69_sidebar_collapsed', isCol ? 'true' : 'false');
+    } catch (e) {}
+  }
+
   function switchTab(tabName) {
     if (tabName === 'settings' && !state.isAdmin) {
       openAdminModal();
@@ -580,6 +1143,15 @@
         panel.classList.add('hidden');
       }
     });
+
+    const titleEl = document.getElementById('topbarActiveTabTitle');
+    if (titleEl && TAB_TITLES[tabName]) {
+      titleEl.textContent = TAB_TITLES[tabName];
+    }
+
+    if (window.innerWidth < 768) {
+      closeMobileSidebar();
+    }
 
     renderAll();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -813,7 +1385,7 @@
   // Build Student & Teacher dynamic input rows in Registration Form
   function createStudentRowElement(index, level, initialData, canRemove) {
     const grades = getGradeOptionsForLevel(level);
-    const prefixVal = (initialData && initialData.prefix) || 'ด.ช.';
+    const prefixVal = toFullPrefix((initialData && initialData.prefix) || 'เด็กชาย');
     const nameVal = (initialData && initialData.name) || '';
     const gradeVal = (initialData && initialData.grade) || grades[0] || '';
 
@@ -822,7 +1394,7 @@
       'student-input-row grid grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-lg border border-slate-200';
 
     let prefixOptions = '';
-    ['ด.ช.', 'ด.ญ.', 'นาย', 'นางสาว'].forEach(function (p) {
+    ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นางสาว'].forEach(function (p) {
       prefixOptions +=
         '<option value="' +
         escapeHtml(p) +
@@ -904,7 +1476,7 @@
   }
 
   function createTeacherRowElement(index, initialData, canRemove) {
-    const prefixVal = (initialData && initialData.prefix) || 'นางสาว';
+    const prefixVal = toFullPrefix((initialData && initialData.prefix) || 'นางสาว');
     const nameVal = (initialData && initialData.name) || '';
 
     const row = document.createElement('div');
@@ -912,7 +1484,7 @@
       'teacher-input-row grid grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-lg border border-slate-200';
 
     let prefixOptions = '';
-    ['นาย', 'นาง', 'นางสาว', 'ว่าที่ ร.ต.', 'ดร.'].forEach(function (p) {
+    ['นาย', 'นาง', 'นางสาว', 'ดร.', 'ว่าที่ ร.ต.', 'ว่าที่ ร.ต.หญิง', 'สิบเอก'].forEach(function (p) {
       prefixOptions +=
         '<option value="' +
         escapeHtml(p) +
@@ -1030,10 +1602,10 @@
       if (dupBox) {
         dupBox.classList.remove('hidden');
         const stuNames = (existingReg.students || [])
-          .map((s, i) => i + 1 + '. ' + s.prefix + s.name + ' (' + s.grade + ')')
+          .map((s, i) => i + 1 + '. ' + formatFullNameForPrint(s.prefix, s.name) + ' (' + s.grade + ')')
           .join('  ');
         const tchNames = (existingReg.teachers || [])
-          .map((t, i) => i + 1 + '. ' + t.prefix + t.name)
+          .map((t, i) => i + 1 + '. ' + formatFullNameForPrint(t.prefix, t.name))
           .join('  ');
         dupSummary.textContent =
           'นักเรียนที่ส่งแล้ว: ' + stuNames + '\nครูผู้ฝึกซ้อม: ' + tchNames;
@@ -1126,10 +1698,10 @@
             ? 'row-new-highlight border-slate-400'
             : 'border-slate-200';
         const stuHtml = (reg.students || [])
-          .map((s, i) => i + 1 + '. ' + escapeHtml(s.prefix + s.name) + ' (' + escapeHtml(s.grade) + ')')
+          .map((s, i) => (i + 1) + '. ' + formatResponsiveNameHtml(s.prefix, s.name, s.grade))
           .join('<br/>');
         const tchHtml = (reg.teachers || [])
-          .map((t, i) => i + 1 + '. ' + escapeHtml(t.prefix + t.name))
+          .map((t, i) => (i + 1) + '. ' + formatResponsiveNameHtml(t.prefix, t.name))
           .join('<br/>');
 
         return (
@@ -1566,7 +2138,8 @@
     const card = document.getElementById('dashCountdownCard');
     if (!card) return;
     const now = Date.now();
-    const closeTime = new Date(REGISTRATION_CLOSE_DATE).getTime();
+    const closeDateObj = getEffectiveRegistrationCloseDate();
+    const closeTime = closeDateObj.getTime();
     const compTime = new Date(COMPETITION_START_DATE).getTime();
 
     const titleEl = document.getElementById('dashCountdownTitle');
@@ -1575,8 +2148,14 @@
     const dateTextEl = document.getElementById('dashCountdownDateText');
     const noteEl = document.getElementById('dashCountdownNote');
 
+    const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    const thaiFullMonths = [
+      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+    ];
+
     if (now <= closeTime) {
-      // Phase 1: Countdown to Registration Deadline (19 Nov)
+      // Phase 1: Countdown to Registration Deadline
       const diffMs = Math.max(0, closeTime - now);
       const days = Math.floor(diffMs / 86400000);
       const hours = Math.floor((diffMs % 86400000) / 3600000);
@@ -1584,12 +2163,24 @@
       setTextById('dashCountdownHours', String(hours));
       if (titleEl) titleEl.textContent = 'นับถอยหลังปิดรับสมัครส่งรายชื่อ';
       if (badgeEl) {
-        badgeEl.textContent = 'วันสุดท้าย 19 พ.ย.';
+        badgeEl.textContent = 'วันสุดท้าย ' + closeDateObj.getDate() + ' ' + thaiMonths[closeDateObj.getMonth()];
         badgeEl.className =
           'text-[10px] font-heading font-semibold px-2 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-700';
       }
       if (subLabelEl) subLabelEl.textContent = 'วันสุดท้ายของการส่งรายชื่อ';
-      if (dateTextEl) dateTextEl.textContent = '19 พฤศจิกายน 2569 (23:59 น.)';
+      if (dateTextEl) {
+        dateTextEl.textContent =
+          closeDateObj.getDate() +
+          ' ' +
+          thaiFullMonths[closeDateObj.getMonth()] +
+          ' ' +
+          (closeDateObj.getFullYear() + 543) +
+          ' (' +
+          String(closeDateObj.getHours()).padStart(2, '0') +
+          ':' +
+          String(closeDateObj.getMinutes()).padStart(2, '0') +
+          ' น.)';
+      }
       if (noteEl) {
         noteEl.textContent =
           emptyCompCount > 0
@@ -1742,43 +2333,7 @@
     const elKpiGrand = document.getElementById('kpiGrandTotalPeople');
     if (elKpiGrand) elKpiGrand.textContent = String(grandTotalPeople);
 
-    // Operation Timeline Card
-    const timelineEl = document.getElementById('dashboardTimelineList');
-    if (timelineEl) {
-      const items = DEFAULT_DATA.operationTimeline || [];
-      timelineEl.innerHTML = items
-        .map(function (it) {
-          const isActive = String(it.status || '').indexOf('กำลัง') !== -1;
-          const badgeCls = isActive
-            ? 'bg-[#EDF3EC] text-[#448361] border-[#D7E6D5]'
-            : 'bg-[#F1F1EF] text-[#787774] border-slate-200';
-          return (
-            '<div class="flex items-start justify-between gap-2 p-2.5 rounded-lg bg-[#F7F7F5] border border-slate-200/80 text-xs">' +
-            '<div class="flex items-start gap-2.5">' +
-            '<span class="w-5 h-5 rounded-md bg-[#37352F] text-white font-heading font-semibold flex items-center justify-center shrink-0 mt-0.5">' +
-            escapeHtml(it.step) +
-            '</span>' +
-            '<div>' +
-            '<div class="font-heading font-semibold text-[#37352F]">' +
-            escapeHtml(it.title) +
-            '</div>' +
-            '<div class="text-[11px] text-[#787774]">' +
-            escapeHtml(it.period) +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-            '<span class="px-2 py-0.5 rounded border text-[10px] font-heading font-medium shrink-0 ' +
-            badgeCls +
-            '">' +
-            escapeHtml(it.status) +
-            '</span>' +
-            '</div>'
-          );
-        })
-        .join('');
-    }
-
-    // 5-Step Visual Timeline Stepper Card on Dashboard
+    // 5-Step Visual Timeline Stepper Card on Dashboard (Roadmap)
     const stepperEl = document.getElementById('dashboardTimelineStepper');
     if (stepperEl) {
       const items = DEFAULT_DATA.operationTimeline || [];
@@ -2177,14 +2732,19 @@
                   '<div>' +
                   (i + 1) +
                   '. ' +
-                  escapeHtml(s.prefix + s.name) +
-                  ' <span class="text-[#787774]">(' +
-                  escapeHtml(s.grade) +
-                  ')</span></div>'
+                  formatResponsiveNameHtml(s.prefix, s.name, s.grade) +
+                  '</div>'
               )
               .join('');
             const tchHtml = (r.teachers || [])
-              .map((t, i) => '<div>' + (i + 1) + '. ' + escapeHtml(t.prefix + t.name) + '</div>')
+              .map(
+                (t, i) =>
+                  '<div>' +
+                  (i + 1) +
+                  '. ' +
+                  formatResponsiveNameHtml(t.prefix, t.name) +
+                  '</div>'
+              )
               .join('');
 
             const isSample = String(r.status || '').indexOf('ตัวอย่าง') !== -1;
@@ -2346,14 +2906,19 @@
               '<div>' +
               (i + 1) +
               '. ' +
-              escapeHtml(s.prefix + s.name) +
-              ' <span class="text-[#787774]">(' +
-              escapeHtml(s.grade) +
-              ')</span></div>'
+              formatResponsiveNameHtml(s.prefix, s.name, s.grade) +
+              '</div>'
           )
           .join('');
         const tchHtml = (r.teachers || [])
-          .map((t, i) => '<div>' + (i + 1) + '. ' + escapeHtml(t.prefix + t.name) + '</div>')
+          .map(
+            (t, i) =>
+              '<div>' +
+              (i + 1) +
+              '. ' +
+              formatResponsiveNameHtml(t.prefix, t.name) +
+              '</div>'
+          )
           .join('');
 
         const medal = r.medal || calculateMedalFromScore(r.score);
@@ -2422,6 +2987,11 @@
           resultCellHtml +
           '</td>' +
           '<td class="py-3 px-2 text-right whitespace-nowrap no-print space-x-1">' +
+          '<button type="button" data-sch-cards="' +
+          escapeHtml(r.reg_id) +
+          '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#EFF6FF] hover:bg-blue-100 text-[#1E40AF] text-xs font-heading" title="พิมพ์บัตรประจำตัวทีมนี้">' +
+          ICONS.fileText +
+          '<span>บัตร</span></button>' +
           '<button type="button" data-sch-edit="' +
           escapeHtml(r.reg_id) +
           '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] text-xs font-heading">' +
@@ -2434,6 +3004,11 @@
       })
       .join('');
 
+    tbody.querySelectorAll('[data-sch-cards]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        printRegistrationIdCards(btn.getAttribute('data-sch-cards'));
+      });
+    });
     tbody.querySelectorAll('[data-sch-edit]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         requestEditRegistration(btn.getAttribute('data-sch-edit'));
@@ -2562,10 +3137,10 @@
             regs
               .map(function (r, idx) {
                 const stuText = (r.students || [])
-                  .map((s, i) => i + 1 + '. ' + escapeHtml(s.prefix + s.name) + ' (' + escapeHtml(s.grade) + ')')
+                  .map((s, i) => (i + 1) + '. ' + formatResponsiveNameHtml(s.prefix, s.name, s.grade))
                   .join('<br/>');
                 const tchText = (r.teachers || [])
-                  .map((t, i) => i + 1 + '. ' + escapeHtml(t.prefix + t.name))
+                  .map((t, i) => (i + 1) + '. ' + formatResponsiveNameHtml(t.prefix, t.name))
                   .join('<br/>');
                 const medal = r.medal || calculateMedalFromScore(r.score);
                 const scoreHtml =
@@ -2753,7 +3328,7 @@
               '<div class="row-subitem">' +
               (i + 1) +
               '. ' +
-              escapeHtml(s.prefix + s.name) +
+              escapeHtml(formatFullNameForPrint(s.prefix, s.name)) +
               ' (' +
               escapeHtml(s.grade) +
               ')</div>'
@@ -2769,7 +3344,7 @@
 
         const tchHtml = teachers
           .map(function (t, i) {
-            return '<div class="row-subitem">' + (i + 1) + '. ' + escapeHtml(t.prefix + t.name) + '</div>';
+            return '<div class="row-subitem">' + (i + 1) + '. ' + escapeHtml(formatFullNameForPrint(t.prefix, t.name)) + '</div>';
           })
           .join('');
 
@@ -3187,10 +3762,10 @@
 
     list.forEach(function (r) {
       const stuStr = (r.students || [])
-        .map((s, i) => i + 1 + '. ' + s.prefix + s.name + ' (' + s.grade + ')')
+        .map((s, i) => (i + 1) + '. ' + formatFullNameForPrint(s.prefix, s.name) + ' (' + s.grade + ')')
         .join(' | ');
       const tchStr = (r.teachers || [])
-        .map((t, i) => i + 1 + '. ' + t.prefix + t.name)
+        .map((t, i) => (i + 1) + '. ' + formatFullNameForPrint(t.prefix, t.name))
         .join(' | ');
       rows.push([
         r.reg_id,
@@ -3312,8 +3887,8 @@
         const t = teachers[i];
         const vals =
           i === 0
-            ? [idx + 1, r.comp_name, r.level, typeText, s ? s.prefix + s.name : '', t ? t.prefix + t.name : '', r.school_name]
-            : [null, null, null, null, s ? s.prefix + s.name : '', t ? t.prefix + t.name : null, null];
+            ? [idx + 1, r.comp_name, r.level, typeText, s ? formatFullNameForPrint(s.prefix, s.name) : '', t ? formatFullNameForPrint(t.prefix, t.name) : '', r.school_name]
+            : [null, null, null, null, s ? formatFullNameForPrint(s.prefix, s.name) : '', t ? formatFullNameForPrint(t.prefix, t.name) : null, null];
         vals.forEach(function (v, ci) {
           const c = row.getCell(ci + 1);
           c.value = v;
@@ -3417,17 +3992,17 @@
                 idx + 1,
                 r.school_name,
                 subdistrict,
-                s ? s.prefix + s.name : '',
+                s ? formatFullNameForPrint(s.prefix, s.name) : '',
                 s ? s.grade : '',
-                t ? t.prefix + t.name : ''
+                t ? formatFullNameForPrint(t.prefix, t.name) : ''
               ]
             : [
                 null,
                 null,
                 null,
-                s ? s.prefix + s.name : '',
+                s ? formatFullNameForPrint(s.prefix, s.name) : '',
                 s ? s.grade : '',
-                t ? t.prefix + t.name : null
+                t ? formatFullNameForPrint(t.prefix, t.name) : null
               ];
 
         vals.forEach(function (v, ci) {
@@ -3502,9 +4077,9 @@
           seq++,
           baseCert + '-S' + (idx + 1),
           'นักเรียนผู้เข้าแข่งขัน',
-          s.prefix || '',
+          toFullPrefix(s.prefix) || '',
           s.name || '',
-          (s.prefix || '') + (s.name || ''),
+          formatFullNameForPrint(s.prefix, s.name),
           s.grade || '',
           r.school_name,
           r.comp_id,
@@ -3524,9 +4099,9 @@
           seq++,
           baseCert + '-T' + (idx + 1),
           'ครูผู้ฝึกซ้อม',
-          t.prefix || '',
+          toFullPrefix(t.prefix) || '',
           t.name || '',
-          (t.prefix || '') + (t.name || ''),
+          formatFullNameForPrint(t.prefix, t.name),
           'ครูผู้ฝึกซ้อม',
           r.school_name,
           r.comp_id,
@@ -3549,9 +4124,9 @@
         seq++,
         jCert,
         'คณะกรรมการตัดสิน',
-        j.prefix || '',
+        toFullPrefix(j.prefix) || '',
         jName,
-        (j.prefix || '') + jName,
+        formatFullNameForPrint(j.prefix, jName),
         j.role || 'กรรมการตัดสิน',
         j.school_name || '',
         j.comp_id || '',
@@ -3684,7 +4259,7 @@
               cert_code: judge.cert_code || ('WYK74-' + judge.judge_id),
               role_type: 'JUDGE',
               role_label: 'คณะกรรมการตัดสิน',
-              recipient_name: (judge.prefix || '') + jName,
+              recipient_name: formatFullNameForPrint(judge.prefix, jName),
               school_name: judge.school_name || '',
               comp_id: judge.comp_id || '',
               comp_name: judge.comp_name || '',
@@ -3742,6 +4317,13 @@
     if (viewComp) viewComp.classList.toggle('hidden', state.resultSubview !== 'by-comp');
     if (viewRank) viewRank.classList.toggle('hidden', state.resultSubview !== 'by-rank');
     if (viewMedal) viewMedal.classList.toggle('hidden', state.resultSubview !== 'by-medal');
+
+    // Update district representative criteria badge text
+    const criteriaTextEl = document.getElementById('resDistrictCriteriaText');
+    if (criteriaTextEl) {
+      const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
+      criteriaTextEl.textContent = getDistrictRepCriteriaLabel(criteria);
+    }
 
     // Group registrations by comp_id
     const regsByComp = {};
@@ -3821,7 +4403,7 @@
                       const repBadge = isRep
                         ? `<span class="ml-1.5 inline-block px-2 py-0.5 rounded bg-slate-900 text-white font-heading text-[10px] font-semibold">ตัวแทนกลุ่มฯ</span>`
                         : '';
-                      const stuNames = (r.students || []).map((s, idx) => idx + 1 + '. ' + s.prefix + s.name).join('<br>');
+                      const stuNames = (r.students || []).map((s, idx) => idx + 1 + '. ' + formatResponsiveNameHtml(s.prefix, s.name)).join('<br>');
 
                       return `
                         <tr class="hover:bg-slate-50">
@@ -4033,7 +4615,7 @@
     const tbody = document.getElementById('scoreModalTableBody');
     tbody.innerHTML = regs
       .map(function (r) {
-        const stuText = (r.students || []).map((s, i) => i + 1 + '. ' + s.prefix + s.name).join('<br>');
+        const stuText = (r.students || []).map((s, i) => i + 1 + '. ' + formatResponsiveNameHtml(s.prefix, s.name)).join('<br>');
         const scVal = r.score !== '' && r.score !== undefined && r.score !== null ? r.score : '';
         const medal = scVal !== '' ? calculateMedalFromScore(scVal) : '';
         return `
@@ -4243,18 +4825,19 @@
   // ==========================================
   function buildAllCertificateEntries() {
     const entries = [];
+    const prefix = (state.config && state.config.certPrefix) ? state.config.certPrefix : 'WYK74-2569-';
     state.registrations.forEach(function (r) {
       const hasScore = r.score !== '' && r.score !== undefined && r.score !== null;
       const medal = r.medal || (hasScore ? calculateMedalFromScore(r.score) : 'เข้าร่วมการแข่งขัน');
       const award = r.award_title || (hasScore ? getAwardTitleFromRank(r.rank, medal) : 'เข้าร่วมการแข่งขัน');
-      const baseCert = r.cert_code || ('CERT-74-' + r.comp_id);
+      const baseCert = r.cert_code || (prefix + r.comp_id);
 
       (r.students || []).forEach(function (s, idx) {
         entries.push({
           cert_code: baseCert + '-S' + (idx + 1),
           role_type: 'STUDENT',
           role_label: 'นักเรียนผู้เข้าแข่งขัน',
-          recipient_name: (s.prefix || '') + (s.name || ''),
+          recipient_name: formatFullNameForPrint(s.prefix, s.name),
           grade_or_pos: 'นักเรียนชั้น ' + (s.grade || '-'),
           school_name: r.school_name,
           comp_id: r.comp_id,
@@ -4272,7 +4855,7 @@
           cert_code: baseCert + '-T' + (idx + 1),
           role_type: 'TEACHER',
           role_label: 'ครูผู้ฝึกซ้อม',
-          recipient_name: (t.prefix || '') + (t.name || ''),
+          recipient_name: formatFullNameForPrint(t.prefix, t.name),
           grade_or_pos: 'ครูผู้ฝึกซ้อมนักเรียน',
           school_name: r.school_name,
           comp_id: r.comp_id,
@@ -4286,13 +4869,13 @@
       });
     });
 
-    (state.judges || []).forEach(function (j) {
+    (state.judges || []).forEach(function (j, idx) {
       const jName = j.judge_name || j.full_name || '';
       entries.push({
-        cert_code: j.cert_code || ('WYK74-' + j.judge_id),
+        cert_code: j.cert_code || (prefix + (j.judge_id || ('J' + (idx + 1)))),
         role_type: 'JUDGE',
         role_label: 'คณะกรรมการตัดสิน',
-        recipient_name: (j.prefix || '') + jName,
+        recipient_name: formatFullNameForPrint(j.prefix, jName),
         grade_or_pos: j.role || 'กรรมการตัดสิน',
         school_name: j.school_name || '',
         comp_id: j.comp_id || '',
@@ -4365,7 +4948,7 @@
           <tr class="hover:bg-slate-50 transition">
             <td class="py-2.5 px-3 font-mono text-xs text-slate-600">${escapeHtml(item.cert_code)}</td>
             <td class="py-2.5 px-2 text-center">${typeBadge}</td>
-            <td class="py-2.5 px-3 font-heading font-semibold text-slate-900">${escapeHtml(item.recipient_name)}</td>
+            <td class="py-2.5 px-3 font-heading font-semibold text-slate-900">${escapeHtml(formatFullNameForPrint('', item.recipient_name))}</td>
             <td class="py-2.5 px-3 text-xs text-slate-700">${escapeHtml(item.school_name)}</td>
             <td class="py-2.5 px-3 text-xs text-slate-700">
               <span class="font-heading font-medium text-slate-900">[${escapeHtml(item.comp_id)}]</span> ${escapeHtml(item.comp_name)} (${escapeHtml(item.level)})
@@ -4391,49 +4974,132 @@
     });
   }
 
-  // Print Official Landscape Certificates
+  // Utility: Convert Arabic digits to Thai numerals (เลขไทย)
+  function toThaiNumerals(str) {
+    if (str === null || str === undefined) return '';
+    const thaiDigits = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
+    return String(str).replace(/[0-9]/g, function (d) {
+      return thaiDigits[Number(d)];
+    });
+  }
+
+  // Print Official Landscape Certificates (Thai Luxury Khit / Mudmee Background + Official MOE & OBEC Logos)
   function printCertificatesWindow(entries) {
     if (!entries || entries.length === 0) {
       showToast('ไม่มีรายการเกียรติบัตรที่เลือกพิมพ์', 'warning');
       return;
     }
 
+    const cfg = state.config || DEFAULT_CONFIG;
+    const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+    const defaultCertBgUrl = baseDir + 'assets/cert-bg-thai.jpg';
+    const logoMoeUrl = baseDir + 'assets/logo-moe.svg';
+    const logoObecUrl = baseDir + 'assets/logo-obec.svg';
+    const certWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
+
+    const certBgUrl =
+      cfg.certBgMode === 'canva' && cfg.certBgImageUrl ? cfg.certBgImageUrl : defaultCertBgUrl;
+    const signerOrg = cfg.certSignerOrg || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3';
+    const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
+    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+    const rawIssueDate = cfg.certIssueDate || '25 พฤศจิกายน พุทธศักราช 2569';
+    let thaiIssueDate = toThaiNumerals(rawIssueDate);
+    if (!thaiIssueDate.includes('เดือน')) {
+      thaiIssueDate = thaiIssueDate.replace(/^([^\s]+)\s+([^\s]+)\s+/, '$1 เดือน $2 ');
+    }
+
     const pagesHtml = entries
       .map(function (c) {
         const verifyUrl = encodeURIComponent('https://campingroom.github.io/talent69/#cert=' + c.cert_code);
+        const sigHtml = cfg.certSignatureUrl
+          ? `<div class="sign-img-wrap"><img src="${cfg.certSignatureUrl}" alt="ลายมือชื่อ" class="cert-signature-img" /></div>`
+          : `<div class="sign-line">........................................................</div>`;
+        const signerNameHtml = signerName
+          ? `<div class="sign-name">(${escapeHtml(signerName)})</div>`
+          : '';
+
+        const isJudge = c.role_type === 'JUDGE' || c.role_type === 'REFEREE';
+        let awardDisplay = '';
+        if (isJudge) {
+          awardDisplay = 'ได้ปฏิบัติหน้าที่คณะกรรมการตัดสินการแข่งขัน';
+        } else {
+          const medal = c.medal ? escapeHtml(c.medal) : 'เข้าร่วมการแข่งขัน';
+          const title = escapeHtml(c.award_title || 'รางวัลเข้าร่วม');
+          awardDisplay = title.includes(medal) ? title : `ได้รับรางวัลระดับ${medal} ${title}`;
+        }
+
+        let schoolDisplay = '';
+        if (isJudge) {
+          schoolDisplay = c.grade_or_pos
+            ? escapeHtml(c.grade_or_pos)
+            : (c.school_name ? `โรงเรียน${escapeHtml(c.school_name.replace(/^โรงเรียน/, ''))}` : 'คณะกรรมการตัดสิน');
+        } else {
+          schoolDisplay = c.school_name
+            ? `โรงเรียน${escapeHtml(c.school_name.replace(/^โรงเรียน/, ''))}`
+            : '';
+        }
+
+        const cleanCompName = (c.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
+        const cleanLevel = (c.level || '').trim();
+        const activityText = cleanLevel
+          ? `กิจกรรม ${escapeHtml(cleanCompName)} ระดับชั้น ${escapeHtml(cleanLevel)}`
+          : `กิจกรรม ${escapeHtml(cleanCompName)}`;
+
         return `
           <div class="cert-page">
-            <div class="cert-outer-frame">
-              <div class="cert-inner-frame">
-                <div class="cert-top-code">เลขที่อ้างอิง: ${escapeHtml(c.cert_code)}</div>
-                <div class="cert-header-org">สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>
-                <div class="cert-sub-org">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง อำเภอโกสุมพิสัย จังหวัดมหาสารคาม</div>
-                <div class="cert-subtitle">ขอมอบเกียรติบัตรฉบับนี้ไว้เพื่อแสดงว่า</div>
+            <div class="cert-watermark-layer">
+              <img src="${certWatermarkUrl}" alt="" class="cert-watermark-img" />
+            </div>
+            <div class="cert-inner">
+              <!-- Top Row: Certificate Code -->
+              <div class="cert-top-row">
+                <div class="cert-top-code-pill">เลขที่ ${escapeHtml(toThaiNumerals(c.cert_code))}</div>
+              </div>
 
-                <div class="cert-recipient">${escapeHtml(c.recipient_name)}</div>
-                <div class="cert-school">${escapeHtml(c.school_name)}</div>
+              <!-- Central Official Emblem: OBEC (ตรา สพฐ.) -->
+              <div class="cert-logos-row">
+                <img src="${logoObecUrl}" alt="ตราสำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน" class="cert-logo-img cert-logo-obec" />
+              </div>
 
-                <div class="cert-award">${escapeHtml(c.award_title)}</div>
-                <div class="cert-activity">
-                  กิจกรรม: ${escapeHtml(c.comp_name)} ระดับชั้น${escapeHtml(c.level)}<br/>
-                  (${escapeHtml(c.learning_area)})
+              <!-- Header Organization -->
+              <div class="cert-header-block">
+                <div class="cert-header-org">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
+                <div class="cert-header-suborg">${escapeHtml(toThaiNumerals(signerOrg))}</div>
+                <div class="cert-subtitle">ขอมอบเกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า</div>
+              </div>
+
+              <!-- Recipient Section -->
+              <div class="cert-recipient-block">
+                <div class="cert-recipient-name">${escapeHtml(formatFullNameForPrint('', c.recipient_name))}</div>
+                <div class="cert-recipient-school">${schoolDisplay}</div>
+              </div>
+
+              <!-- Award & Activity Section -->
+              <div class="cert-award-block">
+                <div class="cert-award">${awardDisplay}</div>
+                <div class="cert-activity">${activityText}</div>
+              </div>
+
+              <!-- Event & Ceremony Details -->
+              <div class="cert-event-block">
+                <div class="cert-event-title">งานศิลปหัตถกรรมนักเรียน ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง ครั้งที่ ๗๔ ประจำปีการศึกษา ๒๕๖๙</div>
+                <div class="cert-event-dates">ระหว่างวันที่ ๒๔ - ๒๕ พฤศจิกายน พ.ศ. ๒๕๖๙</div>
+                <div class="cert-blessing">ขอให้มีความวิริยะ อุตสาหะ และความสามารถของท่านเป็นที่ประจักษ์ต่อไป</div>
+                <div class="cert-issue-date">ให้ไว้ ณ วันที่ ${escapeHtml(thaiIssueDate)}</div>
+              </div>
+
+              <!-- Footer: QR Verification & Authorized Signer -->
+              <div class="cert-footer">
+                <div class="cert-qr">
+                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${verifyUrl}" alt="QR Verify" class="cert-qr-img" width="64" height="64" />
+                  <div class="cert-qr-label">สแกนตรวจสอบเกียรติบัตร</div>
+                  <div class="cert-qr-code">${escapeHtml(c.cert_code)}</div>
                 </div>
-
-                <div class="cert-event">
-                  การแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ระดับกลุ่มโรงเรียน<br/>
-                  ให้ไว้ ณ วันที่ 25 พฤศจิกายน พุทธศักราช 2569
-                </div>
-
-                <div class="cert-footer">
-                  <div class="cert-qr">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${verifyUrl}" alt="QR Verify" width="68" height="68" />
-                    <div>สแกนตรวจสอบเกียรติบัตร</div>
-                  </div>
-                  <div class="cert-sign">
-                    <div class="sign-line">........................................................</div>
-                    <div class="sign-pos">ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
-                    <div class="sign-org">สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>
-                  </div>
+                <div class="cert-sign">
+                  ${sigHtml}
+                  ${signerNameHtml}
+                  <div class="sign-pos">${escapeHtml(signerPos)}</div>
+                  <div class="sign-org">${escapeHtml(signerOrg)}</div>
                 </div>
               </div>
             </div>
@@ -4446,40 +5112,336 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
+  <base href="${baseDir}" />
   <title>เกียรติบัตรออนไลน์ - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74</title>
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Niramit:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Prompt:wght@500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 0; }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: 'Sarabun', sans-serif; color: #1e293b; background: #f8fafc; }
-    .no-print-bar { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: 'Prompt', sans-serif; }
-    .no-print-bar button { background: #f59e0b; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-family: 'Prompt', sans-serif; font-weight: 700; cursor: pointer; }
-    .cert-page { width: 277mm; height: 190mm; margin: 12px auto; background: #fff; page-break-after: always; display: flex; }
-    .cert-outer-frame { width: 100%; height: 100%; border: 4px solid #b45309; padding: 6px; display: flex; }
-    .cert-inner-frame { width: 100%; height: 100%; border: 1.5px solid #d97706; padding: 22px 36px; position: relative; text-align: center; display: flex; flex-direction: column; justify-content: space-between; background: radial-gradient(circle at center, #ffffff 0%, #fffbeb 100%); }
-    .cert-top-code { position: absolute; top: 14px; right: 22px; font-size: 12px; color: #64748b; }
-    .cert-header-org { font-family: 'Prompt', sans-serif; font-size: 24px; font-weight: 700; color: #0f172a; margin-top: 6px; }
-    .cert-sub-org { font-family: 'Prompt', sans-serif; font-size: 18px; font-weight: 600; color: #92400e; }
-    .cert-subtitle { font-size: 16px; color: #334155; margin-top: 4px; }
-    .cert-recipient { font-family: 'Prompt', sans-serif; font-size: 30px; font-weight: 700; color: #0f172a; margin-top: 6px; }
-    .cert-school { font-family: 'Prompt', sans-serif; font-size: 20px; font-weight: 600; color: #1e293b; }
-    .cert-award { font-family: 'Prompt', sans-serif; font-size: 22px; font-weight: 700; color: #b45309; margin-top: 6px; }
-    .cert-activity { font-size: 17px; font-weight: 600; color: #1e293b; line-height: 1.45; }
-    .cert-event { font-size: 15px; color: #475569; line-height: 1.45; }
-    .cert-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 10px; padding: 0 20px; }
-    .cert-qr { font-size: 11px; color: #64748b; text-align: center; }
-    .cert-sign { text-align: center; font-size: 14px; line-height: 1.5; }
-    .sign-pos { font-weight: 700; color: #0f172a; }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Niramit', 'Sarabun', sans-serif;
+      color: #0f172a;
+      background: #f1f5f9;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .no-print-bar {
+      padding: 12px 24px;
+      background: #0f172a;
+      color: #ffffff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: 'Prompt', sans-serif;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    }
+    .no-print-bar button {
+      background: #f59e0b;
+      color: #0f172a;
+      border: none;
+      padding: 8px 22px;
+      border-radius: 8px;
+      font-family: 'Prompt', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .no-print-bar button:hover {
+      background: #d97706;
+      color: #ffffff;
+    }
+    .cert-page {
+      width: 297mm;
+      height: 210mm;
+      margin: 15px auto;
+      background: #ffffff url('${certBgUrl}') no-repeat center center / 100% 100%;
+      page-break-after: always;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .cert-page:last-child {
+      page-break-after: auto;
+    }
+    .cert-watermark-layer {
+      position: absolute;
+      top: 52%;
+      left: 50%;
+      transform: translate(-50%, -47%);
+      width: 138mm;
+      height: 120mm;
+      opacity: 0.088;
+      filter: saturate(1.3) contrast(1.06);
+      pointer-events: none;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .cert-watermark-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .cert-inner {
+      width: 100%;
+      height: 100%;
+      padding: 13mm 22mm 18mm 22mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      text-align: center;
+      position: relative;
+      z-index: 2;
+    }
+    .cert-top-row {
+      display: flex;
+      justify-content: flex-end;
+      width: 100%;
+      height: 22px;
+    }
+    .cert-top-code-pill {
+      font-family: 'Niramit', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid #d4af3799;
+      border-radius: 9999px;
+      padding: 2px 14px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .cert-logos-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: -5.5mm;
+      margin-bottom: 0.5mm;
+    }
+    .cert-logo-img {
+      height: 31mm;
+      width: auto;
+      max-width: 35mm;
+      object-fit: contain;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.12));
+    }
+    .cert-header-block {
+      margin-top: -1mm;
+      margin-bottom: 1mm;
+    }
+    .cert-header-org {
+      font-family: 'Niramit', sans-serif;
+      font-size: 21px;
+      font-weight: 700;
+      color: #1e1b4b;
+      line-height: 1.25;
+      letter-spacing: -0.2px;
+    }
+    .cert-header-suborg {
+      font-family: 'Niramit', sans-serif;
+      font-size: 17.5px;
+      font-weight: 600;
+      color: #0f172a;
+      line-height: 1.25;
+      margin-top: 0.5mm;
+      letter-spacing: -0.1px;
+    }
+    .cert-subtitle {
+      font-family: 'Niramit', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      color: #334155;
+      margin-top: 1.5mm;
+    }
+    .cert-recipient-block {
+      margin: 2mm 0 1.5mm 0;
+      text-align: center;
+    }
+    .cert-recipient-name {
+      font-family: 'Niramit', sans-serif;
+      font-size: 34px;
+      font-weight: 700;
+      color: #090d16;
+      line-height: 1.25;
+      letter-spacing: -0.2px;
+      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+    }
+    .cert-recipient-school {
+      font-family: 'Niramit', sans-serif;
+      font-size: 17.5px;
+      font-weight: 600;
+      color: #334155;
+      margin-top: 2.5mm;
+      letter-spacing: 0.1px;
+    }
+    .cert-award-block {
+      margin: 1.5mm 0 1mm 0;
+    }
+    .cert-award {
+      font-family: 'Niramit', sans-serif;
+      font-size: 21px;
+      font-weight: 700;
+      color: #92400e;
+      line-height: 1.3;
+    }
+    .cert-activity {
+      font-family: 'Niramit', sans-serif;
+      font-size: 16.5px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-top: 0.5mm;
+      line-height: 1.35;
+    }
+    .cert-event-block {
+      margin: 1.5mm 0 1mm 0;
+    }
+    .cert-event-title {
+      font-family: 'Niramit', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e293b;
+      line-height: 1.35;
+    }
+    .cert-event-dates {
+      font-family: 'Niramit', sans-serif;
+      font-size: 14.5px;
+      font-weight: 500;
+      color: #334155;
+      line-height: 1.35;
+    }
+    .cert-blessing {
+      font-family: 'Niramit', sans-serif;
+      font-size: 14px;
+      font-weight: 400;
+      color: #475569;
+      margin-top: 1mm;
+    }
+    .cert-issue-date {
+      font-family: 'Niramit', sans-serif;
+      font-size: 14.5px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-top: 1mm;
+    }
+    .cert-footer {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      padding: 0 4mm 1mm 4mm;
+      margin-top: 1mm;
+      margin-bottom: 2mm;
+      width: 100%;
+    }
+    .cert-qr {
+      position: absolute;
+      left: 4mm;
+      bottom: 2mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      text-align: center;
+    }
+    .cert-qr-img {
+      width: 64px;
+      height: 64px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 1.5px;
+      background: #ffffff;
+    }
+    .cert-qr-label {
+      font-family: 'Niramit', sans-serif;
+      font-size: 9.5px;
+      font-weight: 600;
+      color: #475569;
+    }
+    .cert-qr-code {
+      font-family: monospace;
+      font-size: 8px;
+      color: #64748b;
+    }
+    .cert-sign {
+      text-align: center;
+      min-width: 280px;
+      font-family: 'Niramit', sans-serif;
+      line-height: 1.4;
+      margin: 0 auto;
+    }
+    .sign-img-wrap {
+      height: 48px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      margin-bottom: 2px;
+    }
+    .cert-signature-img {
+      max-height: 48px;
+      max-width: 170px;
+      object-fit: contain;
+    }
+    .sign-line {
+      color: #64748b;
+      letter-spacing: 1.5px;
+      margin-bottom: 3px;
+    }
+    .sign-name {
+      font-family: 'Niramit', sans-serif;
+      font-size: 15.5px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .sign-pos {
+      font-family: 'Niramit', sans-serif;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-top: 1px;
+    }
+    .sign-org {
+      font-family: 'Niramit', sans-serif;
+      font-size: 12.5px;
+      color: #475569;
+      margin-top: 1px;
+    }
     @media print {
-      body { background: #fff; }
-      .no-print-bar { display: none !important; }
-      .cert-page { margin: 0; }
+      body {
+        background: #ffffff;
+        margin: 0;
+        padding: 0;
+      }
+      .no-print-bar {
+        display: none !important;
+      }
+      .cert-page {
+        margin: 0 !important;
+        width: 297mm !important;
+        height: 210mm !important;
+        box-shadow: none !important;
+        page-break-after: always;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        background: #ffffff url('${certBgUrl}') no-repeat center center / 100% 100% !important;
+      }
+      .cert-page:last-child {
+        page-break-after: auto;
+      }
     }
   </style>
 </head>
 <body>
   <div class="no-print-bar">
-    <div>ตัวอย่างก่อนพิมพ์เกียรติบัตรออนไลน์ (${entries.length} ใบ) — แนะนำตั้งค่ากระดาษเป็นแนวนอน (A4 Landscape)</div>
+    <div>ตัวอย่างก่อนพิมพ์เกียรติบัตรออนไลน์ (${entries.length} ใบ) — มาตรฐานกระดาษแนวนอน A4 Landscape (297 x 210 มม.)</div>
     <button onclick="window.print()">สั่งพิมพ์ / บันทึกเป็น PDF</button>
   </div>
   ${pagesHtml}
@@ -4491,99 +5453,218 @@
       win.document.open();
       win.document.write(html);
       win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป โปรดอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์เกียรติบัตร', 'warning');
     }
   }
 
-  // Print Competitor & Coach ID Badges for Selected School
-  function printSchoolIdCards(schoolName) {
-    const regs = state.registrations.filter((r) => r.school_name === schoolName);
-    if (regs.length === 0) {
-      showToast('ยังไม่มีรายชื่อผู้เข้าแข่งขันของ ' + schoolName, 'warning');
+  // Export District Representatives as .xlsx
+  async function exportDistrictRepresentativesExcel() {
+    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
+    const criteriaLabel = getDistrictRepCriteriaLabel(criteria);
+    const list = state.registrations.filter(isDistrictRepresentative);
+    if (list.length === 0) {
+      showToast('ยังไม่มีผลการแข่งขันที่ผ่านเกณฑ์ตัวแทนไปแข่งขันระดับเขต (' + criteriaLabel + ')', 'warning');
       return;
     }
 
-    const cards = [];
-    regs.forEach(function (r) {
-      const comp = state.competitions.find((c) => c.comp_id === r.comp_id) || {};
-      (r.students || []).forEach(function (s, idx) {
-        cards.push({
-          badge_type: 'บัตรประจำตัวนักเรียนผู้เข้าแข่งขัน',
-          badge_color: '#1d4ed8',
-          person_name: (s.prefix || '') + (s.name || ''),
-          sub_role: 'นักเรียนชั้น ' + (s.grade || '-'),
-          school_name: r.school_name,
-          comp_id: r.comp_id,
-          comp_name: r.comp_name,
-          level: r.level,
-          comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
-          comp_time: comp.comp_time || '09.00 - 12.00 น.',
-          venue_room: comp.venue_room || 'อาคารเรียนหลัก',
-          ref_code: r.reg_id + '-S' + (idx + 1)
-        });
-      });
-      (r.teachers || []).forEach(function (t, idx) {
-        cards.push({
-          badge_type: 'บัตรประจำตัวครูผู้ฝึกซ้อม',
-          badge_color: '#047857',
-          person_name: (t.prefix || '') + (t.name || ''),
-          sub_role: 'ครูผู้ฝึกซ้อมนักเรียน',
-          school_name: r.school_name,
-          comp_id: r.comp_id,
-          comp_name: r.comp_name,
-          level: r.level,
-          comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
-          comp_time: comp.comp_time || '09.00 - 12.00 น.',
-          venue_room: comp.venue_room || 'อาคารเรียนหลัก',
-          ref_code: r.reg_id + '-T' + (idx + 1)
-        });
-      });
+    const order = {};
+    state.competitions.forEach(function (c, i) {
+      order[c.comp_id] = i;
+    });
+    list.sort((a, b) => (order[a.comp_id] || 0) - (order[b.comp_id] || 0));
+
+    let ExcelJS;
+    try {
+      ExcelJS = await loadExcelJs();
+    } catch (err) {
+      showToast(err.message, 'error');
+      return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('ตัวแทนระดับเขต');
+    ws.columns = [
+      { width: 6 },
+      { width: 12 },
+      { width: 44 },
+      { width: 20 },
+      { width: 12 },
+      { width: 10 },
+      { width: 26 },
+      { width: 10 },
+      { width: 14 },
+      { width: 14 },
+      { width: 32 },
+      { width: 32 }
+    ];
+
+    const titles = [
+      'บัญชีรายชื่อตัวแทนกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง เข้าร่วมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569',
+      'ระดับสำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3 (เกณฑ์คัดเลือก: ' + criteriaLabel + ')',
+      ''
+    ];
+    titles.forEach(function (t, i) {
+      ws.mergeCells(i + 1, 1, i + 1, 12);
+      const cell = ws.getCell(i + 1, 1);
+      cell.value = t;
+      cell.font = { bold: true, size: i === 0 ? 15 : 13 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
     });
 
-    openIdCardsPrintWindow('บัตรประจำตัวผู้เข้าแข่งขันและครูผู้ฝึกซ้อม - ' + schoolName, cards);
-  }
+    const thin = { style: 'thin' };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const headerRow = ws.getRow(4);
+    const headers = [
+      'ที่',
+      'รหัส',
+      'กิจกรรมการแข่งขัน',
+      'กลุ่มสาระ',
+      'ระดับชั้น',
+      'ประเภท',
+      'โรงเรียนตัวแทน',
+      'คะแนน',
+      'เหรียญ',
+      'รางวัล',
+      'รายชื่อนักเรียนผู้เข้าแข่งขัน',
+      'รายชื่อครูผู้ฝึกซ้อม'
+    ];
+    headers.forEach(function (h, i) {
+      const c = headerRow.getCell(i + 1);
+      c.value = h;
+      c.font = { bold: true, size: 11 };
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      c.border = border;
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F1EF' } };
+    });
 
-  function printJudgeIdCard(judge) {
-    const comp = state.competitions.find((c) => c.comp_id === judge.comp_id) || {};
-    const jName = judge.judge_name || judge.full_name || '';
-    openIdCardsPrintWindow('บัตรประจำตัวคณะกรรมการตัดสิน', [
-      {
-        badge_type: 'บัตรประจำตัวคณะกรรมการตัดสิน',
-        badge_color: '#b45309',
-        person_name: (judge.prefix || '') + jName,
-        sub_role: judge.role || 'กรรมการตัดสิน',
-        school_name: judge.school_name || '',
-        comp_id: judge.comp_id || '',
-        comp_name: judge.comp_name || '',
-        level: judge.level || '',
-        comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
-        comp_time: (comp.comp_time || '09.00 - 12.00 น.') + ' (ประชุม 23 พ.ย. 13.30 น.)',
-        venue_room: comp.venue_room || 'อาคารเรียนหลัก',
-        ref_code: judge.judge_id
+    let rowNo = 5;
+    list.forEach(function (r, idx) {
+      const students = r.students || [];
+      const teachers = r.teachers || [];
+      const stuLines =
+        students
+          .map((s, i) => `${i + 1}. ${formatFullNameForPrint(s.prefix, s.name)} (${s.grade || '-'})`)
+          .join('\n') || '-';
+      const teaLines =
+        teachers
+          .map(
+            (t, i) =>
+              `${i + 1}. ${formatFullNameForPrint(t.prefix, t.name)}${t.phone ? ' (โทร ' + t.phone + ')' : ''}`
+          )
+          .join('\n') || '-';
+      const hasSc = r.score !== '' && r.score !== undefined && r.score !== null;
+      const scoreText = hasSc ? Number(r.score).toFixed(2) : '-';
+      const medalText = r.medal || (hasSc ? calculateMedalFromScore(r.score) : '-');
+      const awardText = r.award_title || 'ชนะเลิศ';
+
+      const row = ws.getRow(rowNo);
+      row.getCell(1).value = idx + 1;
+      row.getCell(2).value = r.comp_id;
+      row.getCell(3).value = r.comp_name;
+      row.getCell(4).value = r.learning_area || '';
+      row.getCell(5).value = r.level || '';
+      row.getCell(6).value = r.team_type || '';
+      row.getCell(7).value = r.school_name;
+      row.getCell(8).value = scoreText;
+      row.getCell(9).value = medalText;
+      row.getCell(10).value = awardText;
+      row.getCell(11).value = stuLines;
+      row.getCell(12).value = teaLines;
+
+      for (let c = 1; c <= 12; c++) {
+        const cell = row.getCell(c);
+        cell.border = border;
+        cell.alignment = {
+          vertical: 'top',
+          wrapText: true,
+          horizontal: [1, 2, 5, 6, 8, 9, 10].includes(c) ? 'center' : 'left'
+        };
       }
-    ]);
+      rowNo++;
+    });
+
+    const sumRow = ws.getRow(rowNo);
+    ws.mergeCells(rowNo, 1, rowNo, 12);
+    const sumCell = sumRow.getCell(1);
+    sumCell.value = `รวมรายการที่เป็นตัวแทนไปแข่งขันระดับเขตพื้นที่การศึกษา ทั้งหมด ${list.length} รายการ`;
+    sumCell.font = { bold: true };
+    sumCell.alignment = { horizontal: 'left', vertical: 'middle' };
+    sumCell.border = border;
+    sumCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ตัวแทนกลุ่มวังยาวเขวาไร่ดอนกลาง_ศิลปหัตถกรรมครั้งที่74_ระดับเขต.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดไฟล์สรุปตัวแทนระดับเขตเรียบร้อยแล้ว', 'success');
   }
 
-  function openIdCardsPrintWindow(title, cards) {
-    const cardsHtml = cards
-      .map(function (c) {
+  // Print Official District Representatives Report (A4 Landscape)
+  function printDistrictRepresentativesReport() {
+    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
+    const criteriaLabel = getDistrictRepCriteriaLabel(criteria);
+    const list = state.registrations.filter(isDistrictRepresentative);
+    if (list.length === 0) {
+      showToast('ยังไม่มีผลการแข่งขันที่ผ่านเกณฑ์ตัวแทนไปแข่งขันระดับเขต (' + criteriaLabel + ')', 'warning');
+      return;
+    }
+
+    const order = {};
+    state.competitions.forEach(function (c, i) {
+      order[c.comp_id] = i;
+    });
+    list.sort((a, b) => (order[a.comp_id] || 0) - (order[b.comp_id] || 0));
+
+    const cfg = state.config || DEFAULT_CONFIG;
+    const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
+    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+
+    const rowsHtml = list
+      .map(function (r, idx) {
+        const students = r.students || [];
+        const teachers = r.teachers || [];
+        const stuText =
+          students
+            .map((s, i) => `${i + 1}. ${escapeHtml(formatFullNameForPrint(s.prefix, s.name))} (${escapeHtml(s.grade || '-')})`)
+            .join('<br/>') || '-';
+        const teaText =
+          teachers
+            .map(
+              (t, i) =>
+                `${i + 1}. ${escapeHtml(formatFullNameForPrint(t.prefix, t.name))}${t.phone ? ' (' + escapeHtml(t.phone) + ')' : ''}`
+            )
+            .join('<br/>') || '-';
+        const hasSc = r.score !== '' && r.score !== undefined && r.score !== null;
+        const scoreText = hasSc ? Number(r.score).toFixed(2) : '-';
+        const medalText = r.medal || (hasSc ? calculateMedalFromScore(r.score) : '-');
+        const repAward = r.award_title || (Number(r.rank) === 1 ? 'ชนะเลิศ' : (r.rank ? 'อันดับ ' + r.rank : 'ตัวแทน'));
+
         return `
-          <div class="id-card">
-            <div class="id-head" style="background:${c.badge_color}">
-              <div class="id-event">ศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>
-              <div class="id-type">${escapeHtml(c.badge_type)}</div>
-            </div>
-            <div class="id-body">
-              <div class="id-photo">ติดรูปถ่าย<br/>1 นิ้ว</div>
-              <div class="id-info">
-                <div class="id-name">${escapeHtml(c.person_name)}</div>
-                <div class="id-role">${escapeHtml(c.sub_role)} • ${escapeHtml(c.school_name)}</div>
-                <div class="id-comp">[${escapeHtml(c.comp_id)}] ${escapeHtml(c.comp_name)} (${escapeHtml(c.level)})</div>
-                <div class="id-meta">วันเวลา: ${escapeHtml(c.comp_date)} (${escapeHtml(c.comp_time)})</div>
-                <div class="id-meta">ห้องสอบ: ${escapeHtml(c.venue_room)} • รหัส: ${escapeHtml(c.ref_code)}</div>
-              </div>
-            </div>
-            <div class="id-foot">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง • สพป.มหาสารคาม เขต 3</div>
-          </div>
+          <tr>
+            <td style="text-align:center; vertical-align:top;">${idx + 1}</td>
+            <td style="text-align:center; vertical-align:top; font-family:'Prompt',sans-serif; font-weight:600;">${escapeHtml(r.comp_id)}</td>
+            <td style="vertical-align:top;">
+              <strong>${escapeHtml(r.comp_name)}</strong><br/>
+              <span style="font-size:12px; color:#475569;">${escapeHtml(r.learning_area || '')} • ชั้น${escapeHtml(r.level || '')} • ${escapeHtml(r.team_type || '')}</span>
+            </td>
+            <td style="vertical-align:top; font-weight:600;">${escapeHtml(r.school_name)}</td>
+            <td style="vertical-align:top; font-size:13px; line-height:1.4;">${stuText}</td>
+            <td style="vertical-align:top; font-size:13px; line-height:1.4;">${teaText}</td>
+            <td style="text-align:center; vertical-align:top; font-weight:600;">${scoreText}</td>
+            <td style="text-align:center; vertical-align:top;">
+              <span style="font-weight:600; color:#b45309;">${escapeHtml(medalText)}</span><br/>
+              <span style="font-size:11px; color:#15803d; font-weight:700;">${escapeHtml(repAward)} (ตัวแทน)</span>
+            </td>
+          </tr>
         `;
       })
       .join('');
@@ -4592,40 +5673,73 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <title>${escapeHtml(title)}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <title>บัญชีรายชื่อตัวแทนกลุ่มโรงเรียน - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ระดับเขต</title>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 landscape; margin: 12mm 10mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Sarabun', sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+    body { font-family: 'Sarabun', sans-serif; color: #0f172a; margin: 0; background: #f8fafc; font-size: 14px; }
     .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: 'Prompt', sans-serif; }
-    .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-    .grid-wrap { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 12px; max-width: 210mm; margin: 0 auto; }
-    .id-card { border: 1.5px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #fff; break-inside: avoid; }
-    .id-head { color: #fff; padding: 8px 12px; font-family: 'Prompt', sans-serif; }
-    .id-event { font-size: 11px; opacity: 0.9; }
-    .id-type { font-size: 14px; font-weight: 700; }
-    .id-body { display: flex; gap: 10px; padding: 10px 12px; align-items: center; }
-    .id-photo { width: 58px; height: 72px; border: 1px dashed #94a3b8; border-radius: 6px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 10px; color: #64748b; flex-shrink: 0; }
-    .id-info { font-size: 12px; line-height: 1.4; }
-    .id-name { font-family: 'Prompt', sans-serif; font-size: 15px; font-weight: 700; color: #0f172a; }
-    .id-role { font-weight: 600; color: #334155; }
-    .id-comp { color: #0f172a; font-weight: 600; margin-top: 2px; }
-    .id-meta { font-size: 11px; color: #475569; }
-    .id-foot { background: #f1f5f9; padding: 5px 12px; font-size: 10px; text-align: center; color: #475569; font-family: 'Prompt', sans-serif; }
+    .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    .report-wrap { width: 277mm; margin: 15px auto; background: #fff; padding: 15mm 12mm; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .report-title { text-align: center; margin-bottom: 12px; }
+    .report-title h1 { font-family: 'Prompt', sans-serif; font-size: 18px; font-weight: 700; margin: 0 0 4px 0; }
+    .report-title h2 { font-family: 'Prompt', sans-serif; font-size: 15px; font-weight: 600; color: #334155; margin: 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+    th { background: #f1f5f9; font-family: 'Prompt', sans-serif; font-weight: 700; font-size: 13px; text-align: center; }
+    .sign-section { margin-top: 30px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+    .sign-box { text-align: center; width: 340px; font-size: 14px; line-height: 1.6; }
     @media print {
-      body { background: #fff; }
+      body { background: #fff; font-size: 13px; }
       .no-print { display: none !important; }
-      .grid-wrap { padding: 0; }
+      .report-wrap { width: 100%; margin: 0; padding: 0; box-shadow: none; }
+      th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
     }
   </style>
 </head>
 <body>
   <div class="no-print">
-    <div>${escapeHtml(title)} (รวม ${cards.length} บัตร)</div>
-    <button onclick="window.print()">สั่งพิมพ์บัตรประจำตัว</button>
+    <div>บัญชีรายชื่อตัวแทนกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (${list.length} รายการ) — ส่งเข้าแข่งขันระดับเขตพื้นที่การศึกษา</div>
+    <button onclick="window.print()">สั่งพิมพ์รายงาน (A4 แนวนอน)</button>
   </div>
-  <div class="grid-wrap">${cardsHtml}</div>
+  <div class="report-wrap">
+    <div class="report-title">
+      <h1>บัญชีรายชื่อตัวแทนนักเรียนและครูผู้ฝึกสอน กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</h1>
+      <h2>เข้าร่วมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ระดับสำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</h2>
+      <div style="font-size:12px; color:#64748b; margin-top:4px;">แข่งขันระหว่างวันที่ 23–24 ธันวาคม 2569 • เอกสารแนบส่ง สพป.มหาสารคาม เขต 3 • เกณฑ์คัดเลือก: ${escapeHtml(criteriaLabel)}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:35px;">ที่</th>
+          <th style="width:75px;">รหัส</th>
+          <th>กิจกรรมการแข่งขัน</th>
+          <th style="width:170px;">โรงเรียนตัวแทน</th>
+          <th style="width:200px;">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
+          <th style="width:190px;">รายชื่อครูผู้ฝึกซ้อม</th>
+          <th style="width:65px;">คะแนน</th>
+          <th style="width:110px;">เหรียญ / ผล</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+    <div style="margin-top:10px; font-size:13px; font-weight:600; color:#334155;">
+      รวมตัวแทนทั้งสิ้น ${list.length} รายการ
+    </div>
+    <div class="sign-section">
+      <div class="sign-box">
+        <div>ขอรับรองว่าเป็นรายชื่อตัวแทนกลุ่มโรงเรียนถูกต้องจริง</div>
+        <div style="height:50px;"></div>
+        <div>(ลงชื่อ)....................................................................</div>
+        <div>(${signerName ? escapeHtml(signerName) : '....................................................................'})</div>
+        <div style="font-weight:600;">${escapeHtml(signerPos)}</div>
+        <div>วันที่ ............ เดือน ................................. พ.ศ. 2569</div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>`;
 
@@ -4634,6 +5748,652 @@
       win.document.open();
       win.document.write(html);
       win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
+    }
+  }
+
+  // Print Official Substitution Request Form (A4 Portrait)
+  function printSubstitutionForm(optRegId) {
+    let reg = null;
+    if (optRegId) {
+      reg = state.registrations.find((r) => r.reg_id === optRegId);
+    } else {
+      const schoolSelect = document.getElementById('schoolViewSelect');
+      const schoolVal = schoolSelect ? schoolSelect.value : '';
+      if (schoolVal) {
+        const schoolRegs = state.registrations.filter((r) => r.school_name === schoolVal);
+        if (schoolRegs.length === 1) {
+          reg = schoolRegs[0];
+        }
+      }
+    }
+
+    const schoolName = reg
+      ? reg.school_name
+      : '................................................................................';
+    const compText = reg
+      ? `[${reg.comp_id}] ${reg.comp_name} (${reg.level})`
+      : '....................................................................................................................................';
+    const originalStudents = reg && reg.students ? reg.students : [];
+    const originalTeachers = reg && reg.teachers ? reg.teachers : [];
+
+    const stuRows = [0, 1, 2, 3]
+      .map(function (idx) {
+        const orig = originalStudents[idx];
+        const origText = orig ? `${orig.prefix || ''}${orig.name} (${orig.grade || '-'})` : '';
+        return `
+          <tr>
+            <td style="text-align:center;">${idx + 1}</td>
+            <td>${escapeHtml(origText)}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const teaRows = [0, 1]
+      .map(function (idx) {
+        const orig = originalTeachers[idx];
+        const origText = orig
+          ? `${orig.prefix || ''}${orig.name}${orig.phone ? ' (' + orig.phone + ')' : ''}`
+          : '';
+        return `
+          <tr>
+            <td style="text-align:center;">${idx + 1}</td>
+            <td>${escapeHtml(origText)}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74</title>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 portrait; margin: 15mm 15mm 12mm 15mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Sarabun', sans-serif; color: #000; margin: 0; background: #f8fafc; font-size: 15px; line-height: 1.5; }
+    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: 'Prompt', sans-serif; }
+    .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    .form-wrap { width: 190mm; margin: 15px auto; background: #fff; padding: 12mm 15mm; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .form-title { text-align: center; margin-bottom: 16px; }
+    .form-title h1 { font-family: 'Prompt', sans-serif; font-size: 19px; font-weight: 700; margin: 0 0 4px 0; }
+    .form-title h2 { font-size: 15px; font-weight: 600; margin: 0; }
+    .form-meta { text-align: right; margin: 12px 0 16px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 14px 0; font-size: 14px; }
+    th, td { border: 1px solid #333; padding: 5px 8px; }
+    th { background: #f1f5f9; font-weight: 700; text-align: center; }
+    .rule-note { font-size: 12.5px; color: #475569; margin: 4px 0 12px 0; }
+    .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 18px; page-break-inside: avoid; }
+    .sign-box { text-align: center; font-size: 14px; line-height: 1.6; }
+    .approval-box { margin-top: 16px; border: 1.5px solid #000; padding: 10px 14px; border-radius: 4px; page-break-inside: avoid; }
+    @media print {
+      body { background: #fff; }
+      .no-print { display: none !important; }
+      .form-wrap { width: 100%; margin: 0; padding: 0; box-shadow: none; }
+      th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div>แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน (A4 แนวตั้ง ตามระเบียบ สพฐ.)</div>
+    <button onclick="window.print()">สั่งพิมพ์แบบคำร้อง (A4 แนวตั้ง)</button>
+  </div>
+  <div class="form-wrap">
+    <div class="form-title">
+      <h1>แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน</h1>
+      <h2>การแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ระดับกลุ่มโรงเรียน</h2>
+      <div>กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง อำเภอโกสุมพิสัย จังหวัดมหาสารคาม</div>
+    </div>
+
+    <div class="form-meta">
+      เขียนที่ โรงเรียน${escapeHtml(schoolName)}<br/>
+      วันที่ .......... เดือน ................................. พ.ศ. 2569
+    </div>
+
+    <div style="margin-bottom: 10px;">
+      <strong>เรื่อง</strong> ขออนุมัติเปลี่ยนตัวผู้เข้าแข่งขัน / ครูผู้ฝึกสอน<br/>
+      <strong>เรียน</strong> ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง
+    </div>
+
+    <div style="text-indent: 2.5em; text-align: justify; margin-bottom: 8px;">
+      ด้วย โรงเรียน<strong>${escapeHtml(schoolName)}</strong> ได้ส่งนักเรียนเข้าร่วมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ในกิจกรรม <strong>${compText}</strong> มีความจำเป็นต้องขออนุมัติเปลี่ยนแปลงตัว เนื่องจาก (ระบุเหตุผลความจำเป็น เช่น ป่วย/ติดภารกิจสำคัญ) ....................................................................................................................................................................................................................
+    </div>
+
+    <div style="font-weight:700; margin-top:10px;">1. รายการขอเปลี่ยนตัวนักเรียนผู้เข้าแข่งขัน:</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:30px;">ที่</th>
+          <th style="width:190px;">รายชื่อเดิมที่ลงทะเบียนไว้</th>
+          <th style="width:190px;">รายชื่อผู้ขอเปลี่ยนตัวแทน (พร้อมระบุชั้น)</th>
+          <th style="width:80px;">เลขประจำตัว/รหัส</th>
+          <th>เหตุผลความจำเป็น</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${stuRows}
+      </tbody>
+    </table>
+
+    <div style="font-weight:700;">2. รายการขอเปลี่ยนตัวครูผู้ฝึกสอน:</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:30px;">ที่</th>
+          <th style="width:190px;">รายชื่อครูเดิม</th>
+          <th style="width:190px;">รายชื่อครูผู้สอนท่านใหม่</th>
+          <th style="width:100px;">เบอร์โทรศัพท์</th>
+          <th>เหตุผลความจำเป็น</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${teaRows}
+      </tbody>
+    </table>
+
+    <div class="rule-note">
+      * หมายเหตุ: ตามเกณฑ์การแข่งขัน การเปลี่ยนตัวผู้เข้าแข่งขันสามารถเปลี่ยนตัวได้ไม่เกินร้อยละตามที่เกณฑ์แต่ละกิจกรรมกำหนด และต้องยื่นแบบคำร้องนี้ต่อประธานกลุ่มโรงเรียนหรือคณะกรรมการจัดการแข่งขันก่อนเริ่มการแข่งขัน
+    </div>
+
+    <div class="sign-grid">
+      <div class="sign-box">
+        <div>(ลงชื่อ).................................................... ครูผู้รับผิดชอบ</div>
+        <div>(....................................................)</div>
+        <div>ตำแหน่ง ....................................................</div>
+      </div>
+      <div class="sign-box">
+        <div>(ลงชื่อ).................................................... ผู้บริหารสถานศึกษา</div>
+        <div>(....................................................)</div>
+        <div>ผู้อำนวยการโรงเรียน${escapeHtml(schoolName)}</div>
+      </div>
+    </div>
+
+    <div class="approval-box">
+      <div style="font-weight:700; font-family:'Prompt',sans-serif; margin-bottom:6px;">ผลการพิจารณาของคณะกรรมการกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง:</div>
+      <div style="display:flex; gap:30px; margin-bottom:8px;">
+        <label><input type="checkbox" style="vertical-align:middle; margin-right:4px;" /> อนุมัติให้เปลี่ยนตัวตามคำร้อง</label>
+        <label><input type="checkbox" style="vertical-align:middle; margin-right:4px;" /> ไม่อนุมัติ เนื่องจาก ................................................................</label>
+      </div>
+      <div style="text-align:center; margin-top:16px;">
+        <div>(ลงชื่อ).................................................................... ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
+        <div>วันที่ .......... / .................... / 2569</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
+    }
+  }
+
+  // Print ID Cards for a single registered team
+  function printRegistrationIdCards(regId) {
+    const r = state.registrations.find((item) => item.reg_id === regId);
+    if (!r) {
+      showToast('ไม่พบข้อมูลการลงทะเบียนนี้', 'error');
+      return;
+    }
+
+    const comp = state.competitions.find((c) => c.comp_id === r.comp_id) || {};
+    const cleanCompName = (r.comp_name || comp.comp_name || '').trim();
+    const cleanLevel = (r.level || comp.level || '').trim();
+    const eventTitle = cleanLevel ? `${cleanCompName} (${cleanLevel})` : cleanCompName;
+    const cards = [];
+
+    (r.students || []).forEach(function (s, idx) {
+      cards.push({
+        badge_type: 'บัตรประจำตัวนักเรียนผู้เข้าแข่งขัน',
+        badge_gradient: 'linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 100%)',
+        theme_badge_bg: '#eff6ff',
+        theme_badge_text: '#1e40af',
+        theme_color: '#1e40af',
+        border_accent: '#2563eb',
+        person_name: formatFullNameForPrint(s.prefix, s.name),
+        sub_role: s.grade ? 'นักเรียนชั้น' + s.grade : 'นักเรียนผู้เข้าแข่งขัน',
+        school_name: r.school_name,
+        comp_name: eventTitle,
+        comp_date: '24–25 พฤศจิกายน 2569',
+        comp_time: '09.00 - 12.00 น.',
+        venue_room: comp.room ? comp.room + ' (กลุ่ม รร.วังยาวเขวาไร่ดอนกลาง)' : 'กลุ่ม รร.วังยาวเขวาไร่ดอนกลาง',
+        ref_code: r.reg_id ? `${r.reg_id}-S${idx + 1}` : `REG-S${idx + 1}`
+      });
+    });
+
+    (r.teachers || []).forEach(function (t, idx) {
+      cards.push({
+        badge_type: 'บัตรประจำตัวครูผู้ฝึกสอน',
+        badge_gradient: 'linear-gradient(135deg, #c2410c 0%, #7c2d12 100%)',
+        theme_badge_bg: '#fff7ed',
+        theme_badge_text: '#c2410c',
+        theme_color: '#c2410c',
+        border_accent: '#ea580c',
+        person_name: formatFullNameForPrint(t.prefix, t.name),
+        sub_role: t.position || 'ครูผู้ฝึกสอนนักเรียน',
+        school_name: r.school_name,
+        comp_name: eventTitle,
+        comp_date: '24–25 พฤศจิกายน 2569',
+        comp_time: '09.00 - 12.00 น.',
+        venue_room: comp.room ? comp.room + ' (กลุ่ม รร.วังยาวเขวาไร่ดอนกลาง)' : 'กลุ่ม รร.วังยาวเขวาไร่ดอนกลาง',
+        ref_code: r.reg_id ? `${r.reg_id}-T${idx + 1}` : `REG-T${idx + 1}`
+      });
+    });
+
+    if (cards.length === 0) {
+      showToast('ไม่พบรายชื่อนักเรียนหรือครูในรายการนี้', 'warning');
+      return;
+    }
+
+    openIdCardsPrintWindow(`บัตรประจำตัวผู้เข้าแข่งขัน - ${cleanCompName} (${r.school_name})`, cards);
+  }
+
+  // Print Competitor & Coach ID Badges for Selected School (Foldable A5 Landscape / 1/4 A4)
+  function printSchoolIdCards(schoolName) {
+    const targetSchool = schoolName || (state.schools[0] ? state.schools[0].school_name : 'กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง');
+    const regs = state.registrations.filter((r) => r.school_name === targetSchool);
+    if (regs.length === 0) {
+      showToast('ยังไม่มีรายชื่อจริงของ ' + targetSchool + ' — ระบบเปิดตัวอย่างบัตรสำหรับทดสอบพิมพ์', 'info');
+      const sampleCards = [
+        {
+          badge_type: 'บัตรประจำตัวนักเรียนผู้เข้าแข่งขัน',
+          badge_gradient: 'linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 100%)',
+          theme_badge_bg: '#eff6ff',
+          theme_badge_text: '#1e40af',
+          theme_color: '#1e40af',
+          border_accent: '#2563eb',
+          person_name: 'เด็กชายพชรวัฒน์ ทับทองดี',
+          sub_role: 'นักเรียนชั้นประถมศึกษาปีที่ 4',
+          school_name: targetSchool,
+          comp_name: 'การแข่งขันต่อสมการคณิตศาสตร์ (เอแม็ท) (ป.1–ป.6)',
+          comp_date: '24–25 พฤศจิกายน 2569',
+          comp_time: '09.00 - 12.00 น.',
+          venue_room: 'อาคารเรียนหลัก ห้อง 101',
+          ref_code: 'REG-74-SAMPLE-S1'
+        },
+        {
+          badge_type: 'บัตรประจำตัวครูผู้ฝึกสอน',
+          badge_gradient: 'linear-gradient(135deg, #c2410c 0%, #7c2d12 100%)',
+          theme_badge_bg: '#fff7ed',
+          theme_badge_text: '#c2410c',
+          theme_color: '#c2410c',
+          border_accent: '#ea580c',
+          person_name: 'นางสาวพิมพ์ใจ มีสุข',
+          sub_role: 'ครูผู้ฝึกสอนนักเรียน',
+          school_name: targetSchool,
+          comp_name: 'การแข่งขันต่อสมการคณิตศาสตร์ (เอแม็ท) (ป.1–ป.6)',
+          comp_date: '24–25 พฤศจิกายน 2569',
+          comp_time: '09.00 - 12.00 น.',
+          venue_room: 'อาคารเรียนหลัก ห้อง 101',
+          ref_code: 'REG-74-SAMPLE-T1'
+        }
+      ];
+      openIdCardsPrintWindow('ตัวอย่างบัตรประจำตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน - ' + targetSchool, sampleCards);
+      return;
+    }
+
+    const cards = [];
+    regs.forEach(function (r) {
+      const comp = state.competitions.find((c) => c.comp_id === r.comp_id) || {};
+      const cleanCompName = (r.comp_name || comp.comp_name || '').trim();
+      const cleanLevel = (r.level || comp.level || '').trim();
+      const eventTitle = cleanLevel ? `${cleanCompName} (${cleanLevel})` : cleanCompName;
+
+      (r.students || []).forEach(function (s, idx) {
+        cards.push({
+          badge_type: 'บัตรประจำตัวนักเรียนผู้เข้าแข่งขัน',
+          badge_gradient: 'linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 100%)',
+          theme_badge_bg: '#eff6ff',
+          theme_badge_text: '#1e40af',
+          theme_color: '#1e40af',
+          border_accent: '#2563eb',
+          person_name: formatFullNameForPrint(s.prefix, s.name),
+          sub_role: 'นักเรียนชั้น ' + (s.grade || '-'),
+          school_name: r.school_name,
+          comp_name: eventTitle,
+          comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
+          comp_time: comp.comp_time || '09.00 - 12.00 น.',
+          venue_room: comp.venue_room || 'อาคารเรียนหลัก',
+          ref_code: r.reg_id + '-S' + (idx + 1)
+        });
+      });
+      (r.teachers || []).forEach(function (t, idx) {
+        cards.push({
+          badge_type: 'บัตรประจำตัวครูผู้ฝึกสอน',
+          badge_gradient: 'linear-gradient(135deg, #c2410c 0%, #7c2d12 100%)',
+          theme_badge_bg: '#fff7ed',
+          theme_badge_text: '#c2410c',
+          theme_color: '#c2410c',
+          border_accent: '#ea580c',
+          person_name: formatFullNameForPrint(t.prefix, t.name),
+          sub_role: 'ครูผู้ฝึกสอนนักเรียน',
+          school_name: r.school_name,
+          comp_name: eventTitle,
+          comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
+          comp_time: comp.comp_time || '09.00 - 12.00 น.',
+          venue_room: comp.venue_room || 'อาคารเรียนหลัก',
+          ref_code: r.reg_id + '-T' + (idx + 1)
+        });
+      });
+    });
+
+    openIdCardsPrintWindow('บัตรประจำตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน - ' + schoolName, cards);
+  }
+
+  function printJudgeIdCard(judge) {
+    const comp = state.competitions.find((c) => c.comp_id === judge.comp_id) || {};
+    const jName = judge.judge_name || judge.full_name || '';
+    const cleanCompName = (judge.comp_name || comp.comp_name || '').trim();
+    const cleanLevel = (judge.level || comp.level || '').trim();
+    const eventTitle = cleanLevel ? `${cleanCompName} (${cleanLevel})` : cleanCompName;
+
+    openIdCardsPrintWindow('บัตรประจำตัวคณะกรรมการตัดสิน', [
+      {
+        badge_type: 'บัตรประจำตัวคณะกรรมการตัดสิน',
+        badge_gradient: 'linear-gradient(135deg, #0f766e 0%, #134e4a 100%)',
+        theme_badge_bg: '#f0fdf4',
+        theme_badge_text: '#0f766e',
+        theme_color: '#0f766e',
+        border_accent: '#0d9488',
+        person_name: formatFullNameForPrint(judge.prefix, jName),
+        sub_role: judge.role || 'กรรมการตัดสิน',
+        school_name: judge.school_name || 'กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
+        comp_name: eventTitle,
+        comp_date: comp.comp_date || '24–25 พฤศจิกายน 2569',
+        comp_time: (comp.comp_time || '09.00 - 12.00 น.') + ' (ประชุม 23 พ.ย. 13.30 น.)',
+        venue_room: comp.venue_room || 'อาคารเรียนหลัก',
+        ref_code: judge.judge_id || ('JDG-' + (judge.comp_id || 'WYK'))
+      }
+    ]);
+  }
+
+  function openIdCardsPrintWindow(title, cards) {
+    const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+    const cardBgUrl = baseDir + 'assets/card-bg-thai.jpg';
+
+    function renderCard(c) {
+      if (!c) return '';
+      return `
+        <div class="foldable-card">
+          <!-- LEFT PANEL: Back Cover When Folded (A6 Portrait = 1/4 A4) -->
+          <div class="card-panel card-panel-left">
+            <div class="panel-inner">
+              <div class="left-top-header">
+                <div class="left-badge-tag" style="background:${c.theme_badge_bg}; color:${c.theme_badge_text}; border: 1px solid ${c.border_accent}33;">
+                  ${escapeHtml(c.badge_type)}
+                </div>
+                <div class="left-title-event">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74</div>
+                <div class="left-title-sub">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
+              </div>
+
+              <!-- Rules Box -->
+              <div class="rules-box">
+                <div class="rules-head">แนวปฏิบัติในการเข้าร่วมแข่งขัน</div>
+                <ol class="rules-list">
+                  <li>รายงานตัวที่ห้องแข่งขันก่อนเวลาอย่างน้อย 15 นาที</li>
+                  <li>แต่งกายชุดนักเรียนหรือชุดแข่งขันที่ถูกต้องตามระเบียบ</li>
+                  <li>พกบัตรประจำตัวนี้ติดตัวไว้ตลอดระยะเวลาการแข่งขัน</li>
+                  <li>ปฏิบัติตามคำแนะนำของคณะกรรมการตัดสินอย่างเคร่งครัด</li>
+                </ol>
+              </div>
+
+              <!-- QR & Verification Box (Centered at bottom) -->
+              <div class="qr-verify-box-center">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://campingroom.github.io/talent69/" class="qr-img" alt="QR" onerror="this.style.opacity='0'" />
+                <div class="qr-text">
+                  <div class="qr-title">ตรวจสอบข้อมูลการแข่งขัน</div>
+                  <div class="qr-url">campingroom.github.io/talent69</div>
+                  <div class="qr-sub">สแกนเพื่อตรวจสอบเกณฑ์และผลการแข่งขัน</div>
+                </div>
+              </div>
+
+              <div class="left-footer">
+                กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง • สพป.มหาสารคาม เขต 3
+              </div>
+            </div>
+
+            <!-- Center Fold Indicator -->
+            <div class="fold-guide-label">
+              <span>[-- รอยพับครึ่ง --]</span>
+            </div>
+          </div>
+
+          <!-- RIGHT PANEL: Front Cover When Folded (A6 Portrait = 1/4 A4) -->
+          <div class="card-panel card-panel-right">
+            <div class="panel-inner">
+              <!-- Right Top Header with Modern Thai Wave Ornament -->
+              <div class="right-header" style="background:${c.badge_gradient};">
+                <div class="header-wave-strip" aria-hidden="true">
+                  <svg viewBox="0 0 300 20" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M0 0 L300 0 L300 10 C240 16 180 6 140 12 C100 18 40 6 0 12 Z" fill="rgba(245, 158, 11, 0.22)" />
+                    <path d="M0 0 L300 0 L300 6 C250 12 190 4 150 10 C110 16 50 4 0 8 Z" fill="rgba(255, 255, 255, 0.15)" />
+                  </svg>
+                </div>
+                <div class="right-header-event">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>
+                <div class="right-header-title">${escapeHtml(c.badge_type)}</div>
+                <div class="right-header-sub">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
+                <div class="header-gold-line"></div>
+              </div>
+
+              <!-- Main Profile Body (Centered Layout with Large Photo Frame as requested) -->
+              <div class="right-body-center">
+                <!-- Center Photo Frame (กรอบตรงกลางขนาดใหญ่ตามภาพวาด) -->
+                <div class="photo-center-wrapper">
+                  <div class="photo-box-center" style="border-color:${c.border_accent};">
+                    <div class="photo-box-content">
+                      <svg class="photo-cam-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                      </svg>
+                      <span class="photo-box-label">ติดรูปถ่าย</span>
+                      <span class="photo-box-hint">ขนาด 1.5 – 2 นิ้ว<br/>(40 × 48 มม.)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Center Name & School (ชื่อนักเรียนให้จัด mid) -->
+                <div class="profile-center">
+                  <div class="person-name">${escapeHtml(formatFullNameForPrint('', c.person_name))}</div>
+                  <div class="person-sub">${escapeHtml(c.sub_role)}</div>
+                  <div class="person-school" style="color:${c.theme_color};">${escapeHtml(c.school_name)}</div>
+                </div>
+
+                <!-- Center Competition Box -->
+                <div class="comp-box-center" style="border-top-color:${c.border_accent};">
+                  <div class="comp-title">${escapeHtml(c.comp_name)}</div>
+                  <div class="comp-schedule">
+                    <div><span>วันเวลา:</span> ${escapeHtml(c.comp_date)} (${escapeHtml(c.comp_time)})</div>
+                    <div><span>สถานที่:</span> ${escapeHtml(c.venue_room)}</div>
+                  </div>
+                </div>
+
+                <!-- Signature & Ref Code Row -->
+                <div class="card-bottom-row">
+                  <span class="ref-code">รหัส: ${escapeHtml(c.ref_code)}</span>
+                  <div class="sign-holder">
+                    (ลงชื่อ).................................................... ผู้ถือบัตร
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Footer -->
+              <div class="right-footer">
+                <span>สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Chunk cards into pairs (2 cards per A4 page)
+    const sheetsHtml = [];
+    for (let i = 0; i < cards.length; i += 2) {
+      const card1 = cards[i];
+      const card2 = cards[i + 1] || null;
+      sheetsHtml.push(`
+        <div class="a4-sheet">
+          ${renderCard(card1)}
+          ${card2 ? `
+            <div class="cut-line">
+              <span>[-- รอยตัดแยกแผ่น (A5 แนวนอน 2 ใบต่อกระดาษ A4 1 แผ่น — พับครึ่งตามแนวตั้งเป็นขนาด 1 ใน 4) --]</span>
+            </div>
+            ${renderCard(card2)}
+          ` : `
+            <div class="cut-line">
+              <span>[-- รอยตัดแยกแผ่น --]</span>
+            </div>
+            <div class="card-empty-placeholder"></div>
+          `}
+        </div>
+      `);
+    }
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <base href="${baseDir}" />
+  <title>${escapeHtml(title)}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Niramit:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Prompt:wght@500;600;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 portrait; margin: 6mm 7mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Niramit', 'Sarabun', sans-serif; margin: 0; padding: 0; background: #f8fafc; color: #0f172a; }
+    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: 'Niramit', 'Prompt', sans-serif; }
+    .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: 'Niramit', 'Prompt', sans-serif; }
+    .a4-sheet { width: 196mm; height: 284mm; margin: 10px auto; background: transparent; display: flex; flex-direction: column; justify-content: space-between; page-break-after: always; }
+    .a4-sheet:last-child { page-break-after: auto; }
+    .foldable-card {
+      width: 196mm;
+      height: 136mm;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      background: #fdfbf7 url('${cardBgUrl}') no-repeat center center / 100% 100%;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .card-panel {
+      width: 50%;
+      height: 100%;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      background: rgba(253, 251, 247, 0.35);
+      overflow: hidden;
+    }
+    .card-panel-left { border-right: 1.5px dashed rgba(148, 163, 184, 0.85); background: rgba(253, 251, 247, 0.45); }
+    .card-panel-right { border-left: none; }
+    .fold-guide-label { position: absolute; top: 50%; right: -24px; transform: translateY(-50%) rotate(90deg); font-size: 8px; font-family: 'Niramit', sans-serif; color: #94a3b8; letter-spacing: 1px; background: rgba(255, 255, 255, 0.9); padding: 1px 4px; border-radius: 3px; pointer-events: none; z-index: 10; }
+    .panel-inner { padding: 6mm 7.5mm; display: flex; flex-direction: column; justify-content: space-between; height: 100%; position: relative; z-index: 2; }
+    .left-top-header { text-align: center; border-bottom: 1px solid rgba(226, 232, 240, 0.9); padding-bottom: 3px; }
+    .left-badge-tag { display: inline-block; font-family: 'Niramit', sans-serif; font-size: 10.5px; font-weight: 700; padding: 1.5px 9px; border-radius: 9999px; margin-bottom: 2px; }
+    .left-title-event { font-family: 'Niramit', sans-serif; font-size: 11.5px; font-weight: 700; color: #1e293b; }
+    .left-title-sub { font-size: 9.5px; font-family: 'Niramit', sans-serif; color: #64748b; font-weight: 500; }
+    .rules-box { background: rgba(255, 255, 255, 0.92); border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; margin: 3px 0; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+    .rules-head { font-family: 'Niramit', sans-serif; font-size: 10px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
+    .rules-list { margin: 0; padding-left: 14px; font-size: 9px; font-family: 'Niramit', sans-serif; color: #334155; line-height: 1.35; }
+    .rules-list li { margin-bottom: 1px; }
+    .qr-verify-box-center { display: flex; align-items: center; gap: 7px; background: rgba(255, 255, 255, 0.92); border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 7px; margin-bottom: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+    .qr-img { width: 38px; height: 38px; border-radius: 4px; background: #fff; border: 1px solid #cbd5e1; flex-shrink: 0; }
+    .qr-text { font-size: 8.5px; font-family: 'Niramit', sans-serif; line-height: 1.25; }
+    .qr-title { font-family: 'Niramit', sans-serif; font-weight: 700; color: #0f172a; }
+    .qr-url { color: #2563eb; font-family: monospace; }
+    .qr-sub { color: #64748b; font-family: 'Niramit', sans-serif; }
+    .left-footer, .right-footer { font-size: 8.5px; text-align: center; color: #64748b; font-family: 'Niramit', sans-serif; border-top: 1px solid rgba(226, 232, 240, 0.8); padding-top: 2.5px; font-weight: 500; }
+    .right-header { color: #ffffff; padding: 4.5px 8px 3.5px 8px; border-radius: 6px; text-align: center; font-family: 'Niramit', sans-serif; position: relative; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+    .header-wave-strip { position: absolute; top: 0; left: 0; right: 0; height: 10px; pointer-events: none; }
+    .header-gold-line { height: 1.5px; background: linear-gradient(90deg, transparent 0%, #f59e0b 20%, #fef08a 50%, #f59e0b 80%, transparent 100%); margin-top: 2.5px; }
+    .right-header-event { font-size: 8px; font-family: 'Niramit', sans-serif; opacity: 0.92; letter-spacing: 0.2px; font-weight: 500; }
+    .right-header-title { font-size: 12px; font-family: 'Niramit', sans-serif; font-weight: 700; line-height: 1.2; margin: 1px 0; letter-spacing: -0.2px; }
+    .right-header-sub { font-size: 8px; font-family: 'Niramit', sans-serif; opacity: 0.88; font-weight: 500; }
+    .right-body-center { display: flex; flex-direction: column; justify-content: space-between; flex: 1; padding: 2px 2px 0 2px; text-align: center; }
+    .photo-center-wrapper { display: flex; justify-content: center; margin: 2mm auto 1.5mm auto; }
+    .photo-box-center {
+      width: 40mm;
+      height: 48mm;
+      border: 2px dashed #94a3b8;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.94);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    .photo-box-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2.5px;
+      font-size: 9px;
+      color: #475569;
+      line-height: 1.3;
+      font-family: 'Niramit', sans-serif;
+      text-align: center;
+    }
+    .photo-cam-icon { width: 18px; height: 18px; color: #94a3b8; }
+    .photo-box-label { font-weight: 700; color: #1e293b; font-size: 10px; font-family: 'Niramit', sans-serif; }
+    .photo-box-hint { font-size: 8.5px; color: #64748b; font-family: 'Niramit', sans-serif; }
+    .profile-center { margin: 1.5mm 0 1.5mm 0; text-align: center; }
+    .person-name { font-family: 'Niramit', sans-serif; font-size: 14.5px; font-weight: 700; color: #0f172a; line-height: 1.25; }
+    .person-sub { font-size: 10px; font-weight: 600; color: #475569; margin-top: 1px; font-family: 'Niramit', sans-serif; }
+    .person-school { font-size: 11px; font-weight: 700; margin-top: 1px; font-family: 'Niramit', sans-serif; }
+    .comp-box-center { background: rgba(255, 255, 255, 0.94); border: 1px solid #e2e8f0; border-top: 2.5px solid #3b82f6; border-radius: 6px; padding: 3px 7px; margin: 1.5mm 0; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
+    .comp-title { font-family: 'Niramit', sans-serif; font-size: 10.5px; font-weight: 700; color: #0f172a; line-height: 1.25; }
+    .comp-schedule { font-size: 8.5px; color: #334155; margin-top: 1.5px; line-height: 1.3; font-family: 'Niramit', sans-serif; }
+    .card-bottom-row { display: flex; align-items: center; justify-content: space-between; margin-top: 1.5mm; padding: 0 2px; }
+    .ref-code { font-size: 8px; font-family: monospace; color: #64748b; background: rgba(255, 255, 255, 0.9); padding: 1px 4px; border-radius: 3px; border: 1px solid #e2e8f0; }
+    .sign-holder { font-size: 9px; color: #334155; font-family: 'Niramit', sans-serif; }
+    .cut-line { height: 5mm; display: flex; align-items: center; justify-content: center; border-top: 1px dashed #94a3b8; border-bottom: 1px dashed #94a3b8; font-size: 9px; color: #64748b; font-family: 'Niramit', sans-serif; margin: 1.5mm 0; }
+    .card-empty-placeholder { width: 196mm; height: 136mm; border: 1px dashed #e2e8f0; border-radius: 8px; }
+    @media print {
+      body { background: #ffffff; }
+      .no-print { display: none !important; }
+      .a4-sheet { margin: 0; box-shadow: none; height: 284mm; }
+      .foldable-card {
+        box-shadow: none;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        background: #fdfbf7 url('${cardBgUrl}') no-repeat center center / 100% 100% !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div>${escapeHtml(title)} (รวม ${cards.length} บัตร — พิมพ์ 2 บัตรต่อแผ่น A4 แนวนอน A5 พับครึ่ง)</div>
+    <button onclick="window.print()">สั่งพิมพ์บัตรประจำตัว</button>
+  </div>
+  ${sheetsHtml.join('')}
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
     }
   }
 
@@ -4655,8 +6415,8 @@
         const scText = hasSc ? Number(r.score).toFixed(2) : '-';
         const medal = r.medal || (hasSc ? calculateMedalFromScore(r.score) : '-');
         const award = r.award_title || (hasSc ? getAwardTitleFromRank(r.rank, medal) : '-');
-        const stuList = (r.students || []).map((s, i) => i + 1 + '. ' + s.prefix + s.name).join('<br/>');
-        const tchList = (r.teachers || []).map((t, i) => i + 1 + '. ' + t.prefix + t.name).join('<br/>');
+        const stuList = (r.students || []).map((s, i) => (i + 1) + '. ' + escapeHtml(formatFullNameForPrint(s.prefix, s.name))).join('<br/>');
+        const tchList = (r.teachers || []).map((t, i) => (i + 1) + '. ' + escapeHtml(formatFullNameForPrint(t.prefix, t.name))).join('<br/>');
         return `
           <tr>
             <td style="text-align:center;font-weight:700;">${escapeHtml(r.rank ? 'อันดับ ' + r.rank : '-')}</td>
@@ -4716,6 +6476,8 @@
       win.document.open();
       win.document.write(html);
       win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
     }
   }
 
@@ -4743,10 +6505,53 @@
 
   // Initialize Event Listeners
   function initEvents() {
+    // Sidebar Toggle & Collapse Handlers (Notion Style)
+    const btnToggleSidebar = document.getElementById('btnToggleSidebar');
+    if (btnToggleSidebar) {
+      btnToggleSidebar.addEventListener('click', function () {
+        if (window.innerWidth < 768) {
+          openMobileSidebar();
+        } else {
+          toggleDesktopSidebar();
+        }
+      });
+    }
+
+    const btnCloseSidebar = document.getElementById('btnCloseSidebar');
+    if (btnCloseSidebar) {
+      btnCloseSidebar.addEventListener('click', function () {
+        if (window.innerWidth < 768) {
+          closeMobileSidebar();
+        } else {
+          toggleDesktopSidebar();
+        }
+      });
+    }
+
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    if (sidebarBackdrop) {
+      sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+    }
+
+    // Restore desktop collapsed state
+    try {
+      if (localStorage.getItem('talent69_sidebar_collapsed') === 'true' && window.innerWidth >= 768) {
+        document.body.classList.add('sidebar-collapsed');
+      }
+    } catch (e) {}
+
     // Tab switching
     document.querySelectorAll('.nav-tab-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         switchTab(btn.getAttribute('data-tab'));
+      });
+    });
+
+    // Hero Section Quick Tab Navigation
+    document.querySelectorAll('[data-hero-tab]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const tab = btn.getAttribute('data-hero-tab');
+        if (tab) switchTab(tab);
       });
     });
 
@@ -5416,6 +7221,287 @@
     const btnCopyCodeGs = document.getElementById('btnCopyCodeGs');
     if (btnCopyCodeGs) {
       btnCopyCodeGs.addEventListener('click', copyCodeGsToClipboard);
+    }
+
+    // Phase 2: Auto-Lock Registration Schedule Events
+    const btnSaveRegCloseDate = document.getElementById('btnSaveRegCloseDate');
+    if (btnSaveRegCloseDate) {
+      btnSaveRegCloseDate.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const val = (document.getElementById('cfgRegCloseDateTimeInput').value || '').trim();
+        if (!val) {
+          showToast('กรุณาระบุวันและเวลาปิดรับสมัคร', 'warning');
+          return;
+        }
+        state.config.regCloseDate = val;
+        saveState();
+        renderAll();
+        showToast('บันทึกกำหนดเวลาปิดรับสมัครอัตโนมัติเรียบร้อยแล้ว', 'success');
+      });
+    }
+
+    const btnToggleRegistrationOpenSchedule = document.getElementById(
+      'btnToggleRegistrationOpenSchedule'
+    );
+    if (btnToggleRegistrationOpenSchedule) {
+      btnToggleRegistrationOpenSchedule.addEventListener('click', async function () {
+        if (!state.isAdmin) return;
+        state.registrationOpen = !state.registrationOpen;
+        localStorage.setItem(REG_OPEN_KEY, String(state.registrationOpen));
+        await postToGoogleSheets({
+          action: 'set_registration_open',
+          registration_open: state.registrationOpen,
+          admin_pin: state.adminPin
+        });
+        renderAll();
+        showToast(
+          state.registrationOpen
+            ? 'เปิดระบบรับสมัครเรียบร้อยแล้ว'
+            : 'สั่งปิดรับสมัครทันทีเรียบร้อยแล้ว',
+          state.registrationOpen ? 'success' : 'warning'
+        );
+      });
+    }
+
+    // Phase 2: District Representatives Summary Reports (Excel & Print)
+    const btnExportDistrictRepsExcel = document.getElementById('btnExportDistrictRepsExcel');
+    if (btnExportDistrictRepsExcel) {
+      btnExportDistrictRepsExcel.addEventListener('click', exportDistrictRepresentativesExcel);
+    }
+    const btnAdminExportDistrictRepsExcel = document.getElementById(
+      'btnAdminExportDistrictRepsExcel'
+    );
+    if (btnAdminExportDistrictRepsExcel) {
+      btnAdminExportDistrictRepsExcel.addEventListener('click', exportDistrictRepresentativesExcel);
+    }
+
+    const btnPrintDistrictRepsReport = document.getElementById('btnPrintDistrictRepsReport');
+    if (btnPrintDistrictRepsReport) {
+      btnPrintDistrictRepsReport.addEventListener('click', printDistrictRepresentativesReport);
+    }
+    const btnAdminPrintDistrictRepsReport = document.getElementById(
+      'btnAdminPrintDistrictRepsReport'
+    );
+    if (btnAdminPrintDistrictRepsReport) {
+      btnAdminPrintDistrictRepsReport.addEventListener('click', printDistrictRepresentativesReport);
+    }
+
+    const repCriteriaSelect = document.getElementById('cfgDistrictRepCriteriaSelect');
+    const btnSaveDistrictRepCriteria = document.getElementById('btnSaveDistrictRepCriteria');
+    if (btnSaveDistrictRepCriteria && repCriteriaSelect) {
+      btnSaveDistrictRepCriteria.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        state.config.districtRepCriteria = repCriteriaSelect.value || 'rank_1';
+        saveState();
+        renderAll();
+        showToast('บันทึกเกณฑ์ตัวแทนระดับเขตฯ เรียบร้อยแล้ว: ' + getDistrictRepCriteriaLabel(state.config.districtRepCriteria), 'success');
+      });
+      repCriteriaSelect.addEventListener('change', function () {
+        if (!state.isAdmin) return;
+        state.config.districtRepCriteria = repCriteriaSelect.value || 'rank_1';
+        saveState();
+        renderAll();
+        showToast('ปรับเกณฑ์ตัวแทนระดับเขตฯ เป็น: ' + getDistrictRepCriteriaLabel(state.config.districtRepCriteria), 'info');
+      });
+    }
+
+    // Feature Visibility Toggle Handlers (Admin)
+    const btnUnlockAllFeaturesNow = document.getElementById('btnUnlockAllFeaturesNow');
+    if (btnUnlockAllFeaturesNow) {
+      btnUnlockAllFeaturesNow.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        if (!state.config.featureVisibility) state.config.featureVisibility = {};
+        state.config.featureVisibility.judges = 'open';
+        state.config.featureVisibility.results = 'open';
+        state.config.featureVisibility.certificates = 'open';
+        saveState();
+        updateFeatureVisibilityUI();
+        showToast('เปิดทุกฟีเจอร์จัดการแข่งขันต่อสาธารณะทันทีเรียบร้อยแล้ว', 'success');
+      });
+    }
+
+    const btnResetFeaturesToAuto = document.getElementById('btnResetFeaturesToAuto');
+    if (btnResetFeaturesToAuto) {
+      btnResetFeaturesToAuto.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        if (!state.config.featureVisibility) state.config.featureVisibility = {};
+        state.config.featureVisibility.judges = 'auto';
+        state.config.featureVisibility.results = 'auto';
+        state.config.featureVisibility.certificates = 'auto';
+        saveState();
+        updateFeatureVisibilityUI();
+        showToast('รีเซ็ตทุกฟีเจอร์เป็นตามกำหนดการแข่งขันเรียบร้อยแล้ว', 'info');
+      });
+    }
+
+    document.querySelectorAll('[data-feature-toggle]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const key = btn.getAttribute('data-feature-toggle');
+        const action = btn.getAttribute('data-action');
+        setFeatureVisibility(key, action);
+      });
+    });
+
+    // Phase 2: Official Substitution Request Form (Print)
+    const btnPrintSubstitutionFormSchool = document.getElementById(
+      'btnPrintSubstitutionFormSchool'
+    );
+    if (btnPrintSubstitutionFormSchool) {
+      btnPrintSubstitutionFormSchool.addEventListener('click', function () {
+        printSubstitutionForm();
+      });
+    }
+    const btnPrintSubstitutionFormComp = document.getElementById('btnPrintSubstitutionFormComp');
+    if (btnPrintSubstitutionFormComp) {
+      btnPrintSubstitutionFormComp.addEventListener('click', function () {
+        printSubstitutionForm();
+      });
+    }
+    const btnPrintSubstitutionFormAdmin = document.getElementById(
+      'btnPrintSubstitutionFormAdmin'
+    );
+    if (btnPrintSubstitutionFormAdmin) {
+      btnPrintSubstitutionFormAdmin.addEventListener('click', function () {
+        printSubstitutionForm();
+      });
+    }
+
+    // Phase 2: Certificate & Canva Template Customizer Events
+    const certConfigForm = document.getElementById('certConfigForm');
+    if (certConfigForm) {
+      certConfigForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!state.isAdmin) return;
+        state.config.certPrefix =
+          (document.getElementById('cfgCertPrefixInput').value || '').trim() || 'WYK74-2569-';
+        state.config.certIssueDate =
+          (document.getElementById('cfgCertIssueDateInput').value || '').trim() ||
+          '25 พฤศจิกายน พุทธศักราช 2569';
+        state.config.certSignerName = (
+          document.getElementById('cfgCertSignerNameInput').value || ''
+        ).trim();
+        state.config.certSignerPos =
+          (document.getElementById('cfgCertSignerPosInput').value || '').trim() ||
+          'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+        state.config.certSignerOrg =
+          (document.getElementById('cfgCertSignerOrgInput').value || '').trim() ||
+          'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3';
+        saveState();
+        renderAll();
+        showToast('บันทึกการตั้งค่าเกียรติบัตรเรียบร้อยแล้ว', 'success');
+      });
+    }
+
+    const cfgCertSigFileInput = document.getElementById('cfgCertSigFileInput');
+    if (cfgCertSigFileInput) {
+      cfgCertSigFileInput.addEventListener('change', function (e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+          showToast('ไฟล์รูปภาพมีขนาดใหญ่เกิน 2 MB', 'warning');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function (ev) {
+          state.config.certSignatureUrl = ev.target.result;
+          saveState();
+          updateCertConfigUI();
+          showToast('อัปโหลดลายมือชื่อดิจิทัลเรียบร้อยแล้ว', 'success');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    const btnClearCertSig = document.getElementById('btnClearCertSig');
+    if (btnClearCertSig) {
+      btnClearCertSig.addEventListener('click', function () {
+        state.config.certSignatureUrl = '';
+        const fileInput = document.getElementById('cfgCertSigFileInput');
+        if (fileInput) fileInput.value = '';
+        saveState();
+        updateCertConfigUI();
+        showToast('ลบลายมือชื่อดิจิทัลแล้ว', 'info');
+      });
+    }
+
+    const certBgModeStandard = document.getElementById('certBgModeStandard');
+    const certBgModeCanva = document.getElementById('certBgModeCanva');
+    if (certBgModeStandard) {
+      certBgModeStandard.addEventListener('change', function () {
+        if (certBgModeStandard.checked) {
+          state.config.certBgMode = 'standard';
+          saveState();
+          updateCertConfigUI();
+        }
+      });
+    }
+    if (certBgModeCanva) {
+      certBgModeCanva.addEventListener('change', function () {
+        if (certBgModeCanva.checked) {
+          state.config.certBgMode = 'canva';
+          saveState();
+          updateCertConfigUI();
+        }
+      });
+    }
+
+    const cfgCertBgFileInput = document.getElementById('cfgCertBgFileInput');
+    if (cfgCertBgFileInput) {
+      cfgCertBgFileInput.addEventListener('change', function (e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+          showToast('ไฟล์รูปภาพพื้นหลังมีขนาดใหญ่เกิน 5 MB', 'warning');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function (ev) {
+          state.config.certBgImageUrl = ev.target.result;
+          state.config.certBgMode = 'canva';
+          saveState();
+          updateCertConfigUI();
+          showToast('อัปโหลดพื้นหลังเกียรติบัตร (Canva) เรียบร้อยแล้ว', 'success');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    const btnClearCertBg = document.getElementById('btnClearCertBg');
+    if (btnClearCertBg) {
+      btnClearCertBg.addEventListener('click', function () {
+        state.config.certBgImageUrl = '';
+        state.config.certBgMode = 'standard';
+        const fileInput = document.getElementById('cfgCertBgFileInput');
+        if (fileInput) fileInput.value = '';
+        saveState();
+        updateCertConfigUI();
+        showToast('ลบรูปภาพพื้นหลังเกียรติบัตรแล้ว', 'info');
+      });
+    }
+
+    const btnPreviewCertSample = document.getElementById('btnPreviewCertSample');
+    if (btnPreviewCertSample) {
+      btnPreviewCertSample.addEventListener('click', function () {
+        const sampleEntry = {
+          cert_code: (state.config.certPrefix || 'WYK74-2569-') + 'SAMPLE-001',
+          role_type: 'STUDENT',
+          role_label: 'นักเรียนผู้เข้าแข่งขัน',
+          recipient_name: 'เด็กชายตัวอย่าง มีปัญญา',
+          grade_or_pos: 'นักเรียนชั้นประถมศึกษาปีที่ 6',
+          school_name: 'โรงเรียนบ้านวังยาววิทยายน',
+          comp_id: 'SOC-001',
+          comp_name: 'การประกวดเพลงกล่อมเด็ก',
+          learning_area: 'กลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม',
+          level: 'ป.1-ป.6',
+          score: '94.50',
+          medal: 'เหรียญทอง',
+          award_title: 'รางวัลชนะเลิศ'
+        };
+        printCertificatesWindow([sampleEntry]);
+      });
     }
   }
 
