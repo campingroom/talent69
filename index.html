@@ -1151,23 +1151,23 @@
         <div class="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100 text-xs">
           <!-- Group 1: Documents & Badges -->
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="btnPrintSchoolIdCards" class="phase2-only inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+            <button type="button" id="btnPrintSchoolIdCards" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
               <svg class="w-3.5 h-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
               </svg>
               <span>พิมพ์บัตรประจำตัว (พับครึ่ง A5)</span>
             </button>
-            <button type="button" id="btnPrintSubstitutionFormSchool" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+            <button type="button" id="btnPrintSubstitutionFormSchool" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
               <svg class="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
               </svg>
               <span>พิมพ์แบบคำร้องขอเปลี่ยนตัว</span>
             </button>
-            <button type="button" onclick="window.print()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+            <button type="button" id="btnPrintSchoolSummary" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
               <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
               </svg>
-              <span>พิมพ์ใบสรุปโรงเรียน</span>
+              <span>พิมพ์ใบสรุปโรงเรียน (A4 แนวนอน)</span>
             </button>
           </div>
 
@@ -1270,7 +1270,7 @@
               </svg>
               <span>พิมพ์สารบัญรายการแข่งขัน</span>
             </button>
-            <button type="button" id="btnPrintSubstitutionFormComp" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs">
+            <button type="button" id="btnPrintSubstitutionFormComp" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
               <svg class="icon-svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -1735,6 +1735,44 @@
               </button>
               <button type="button" data-feature-toggle="certificates" data-action="hidden" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
                 ซ่อนเฉพาะแอดมิน
+              </button>
+            </div>
+          </div>
+
+          <!-- Item 4: ID Cards Printing -->
+          <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="font-heading font-semibold text-slate-900 text-sm">4. ปุ่มพิมพ์บัตรประจำตัว (ผู้เข้าแข่งขัน / ครูผู้ฝึกซ้อม / กรรมการ)</span>
+                <span id="badgeVisibilityIdCards" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-rose-100 text-rose-800">ปิดซ่อนปุ่มไว้ก่อน</span>
+              </div>
+              <p class="text-slate-500 text-[11px]">ค่าเริ่มต้น: ปิดซ่อนปุ่มพิมพ์บัตรทุกจุดในหน้าเว็บ (เปิดเมื่อต้องการใช้งานจริงเท่านั้น)</p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" data-feature-toggle="id_cards" data-action="open" class="btn-vis-toggle-id-cards px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                เปิดแสดงปุ่ม
+              </button>
+              <button type="button" data-feature-toggle="id_cards" data-action="hidden" class="btn-vis-toggle-id-cards px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                ปิดซ่อนปุ่มไว้ก่อน
+              </button>
+            </div>
+          </div>
+
+          <!-- Item 5: Substitution Request Form -->
+          <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="font-heading font-semibold text-slate-900 text-sm">5. ปุ่มพิมพ์แบบคำร้องขอเปลี่ยนตัว</span>
+                <span id="badgeVisibilitySubForm" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-rose-100 text-rose-800">ปิดซ่อนปุ่มไว้ก่อน</span>
+              </div>
+              <p class="text-slate-500 text-[11px]">ค่าเริ่มต้น: ปิดซ่อนปุ่มแบบคำร้องขอเปลี่ยนตัวในหน้าโรงเรียนและหน้ารายการแข่งขัน</p>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" data-feature-toggle="substitution_form" data-action="open" class="btn-vis-toggle-sub-form px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                เปิดแสดงปุ่ม
+              </button>
+              <button type="button" data-feature-toggle="substitution_form" data-action="hidden" class="btn-vis-toggle-sub-form px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                ปิดซ่อนปุ่มไว้ก่อน
               </button>
             </div>
           </div>
