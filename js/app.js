@@ -1213,9 +1213,10 @@
     const btnToggleVenuePublic = document.getElementById('btnToggleVenuePublic');
     const btnToggleVenuePublicText = document.getElementById('btnToggleVenuePublicText');
     if (btnToggleVenuePublic) {
-      btnToggleVenuePublic.classList.toggle('hidden', !state.isAdmin);
-      btnToggleVenuePublic.classList.toggle('inline-flex', Boolean(state.isAdmin));
-      if (isVenuePublic) {
+      if (!state.isAdmin) {
+        btnToggleVenuePublic.classList.add('hidden');
+        btnToggleVenuePublic.classList.remove('inline-flex');
+      } else if (isVenuePublic) {
         btnToggleVenuePublic.className =
           'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-heading text-xs font-semibold transition shadow-2xs cursor-pointer';
         if (btnToggleVenuePublicText) {
