@@ -7,7 +7,7 @@
   const ADMIN_SESSION_KEY = 'talent69_wangyao_admin_session_v1';
   const REG_OPEN_KEY = 'talent69_wangyao_reg_open_v1';
   const DEFAULT_ADMIN_PIN = '7469';
-  const ENABLE_PHASE_2 = false;
+  const ENABLE_PHASE_2 = true;
   // กำหนดการสำคัญสำหรับระบบนับถอยหลังและ Auto-Lock
   const REGISTRATION_CLOSE_DATE = '2026-11-19T23:59:59+07:00';
   const COMPETITION_START_DATE = '2026-11-24T08:30:00+07:00';
@@ -25,7 +25,9 @@
     certSignatureUrl: '',
     certBgMode: 'standard', // 'standard' or 'canva'
     certBgImageUrl: '',
+    venueMapImageUrl: '',
     featureVisibility: {
+      venue: 'hidden',
       judges: 'auto',
       results: 'auto',
       certificates: 'auto',
@@ -35,6 +37,12 @@
   };
 
   const FEATURE_MILESTONES = {
+    venue: {
+      key: 'venue',
+      name: 'แผนผังสนามและห้องสอบแข่งขัน',
+      openDateStr: '',
+      dateLabel: 'เมื่อแอดมินตั้งค่าห้องสอบจริงแล้วเปิดเผย'
+    },
     judges: {
       key: 'judges',
       name: 'คณะกรรมการตัดสิน',
@@ -68,7 +76,7 @@
     if (cfg.featureVisibility && cfg.featureVisibility[featureKey]) {
       return cfg.featureVisibility[featureKey];
     }
-    if (featureKey === 'id_cards' || featureKey === 'substitution_form') {
+    if (featureKey === 'venue' || featureKey === 'id_cards' || featureKey === 'substitution_form') {
       return 'hidden';
     }
     return 'auto';
@@ -87,13 +95,19 @@
     if (setting === 'open') return true;
     if (setting === 'hidden') return false;
     const meta = FEATURE_MILESTONES[featureKey];
-    if (!meta) return false;
+    if (!meta || !meta.openDateStr) return false;
     return Date.now() >= new Date(meta.openDateStr).getTime();
   }
 
   function canUserAccessFeature(featureKey) {
     if (state.isAdmin) return true;
     return isFeatureOpenToPublic(featureKey);
+  }
+
+  function shouldShowScoresInTables() {
+    if (!ENABLE_PHASE_2) return false;
+    if (isFeatureOpenToPublic('results')) return true;
+    return Boolean(state.isAdmin && state.adminShowScoresInLists);
   }
 
   function getDistrictRepCriteriaLabel(criteria) {
@@ -110,8 +124,46 @@
     }
   }
 
-  function isDistrictRepresentative(r) {
+  function isRegistrationAbsent(r) {
     if (!r) return false;
+    const m = String(r.medal || '').trim();
+    const a = String(r.award_title || '').trim();
+    return (
+      m === 'ไม่มาแข่งขัน' ||
+      m === 'ขาดสอบ' ||
+      a.indexOf('ไม่มาแข่งขัน') !== -1 ||
+      a.indexOf('ขาดสอบ') !== -1
+    );
+  }
+
+  function hasValidScore(r) {
+    if (!r || isRegistrationAbsent(r)) return false;
+    return r.score !== '' && r.score !== null && r.score !== undefined && !Number.isNaN(Number(r.score));
+  }
+
+  function getCompetitionTieStats(compId) {
+    const regs = state.registrations.filter((r) => r.comp_id === compId && hasValidScore(r));
+    const scoreCounts = {};
+    const rankCounts = {};
+    regs.forEach(function (r) {
+      const key = Number(r.score).toFixed(2);
+      scoreCounts[key] = (scoreCounts[key] || 0) + 1;
+      const rk = Number(r.rank);
+      if (rk > 0) rankCounts[rk] = (rankCounts[rk] || 0) + 1;
+    });
+    const tiedScores = Object.keys(scoreCounts).filter((k) => scoreCounts[k] > 1);
+    const hasTie = tiedScores.length > 0;
+    const hasUnresolvedTie = regs.some(function (r) {
+      const key = Number(r.score).toFixed(2);
+      if (scoreCounts[key] <= 1) return false;
+      const rk = Number(r.rank);
+      return !(rk > 0) || rankCounts[rk] > 1;
+    });
+    return { hasTie: hasTie, hasUnresolvedTie: hasUnresolvedTie, tiedScores: tiedScores };
+  }
+
+  function isDistrictRepresentative(r) {
+    if (!r || isRegistrationAbsent(r) || !hasValidScore(r)) return false;
     const rank = Number(r.rank);
     const award = r.award_title || '';
     const medal = r.medal || '';
@@ -163,7 +215,21 @@
     award:
       '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>',
     table:
-      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>'
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>',
+    fileText:
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
+    map:
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>',
+    clipboard:
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>',
+    calculator:
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>',
+    arrowRight:
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>',
+    userX:
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/></svg>',
+    building:
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>'
   };
 
   let state = {
@@ -173,10 +239,13 @@
     judges: [],
     activeTab: 'dashboard',
     compStatusFilter: 'ALL',
+    compRoomFilter: 'ALL',
+    venueMapExpanded: true,
     resultSubview: 'by-comp',
     lastAddedRegId: null,
     gasWebAppUrl: '',
     isAdmin: false,
+    adminShowScoresInLists: false,
     adminPin: DEFAULT_ADMIN_PIN,
     registrationOpen: true,
     config: Object.assign({}, DEFAULT_CONFIG)
@@ -213,6 +282,9 @@
 
   function renderMedalBadgeHtml(medal) {
     if (!medal) return '<span class="text-xs text-slate-400">รอผล</span>';
+    if (medal === 'ไม่มาแข่งขัน' || medal === 'ขาดสอบ') {
+      return '<span class="inline-block px-2 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-700 font-heading font-semibold text-xs">ขาดสอบ</span>';
+    }
     if (medal.indexOf('ทองแดง') !== -1) {
       return '<span class="inline-block px-2 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-800 font-heading font-semibold text-xs">' + escapeHtml(medal) + '</span>';
     }
@@ -760,6 +832,25 @@
 
     const urlInput = document.getElementById('gasWebAppUrlInput');
     if (urlInput) urlInput.value = state.gasWebAppUrl;
+
+    const btnOpenBulkSched = document.getElementById('btnOpenBulkScheduleModal');
+    if (btnOpenBulkSched) {
+      btnOpenBulkSched.classList.toggle('hidden', !state.isAdmin);
+      btnOpenBulkSched.classList.toggle('inline-flex', Boolean(state.isAdmin));
+    }
+
+    const btnUploadVenueMapLabel = document.getElementById('btnUploadVenueMapLabel');
+    if (btnUploadVenueMapLabel) {
+      btnUploadVenueMapLabel.classList.toggle('hidden', !state.isAdmin);
+      btnUploadVenueMapLabel.classList.toggle('inline-flex', Boolean(state.isAdmin));
+    }
+
+    const btnClearVenueMapImage = document.getElementById('btnClearVenueMapImage');
+    if (btnClearVenueMapImage) {
+      const hasCustomMap = Boolean(state.isAdmin && state.config && state.config.venueMapImageUrl);
+      btnClearVenueMapImage.classList.toggle('hidden', !hasCustomMap);
+    }
+
     updateFeatureVisibilityUI();
   }
 
@@ -1046,6 +1137,90 @@
         }
       });
     });
+
+    // 9. Venue / Room Schedule Public vs Admin Controls & Print Button Gating
+    const venueSetting = getFeatureVisibilitySetting('venue');
+    const isVenuePublic = isFeatureOpenToPublic('venue');
+    const canSeeVenueUI = state.isAdmin || isVenuePublic;
+
+    const btnToggleVenueMap = document.getElementById('btnToggleVenueMap');
+    if (btnToggleVenueMap) {
+      btnToggleVenueMap.classList.toggle('hidden', !canSeeVenueUI);
+      btnToggleVenueMap.classList.toggle('inline-flex', Boolean(canSeeVenueUI));
+    }
+
+    const btnToggleVenuePublic = document.getElementById('btnToggleVenuePublic');
+    const btnToggleVenuePublicText = document.getElementById('btnToggleVenuePublicText');
+    if (btnToggleVenuePublic) {
+      btnToggleVenuePublic.classList.toggle('hidden', !state.isAdmin);
+      btnToggleVenuePublic.classList.toggle('inline-flex', Boolean(state.isAdmin));
+      if (isVenuePublic) {
+        btnToggleVenuePublic.className =
+          'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-heading text-xs font-semibold transition shadow-2xs cursor-pointer';
+        if (btnToggleVenuePublicText) {
+          btnToggleVenuePublicText.textContent = 'เปิดแผนผัง/ห้องสอบต่อสาธารณะแล้ว (กดเพื่อซ่อน)';
+        }
+      } else {
+        btnToggleVenuePublic.className =
+          'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-heading text-xs font-semibold transition shadow-2xs cursor-pointer';
+        if (btnToggleVenuePublicText) {
+          btnToggleVenuePublicText.textContent = 'ซ่อนแผนผัง/ห้องสอบจากสาธารณะอยู่ (กดเพื่อเปิด)';
+        }
+      }
+    }
+
+    const venueAdminHiddenBanner = document.getElementById('venueAdminHiddenBanner');
+    if (venueAdminHiddenBanner) {
+      venueAdminHiddenBanner.classList.toggle('hidden', !(state.isAdmin && !isVenuePublic));
+    }
+
+    const btnPrintVenueDir = document.getElementById('btnPrintVenueDirectory');
+    if (btnPrintVenueDir) {
+      if (!canSeeVenueUI) {
+        btnPrintVenueDir.classList.add('hidden');
+        btnPrintVenueDir.classList.remove('inline-flex');
+      } else {
+        btnPrintVenueDir.classList.remove('hidden');
+        btnPrintVenueDir.classList.add('inline-flex');
+        const printUnlocked = Boolean(isVenuePublic);
+        btnPrintVenueDir.disabled = !printUnlocked;
+        if (printUnlocked) {
+          btnPrintVenueDir.className =
+            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs cursor-pointer';
+          btnPrintVenueDir.title = 'พิมพ์ตารางห้องสอบ ใบจัดสนามฝ่ายสถานที่ (ระบุจำนวนโต๊ะ) และป้ายหน้าห้อง (A4)';
+        } else {
+          btnPrintVenueDir.className =
+            'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-400 font-heading text-xs font-medium opacity-60 cursor-not-allowed';
+          btnPrintVenueDir.title =
+            'ปุ่มพิมพ์ถูกปิดไว้ชั่วคราว — กรุณากด "ตั้งค่าเสร็จแล้ว • เปิดเผยต่อสาธารณะ" หลังจากจัดห้องสอบจริงเสร็จแล้ว เพื่อป้องกันการพิมพ์ข้อมูลห้องสมมติ';
+        }
+      }
+    }
+
+    if (!canSeeVenueUI) {
+      state.compRoomFilter = 'ALL';
+    }
+
+    const badgeVisVenue = document.getElementById('badgeVisibilityVenue');
+    if (badgeVisVenue) {
+      if (isVenuePublic) {
+        badgeVisVenue.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-100 text-emerald-800';
+        badgeVisVenue.textContent = 'เปิดทันที (สาธารณะ)';
+      } else {
+        badgeVisVenue.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-rose-100 text-rose-800';
+        badgeVisVenue.textContent = 'ซ่อนเฉพาะแอดมิน';
+      }
+    }
+
+    document.querySelectorAll('[data-feature-toggle="venue"]').forEach(function (b) {
+      const action = b.getAttribute('data-action');
+      const normalized = venueSetting === 'open' ? 'open' : 'hidden';
+      if (action === normalized) {
+        b.className = 'btn-vis-toggle-venue px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white border border-slate-900 transition cursor-pointer';
+      } else {
+        b.className = 'btn-vis-toggle-venue px-3 py-1.5 rounded-lg font-heading text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition cursor-pointer';
+      }
+    });
   }
 
   function renderLockedNotice(featureKey, containerEl) {
@@ -1087,11 +1262,7 @@
     }
     state.config.featureVisibility[featureKey] = action;
     saveState();
-    updateFeatureVisibilityUI();
-    if (featureKey === 'id_cards') {
-      renderSchoolViewTab();
-      renderJudgesTab();
-    }
+    renderAll();
     const meta = FEATURE_MILESTONES[featureKey];
     const metaName = (meta && meta.name) || featureKey;
     let label = '';
@@ -1375,7 +1546,7 @@
     const areas = getLearningAreas();
     const levels = getLevels();
 
-    ['regAreaFilter', 'compViewAreaFilter', 'judgeAreaFilter', 'resAreaFilter'].forEach(function (id) {
+    ['regAreaFilter', 'compViewAreaFilter', 'judgeAreaFilter', 'resAreaFilter', 'bulkSchedAreaFilter'].forEach(function (id) {
       const el = document.getElementById(id);
       if (!el) return;
       const prev = el.value || 'ALL';
@@ -2508,10 +2679,10 @@
     let announcedActiveCount = 0;
     let announcedTotalCount = 0;
     state.competitions.forEach(function (c) {
-      const hasScores = state.registrations.some(function (r) {
-        return r.comp_id === c.comp_id && r.score !== null && r.score !== undefined && r.score !== '';
+      const hasEvaluated = state.registrations.some(function (r) {
+        return r.comp_id === c.comp_id && (hasValidScore(r) || isRegistrationAbsent(r));
       });
-      const isPublished = c.result_status === 'ประกาศผลแล้ว' || hasScores;
+      const isPublished = c.result_status === 'ประกาศผลแล้ว' || hasEvaluated;
       if (isPublished) {
         announcedTotalCount++;
         if ((compRegMap[c.comp_id] || 0) > 0) announcedActiveCount++;
@@ -2533,6 +2704,7 @@
     let silverTotal = 0;
     let bronzeTotal = 0;
     state.registrations.forEach(function (r) {
+      if (isRegistrationAbsent(r) || !hasValidScore(r)) return;
       const m = r.medal || calculateMedalFromScore(r.score);
       if (m.indexOf('ทองแดง') !== -1) bronzeTotal++;
       else if (m.indexOf('ทอง') !== -1) goldTotal++;
@@ -2974,6 +3146,7 @@
       else teamCount++;
       stuCount += (r.students || []).length;
       tchCount += (r.teachers || []).length;
+      if (isRegistrationAbsent(r) || !hasValidScore(r)) return;
       const m = r.medal || calculateMedalFromScore(r.score);
       if (m.indexOf('ทองแดง') !== -1) bronzeCount++;
       else if (m.indexOf('ทอง') !== -1) goldCount++;
@@ -2987,21 +3160,42 @@
     document.getElementById('schKpiStudents').textContent = String(stuCount);
     document.getElementById('schKpiTeachers').textContent = String(tchCount);
 
+    const showScores = shouldShowScoresInTables();
     const medalSummaryEl = document.getElementById('schoolViewMedalSummary');
     if (medalSummaryEl) {
-      medalSummaryEl.innerHTML =
-        '<span class="px-2.5 py-1 rounded-md bg-amber-50 border border-amber-200 text-amber-800">ทอง <strong>' +
-        goldCount +
-        '</strong></span>' +
-        '<span class="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-300 text-slate-700">เงิน <strong>' +
-        silverCount +
-        '</strong></span>' +
-        '<span class="px-2.5 py-1 rounded-md bg-orange-50 border border-orange-200 text-orange-800">ทองแดง <strong>' +
-        bronzeCount +
-        '</strong></span>' +
-        '<span class="px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800">ชนะเลิศ (ตัวแทนกลุ่ม) <strong>' +
-        winCount +
-        '</strong></span>';
+      medalSummaryEl.classList.toggle('hidden', !showScores);
+      medalSummaryEl.innerHTML = showScores
+        ? '<span class="px-2.5 py-1 rounded-md bg-amber-50 border border-amber-200 text-amber-800">ทอง <strong>' +
+          goldCount +
+          '</strong></span>' +
+          '<span class="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-300 text-slate-700">เงิน <strong>' +
+          silverCount +
+          '</strong></span>' +
+          '<span class="px-2.5 py-1 rounded-md bg-orange-50 border border-orange-200 text-orange-800">ทองแดง <strong>' +
+          bronzeCount +
+          '</strong></span>' +
+          '<span class="px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800">ชนะเลิศ (ตัวแทนกลุ่ม) <strong>' +
+          winCount +
+          '</strong></span>'
+        : '';
+    }
+
+    const statusColHeader = document.getElementById('schoolViewStatusColHeader');
+    if (statusColHeader) {
+      statusColHeader.textContent = showScores ? 'ผลคะแนน / รางวัล' : 'สถานะการลงทะเบียน';
+    }
+
+    const btnAdminScorePreview = document.getElementById('btnToggleAdminScorePreview');
+    const btnAdminScorePreviewText = document.getElementById('btnToggleAdminScorePreviewText');
+    if (btnAdminScorePreview) {
+      const canShowToggle = Boolean(state.isAdmin && ENABLE_PHASE_2 && !isFeatureOpenToPublic('results'));
+      btnAdminScorePreview.classList.toggle('hidden', !canShowToggle);
+      btnAdminScorePreview.classList.toggle('inline-flex', canShowToggle);
+      if (btnAdminScorePreviewText) {
+        btnAdminScorePreviewText.textContent = state.adminShowScoresInLists
+          ? 'ซ่อนคอลัมน์คะแนน (โหมดเตรียมสนาม)'
+          : 'ดูคอลัมน์คะแนน (เฉพาะแอดมิน)';
+      }
     }
 
     const tbody = document.getElementById('schoolViewTableBody');
@@ -3046,14 +3240,17 @@
           )
           .join('');
 
-        const medal = r.medal || calculateMedalFromScore(r.score);
-        const award = r.award_title || getAwardTitleFromRank(r.rank, r.score);
-        const hasScore = r.score !== null && r.score !== undefined && r.score !== '';
+        const isAbsent = isRegistrationAbsent(r);
+        const medal = isAbsent ? 'ไม่มาแข่งขัน' : r.medal || calculateMedalFromScore(r.score);
+        const award = isAbsent ? 'ไม่มาแข่งขัน (ขาดสอบ)' : r.award_title || getAwardTitleFromRank(r.rank, r.score);
+        const hasScore = hasValidScore(r);
         const statusBadgeHtml = r.is_sample
           ? '<span class="px-2.5 py-0.5 rounded-full bg-[#FBF3DB] text-[#CB912F] text-xs font-heading">ข้อมูลตัวอย่าง</span>'
           : '<span class="px-2.5 py-0.5 rounded-full bg-[#EDF3EC] text-[#448361] text-xs font-heading">ลงทะเบียนแล้ว</span>';
-        const resultCellHtml = ENABLE_PHASE_2
-          ? hasScore
+        const resultCellHtml = showScores
+          ? isAbsent
+            ? '<div>' + renderMedalBadgeHtml('ไม่มาแข่งขัน') + '</div><div class="text-[10px] text-rose-600 mt-0.5">ไม่ได้เข้าแข่งขัน</div>'
+            : hasScore
             ? '<div class="font-heading font-bold text-[#37352F]">' +
               Number(r.score).toFixed(2) +
               ' คะแนน</div>' +
@@ -3072,9 +3269,10 @@
             '<span>ลบ</span></button>'
           : '';
 
-        const roomSubHtml = ENABLE_PHASE_2
-          ? '<div class="text-[11px] text-[#787774] mt-0.5">' + escapeHtml(roomInfo) + '</div>'
-          : '';
+        const roomSubHtml =
+          ENABLE_PHASE_2 && canUserAccessFeature('venue')
+            ? '<div class="text-[11px] text-[#787774] mt-0.5">' + escapeHtml(roomInfo) + '</div>'
+            : '';
 
         const cardBtnHtml = isIdCardsPrintingEnabled()
           ? '<button type="button" data-sch-cards="' +
@@ -3151,8 +3349,519 @@
   }
 
   // ==========================================
-  // RENDER TAB 4: COMPETITION VIEW (รายรายการ & ตารางสถานที่)
+  // RENDER TAB 4: COMPETITION VIEW (รายรายการ & แผนผัง/ตารางสถานที่)
   // ==========================================
+  function renderVenueMapAndDirectory(regByComp) {
+    const section = document.getElementById('venueMapDirectorySection');
+    const toggleText = document.getElementById('btnToggleVenueMapText');
+    const canSeeVenue = canUserAccessFeature('venue');
+    if (section) {
+      section.classList.toggle('hidden', !canSeeVenue || !state.venueMapExpanded);
+    }
+    if (toggleText) {
+      toggleText.textContent = state.venueMapExpanded
+        ? 'ซ่อนแผนผัง/ห้องสอบ'
+        : 'แผนผังสนามและตารางอาคารเรียน';
+    }
+    if (!section || !canSeeVenue || !state.venueMapExpanded) return;
+
+    // Group competitions by room
+    const roomMap = {};
+    state.competitions.forEach(function (c) {
+      const roomName = (c.venue_room || 'อาคารเรียนรวม ห้อง 101').trim();
+      const buildingName = (c.venue_building || 'โรงเรียนบ้านวังยาววิทยายน').trim();
+      if (!roomMap[roomName]) {
+        roomMap[roomName] = {
+          room: roomName,
+          building: buildingName,
+          comps: [],
+          activeComps: 0,
+          totalTeams: 0
+        };
+      }
+      const teamCount = (regByComp[c.comp_id] || []).length;
+      roomMap[roomName].comps.push(c);
+      if (teamCount > 0) roomMap[roomName].activeComps++;
+      roomMap[roomName].totalTeams += teamCount;
+    });
+
+    const roomsList = Object.keys(roomMap)
+      .map((k) => roomMap[k])
+      .sort(function (a, b) {
+        if (b.activeComps !== a.activeComps) return b.activeComps - a.activeComps;
+        return a.room.localeCompare(b.room, 'th');
+      });
+
+    // Left panel: Uploaded Map or Clean SVG/HTML Interactive Campus Map
+    const visualEl = document.getElementById('venueMapVisualContainer');
+    if (visualEl) {
+      const customMapUrl = state.config && state.config.venueMapImageUrl;
+      if (customMapUrl) {
+        visualEl.innerHTML =
+          '<div class="space-y-2">' +
+          '<img src="' +
+          escapeHtml(customMapUrl) +
+          '" alt="แผนผังสนามแข่งขัน" class="w-full max-h-[300px] object-contain rounded-lg border border-slate-200 bg-white" />' +
+          '<div class="text-[11px] text-slate-500 text-center font-heading">แผนผังสนามแข่งขันโรงเรียนบ้านวังยาววิทยายน (อัปโหลดโดยแอดมิน)</div>' +
+          '</div>';
+      } else {
+        const findRoomByKey = function (kw) {
+          const hit = roomsList.find((rm) => rm.room.indexOf(kw) !== -1);
+          return hit ? hit.room : '';
+        };
+        const zoneConfigs = [
+          { title: 'หอประชุมกลุ่มโรงเรียน', sub: 'ดนตรี / นาฏศิลป์ / ท้องถิ่น', kw: 'หอประชุม', cls: 'bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-950' },
+          { title: 'อาคารเรียนรวม (ห้อง 101)', sub: 'กองอำนวยการ / ประมวลผล / ทั่วไป', kw: '101', cls: 'bg-white border-slate-300 hover:bg-slate-100 text-slate-900' },
+          { title: 'อาคารวิชาการ (คณิต / ไทย)', sub: 'คิดเลขเร็ว / คัดลายมือ / วิชาการ', kw: 'วิชาการ', cls: 'bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-950' },
+          { title: 'ห้องปฏิบัติการคอมพิวเตอร์', sub: 'สร้างการ์ตูน / นำเสนอ / โรบอต', kw: 'คอมพิวเตอร์', cls: 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-950' },
+          { title: 'ห้องปฏิบัติการวิทยาศาสตร์', sub: 'โครงงานวิทย์ / อัจฉริยภาพ', kw: 'วิทยาศาสตร์', cls: 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100 text-indigo-950' },
+          { title: 'อาคารปฐมวัย', sub: 'ปั้นดินน้ำมัน / ฉีกปะ / เล่านิทาน', kw: 'ปฐมวัย', cls: 'bg-rose-50 border-rose-200 hover:bg-rose-100 text-rose-950' }
+        ];
+
+        const zoneCardsHtml = zoneConfigs
+          .map(function (z) {
+            const matchedRooms = roomsList.filter((rm) => rm.room.indexOf(z.kw) !== -1);
+            const compTotal = matchedRooms.reduce((sum, rm) => sum + rm.comps.length, 0);
+            const activeTeams = matchedRooms.reduce((sum, rm) => sum + rm.totalTeams, 0);
+            const targetRoom = findRoomByKey(z.kw);
+            const isSelected = targetRoom && state.compRoomFilter === targetRoom;
+            const ringCls = isSelected ? ' ring-2 ring-slate-900 shadow-sm' : '';
+            return (
+              '<button type="button" data-map-zone-room="' +
+              escapeHtml(targetRoom) +
+              '" class="text-left p-2.5 rounded-lg border transition cursor-pointer ' +
+              z.cls +
+              ringCls +
+              '" ' +
+              (targetRoom ? '' : 'disabled') +
+              '>' +
+              '<div class="flex items-center justify-between gap-1">' +
+              '<span class="font-heading font-bold text-xs truncate">' +
+              escapeHtml(z.title) +
+              '</span>' +
+              '<span class="text-[10px] font-heading font-semibold px-1.5 py-0.5 rounded bg-white/80 border border-black/10 shrink-0">' +
+              compTotal +
+              ' รายการ</span>' +
+              '</div>' +
+              '<div class="text-[11px] opacity-80 truncate mt-0.5">' +
+              escapeHtml(z.sub) +
+              '</div>' +
+              '<div class="text-[10px] font-heading opacity-75 mt-1">มีทีมแข่งแล้ว ' +
+              activeTeams +
+              ' ทีม</div>' +
+              '</button>'
+            );
+          })
+          .join('');
+
+        visualEl.innerHTML =
+          '<div class="space-y-2.5">' +
+          '<div class="flex items-center justify-between text-[11px] font-heading text-slate-600 px-1">' +
+          '<span class="font-semibold text-slate-800">ผังโซนอาคารสนามแข่งขัน (รร.บ้านวังยาววิทยายน)</span>' +
+          '<span>รวม ' +
+          roomsList.length +
+          ' ห้องสอบ</span>' +
+          '</div>' +
+          '<div class="p-2 rounded-lg bg-slate-900 text-white text-center text-[11px] font-heading font-semibold">' +
+          'จุดกองอำนวยการกลาง • รายงานตัวกรรมการ • ศูนย์ประมวลผลคะแนน' +
+          '</div>' +
+          '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">' +
+          zoneCardsHtml +
+          '</div>' +
+          '<div class="text-[10px] text-slate-500 text-center pt-0.5">กดที่โซนอาคารด้านบน หรือกดการ์ดห้องสอบด้านขวาเพื่อกรองดูรายการในห้องนั้น</div>' +
+          '</div>';
+
+        visualEl.querySelectorAll('[data-map-zone-room]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const rm = btn.getAttribute('data-map-zone-room');
+            if (!rm) return;
+            state.compRoomFilter = state.compRoomFilter === rm ? 'ALL' : rm;
+            renderCompetitionViewTab();
+          });
+        });
+      }
+    }
+
+    // Right panel: Building / Room Cards
+    const resetBtn = document.getElementById('btnResetVenueRoomFilter');
+    if (resetBtn) {
+      resetBtn.classList.toggle('hidden', state.compRoomFilter === 'ALL');
+    }
+
+    const cardsEl = document.getElementById('venueRoomCardsContainer');
+    if (cardsEl) {
+      cardsEl.innerHTML = roomsList
+        .map(function (rm) {
+          const isSelected = state.compRoomFilter === rm.room;
+          const borderCls = isSelected
+            ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-500'
+            : 'border-slate-200 bg-[#F7F7F5]/60 hover:bg-[#F1F1EF]';
+          return (
+            '<button type="button" data-filter-room="' +
+            escapeHtml(rm.room) +
+            '" class="text-left p-3 rounded-lg border transition cursor-pointer ' +
+            borderCls +
+            '">' +
+            '<div class="flex items-start justify-between gap-2">' +
+            '<div class="min-w-0">' +
+            '<div class="font-heading font-bold text-xs text-slate-900 truncate">' +
+            escapeHtml(rm.room) +
+            '</div>' +
+            '<div class="text-[11px] text-slate-500 truncate mt-0.5">' +
+            escapeHtml(rm.building) +
+            '</div>' +
+            '</div>' +
+            '<span class="px-2 py-0.5 rounded bg-white border border-slate-200 font-heading font-semibold text-[11px] text-slate-700 shrink-0">' +
+            rm.comps.length +
+            ' รายการ</span>' +
+            '</div>' +
+            '<div class="flex items-center justify-between text-[11px] mt-2 pt-1.5 border-t border-slate-200/70 font-heading">' +
+            '<span class="text-emerald-700 font-medium">มีทีมแข่ง ' +
+            rm.activeComps +
+            ' รายการ</span>' +
+            '<span class="text-slate-600">' +
+            rm.totalTeams +
+            ' ทีม</span>' +
+            '</div>' +
+            '</button>'
+          );
+        })
+        .join('');
+
+      cardsEl.querySelectorAll('[data-filter-room]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const rm = btn.getAttribute('data-filter-room');
+          state.compRoomFilter = state.compRoomFilter === rm ? 'ALL' : rm;
+          renderCompetitionViewTab();
+        });
+      });
+    }
+  }
+
+  function printVenueDirectoryAndDoorSigns() {
+    if (!isFeatureOpenToPublic('venue')) {
+      showToast(
+        'กรุณากด "ตั้งค่าเสร็จแล้ว • เปิดเผยต่อสาธารณะ" หลังตั้งค่าห้องสอบจริงเสร็จก่อน จึงจะสั่งพิมพ์ตารางห้องสอบและป้ายหน้าห้องได้',
+        'warning'
+      );
+      return;
+    }
+    const regByComp = {};
+    state.registrations.forEach(function (r) {
+      if (!regByComp[r.comp_id]) regByComp[r.comp_id] = [];
+      regByComp[r.comp_id].push(r);
+    });
+
+    const roomMap = {};
+    state.competitions.forEach(function (c) {
+      const rm = (c.venue_room || 'อาคารเรียนรวม ห้อง 101').trim();
+      if (!roomMap[rm]) {
+        roomMap[rm] = {
+          room: rm,
+          building: (c.venue_building || 'โรงเรียนบ้านวังยาววิทยายน').trim(),
+          items: []
+        };
+      }
+      roomMap[rm].items.push(c);
+    });
+
+    const rooms = Object.keys(roomMap)
+      .map((k) => roomMap[k])
+      .sort((a, b) => a.room.localeCompare(b.room, 'th'));
+
+    const summaryRowsHtml = [];
+    const venuePrepRowsHtml = [];
+    let seq = 1;
+    let prepSeq = 1;
+    let grandTotalPrepTeams = 0;
+    let grandTotalPrepStudents = 0;
+    let grandTotalPrepTeachers = 0;
+    let activeVenueRoomCount = 0;
+
+    rooms.forEach(function (rm) {
+      let roomHasActive = false;
+      rm.items.forEach(function (c) {
+        const compRegs = regByComp[c.comp_id] || [];
+        const teamCount = compRegs.length;
+        const stuCount = compRegs.reduce((sum, r) => sum + ((r.students || []).length), 0);
+        const tchCount = compRegs.reduce((sum, r) => sum + ((r.teachers || []).length), 0);
+
+        summaryRowsHtml.push(
+          '<tr>' +
+            '<td style="text-align:center;">' +
+            seq++ +
+            '</td>' +
+            '<td style="font-weight:700;">' +
+            escapeHtml(rm.room) +
+            '<div style="font-size:12px;color:#475569;font-weight:400;">' +
+            escapeHtml(rm.building) +
+            '</div></td>' +
+            '<td style="text-align:center;font-weight:600;">' +
+            escapeHtml(c.comp_id) +
+            '</td>' +
+            '<td><strong>' +
+            escapeHtml(c.comp_name) +
+            '</strong><div style="font-size:12px;color:#475569;">' +
+            escapeHtml(c.learning_area) +
+            '</div></td>' +
+            '<td style="text-align:center;">' +
+            escapeHtml(c.level) +
+            '</td>' +
+            '<td style="text-align:center;">' +
+            escapeHtml(c.comp_date || '24–25 พฤศจิกายน 2569') +
+            '<br/>' +
+            escapeHtml(c.comp_time || '09.00 - 12.00 น.') +
+            '</td>' +
+            '<td style="text-align:center;font-weight:700;">' +
+            (teamCount > 0 ? teamCount + ' ทีม' : '-') +
+            '</td>' +
+            '</tr>'
+        );
+
+        if (teamCount > 0) {
+          roomHasActive = true;
+          grandTotalPrepTeams += teamCount;
+          grandTotalPrepStudents += stuCount;
+          grandTotalPrepTeachers += tchCount;
+          const schoolListHtml = compRegs
+            .map(function (r, idx) {
+              const sCnt = (r.students || []).length;
+              return (
+                '<div>' +
+                (idx + 1) +
+                '. ' +
+                escapeHtml(r.school_name) +
+                ' <span style="color:#475569;font-size:12.5pt;">(' +
+                sCnt +
+                ' คน)</span></div>'
+              );
+            })
+            .join('');
+
+          venuePrepRowsHtml.push(
+            '<tr>' +
+              '<td style="text-align:center;">' +
+              prepSeq++ +
+              '</td>' +
+              '<td style="font-weight:700;">' +
+              escapeHtml(rm.room) +
+              '<div style="font-size:12px;color:#475569;font-weight:400;">' +
+              escapeHtml(rm.building) +
+              '</div></td>' +
+              '<td><div><strong>[' +
+              escapeHtml(c.comp_id) +
+              '] ' +
+              escapeHtml(c.comp_name) +
+              '</strong></div><div style="font-size:12px;color:#475569;">ระดับ ' +
+              escapeHtml(c.level) +
+              ' (' +
+              escapeHtml(c.team_type) +
+              ')</div></td>' +
+              '<td style="text-align:center;">' +
+              escapeHtml(c.comp_date || '24–25 พ.ย. 69') +
+              '<br/>' +
+              escapeHtml(c.comp_time || '09.00 - 12.00 น.') +
+              '</td>' +
+              '<td style="text-align:center;font-weight:700;">' +
+              teamCount +
+              ' ทีม</td>' +
+              '<td style="text-align:center;font-weight:700;color:#1e40af;">' +
+              stuCount +
+              ' คน' +
+              '<div style="font-size:11.5pt;color:#475569;font-weight:400;">ครู ' +
+              tchCount +
+              ' คน</div></td>' +
+              '<td>' +
+              schoolListHtml +
+              '</td>' +
+              '</tr>'
+          );
+        }
+      });
+      if (roomHasActive) activeVenueRoomCount++;
+    });
+
+    if (venuePrepRowsHtml.length === 0) {
+      venuePrepRowsHtml.push(
+        '<tr><td colspan="7" style="text-align:center;padding:18px;color:#64748b;">ยังไม่มีรายชื่อผู้เข้าแข่งขันที่ลงทะเบียนในระบบ</td></tr>'
+      );
+    }
+
+    const doorSignsHtml = rooms
+      .map(function (rm) {
+        const activeItems = rm.items.filter((c) => (regByComp[c.comp_id] || []).length > 0);
+        const listToShow = activeItems.length > 0 ? activeItems : rm.items;
+        const itemsRows = listToShow
+          .map(function (c, i) {
+            const cnt = (regByComp[c.comp_id] || []).length;
+            return (
+              '<tr>' +
+              '<td style="text-align:center;width:45px;">' +
+              (i + 1) +
+              '</td>' +
+              '<td style="text-align:center;width:105px;font-weight:700;">' +
+              escapeHtml(c.comp_id) +
+              '</td>' +
+              '<td style="font-weight:700;">' +
+              escapeHtml(c.comp_name) +
+              '</td>' +
+              '<td style="text-align:center;width:100px;">' +
+              escapeHtml(c.level) +
+              '</td>' +
+              '<td style="text-align:center;width:180px;">' +
+              escapeHtml(c.comp_date || '24–25 พ.ย. 69') +
+              ' • ' +
+              escapeHtml(c.comp_time || '09.00 - 12.00 น.') +
+              '</td>' +
+              '<td style="text-align:center;width:85px;font-weight:700;">' +
+              cnt +
+              ' ทีม</td>' +
+              '</tr>'
+            );
+          })
+          .join('');
+
+        return (
+          '<div class="door-sign-page">' +
+          '<div class="door-header">' +
+          '<div class="door-event">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 • กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>' +
+          '<div class="door-room-title">ห้องสอบ: ' +
+          escapeHtml(rm.room) +
+          '</div>' +
+          '<div class="door-building">สนามแข่งขัน: ' +
+          escapeHtml(rm.building) +
+          '</div>' +
+          '</div>' +
+          '<table class="door-table">' +
+          '<thead><tr><th>ที่</th><th>รหัส</th><th>รายการแข่งขันที่จัดสอบในห้องนี้</th><th>ระดับ</th><th>วัน-เวลา</th><th>จำนวนทีม</th></tr></thead>' +
+          '<tbody>' +
+          itemsRows +
+          '</tbody>' +
+          '</table>' +
+          '<div class="door-footer">กรุณารายงานตัวก่อนเวลาแข่งขัน 15 นาที • แต่งกายตามระเบียบและสวมบัตรประจำตัวผู้เข้าแข่งขันตลอดเวลา</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>ตารางสถานที่ห้องสอบ ใบฝ่ายสถานที่ และป้ายหน้าห้อง - งานศิลปหัตถกรรม ครั้งที่ 74</title>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@600;700;800&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 landscape; margin: 10mm 14mm; }
+    * { box-sizing: border-box; }
+    body { font-family: "TH Sarabun New", "Sarabun", sans-serif; color: #0f172a; margin: 0; background: #f8fafc; font-size: 15pt; }
+    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; font-family: 'Prompt', sans-serif; font-size: 13px; }
+    .no-print-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .no-print button { background: #ffffff; color: #0f172a; border: none; padding: 7px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: 'Prompt', sans-serif; font-size: 12px; }
+    .no-print button.prep-btn { background: #dbeafe; color: #1e3a8a; }
+    .no-print button.primary { background: #f59e0b; }
+    .wrap { width: 277mm; margin: 14px auto; background: #fff; padding: 12mm; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .page-break { page-break-before: always; }
+    .title { text-align: center; margin-bottom: 10px; }
+    .title h1 { font-family: 'Prompt', sans-serif; font-size: 18pt; margin: 0 0 2px; }
+    .title h2 { font-size: 15pt; margin: 0; font-weight: 600; color: #334155; }
+    .prep-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; border: 1px solid #cbd5e1; background: #f8fafc; padding: 6px 12px; border-radius: 6px; margin-bottom: 8px; font-size: 14.5pt; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14pt; }
+    th, td { border: 1px solid #334155; padding: 5px 7px; vertical-align: top; }
+    th { background: #f1f5f9; font-weight: 700; text-align: center; }
+    tr { page-break-inside: avoid; }
+    .door-sign-page { width: 277mm; min-height: 185mm; margin: 16px auto; background: #fff; padding: 14mm; border: 2px solid #0f172a; border-radius: 8px; page-break-before: always; display: flex; flex-direction: column; justify-content: space-between; }
+    .door-header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 10px; }
+    .door-event { font-size: 14pt; color: #334155; font-weight: 600; }
+    .door-room-title { font-family: 'Prompt', sans-serif; font-size: 28pt; font-weight: 800; color: #0f172a; margin: 4px 0; }
+    .door-building { font-size: 16pt; font-weight: 700; color: #1e40af; }
+    .door-table { font-size: 15pt; }
+    .door-footer { margin-top: 12px; padding-top: 8px; border-top: 1px dashed #64748b; text-align: center; font-size: 13pt; color: #475569; }
+    body.only-summary #venuePrepSection,
+    body.only-summary .door-sign-page { display: none; }
+    body.only-prep #summarySection,
+    body.only-prep .door-sign-page { display: none; }
+    body.only-prep #venuePrepSection { page-break-before: auto; }
+    body.only-doors #summarySection,
+    body.only-doors #venuePrepSection { display: none; }
+    @media print {
+      body { background: #fff; }
+      .no-print { display: none !important; }
+      .wrap { width: 100%; margin: 0; padding: 0; box-shadow: none; }
+      .door-sign-page { width: 100%; margin: 0; box-shadow: none; }
+      th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div>ตารางห้องสอบ (${rooms.length} ห้อง) • ใบจัดสนามฝ่ายสถานที่ • ป้ายหน้าห้องสอบ</div>
+    <div class="no-print-actions">
+      <button class="prep-btn" onclick="document.body.className='only-prep'; window.print();">พิมพ์ใบจัดสนามฝ่ายสถานที่ (ระบุจำนวนโต๊ะ/รายชื่อ)</button>
+      <button onclick="document.body.className='only-summary'; window.print();">พิมพ์เฉพาะตารางรวม (149 รายการ)</button>
+      <button onclick="document.body.className='only-doors'; window.print();">พิมพ์เฉพาะป้ายหน้าห้อง (${rooms.length} แผ่น)</button>
+      <button class="primary" onclick="document.body.className=''; window.print();">พิมพ์ทั้งหมด</button>
+    </div>
+  </div>
+  <div id="venuePrepSection" class="wrap">
+    <div class="title">
+      <h1>ใบสรุปจัดเตรียมสนามแข่งขันแยกตามห้องสอบ (สำหรับฝ่ายสถานที่ / ไม่มีคะแนน)</h1>
+      <h2>งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 • ณ โรงเรียนบ้านวังยาววิทยายน</h2>
+    </div>
+    <div class="prep-summary">
+      <div><strong>จำนวนห้องสอบที่มีทีมแข่ง:</strong> ${activeVenueRoomCount} ห้อง</div>
+      <div><strong>ทีมสมัครรวม:</strong> ${grandTotalPrepTeams} ทีม</div>
+      <div><strong>จำนวนนักเรียน (โต๊ะ-เก้าอี้สอบที่ต้องเตรียม):</strong> <span style="color:#1e40af;font-weight:700;">${grandTotalPrepStudents} ที่นั่ง</span></div>
+      <div><strong>ครูผู้ฝึกซ้อมรวม:</strong> ${grandTotalPrepTeachers} คน</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:36px;">ที่</th>
+          <th style="width:165px;">ห้องสอบ / อาคาร</th>
+          <th>รายการแข่งขัน (เฉพาะที่มีผู้สมัคร)</th>
+          <th style="width:130px;">วัน-เวลา</th>
+          <th style="width:70px;">ทีม</th>
+          <th style="width:95px;">จำนวนนักเรียน<br/>(จัดโต๊ะ-เก้าอี้)</th>
+          <th style="width:235px;">รายชื่อโรงเรียนที่เข้าแข่งขัน</th>
+        </tr>
+      </thead>
+      <tbody>${venuePrepRowsHtml.join('')}</tbody>
+    </table>
+  </div>
+  <div id="summarySection" class="wrap page-break">
+    <div class="title">
+      <h1>ตารางสถานที่ อาคาร ห้องสอบ และเวลาการแข่งขัน (149 รายการทั้งหมด)</h1>
+      <h2>งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 • กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</h2>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px;">ที่</th>
+          <th style="width:185px;">ห้องสอบ / อาคาร</th>
+          <th style="width:85px;">รหัส</th>
+          <th>กิจกรรมการแข่งขัน</th>
+          <th style="width:85px;">ระดับ</th>
+          <th style="width:155px;">วัน-เวลาแข่งขัน</th>
+          <th style="width:75px;">ทีมสมัคร</th>
+        </tr>
+      </thead>
+      <tbody>${summaryRowsHtml.join('')}</tbody>
+    </table>
+  </div>
+  ${doorSignsHtml}
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป โปรดอนุญาต Pop-up เพื่อพิมพ์ตารางห้องสอบ', 'warning');
+    }
+  }
+
   function renderCompetitionViewTab() {
     const areaFilter = (document.getElementById('compViewAreaFilter') || {}).value || 'ALL';
     const levelFilter = (document.getElementById('compViewLevelFilter') || {}).value || 'ALL';
@@ -3166,9 +3875,24 @@
       regByComp[r.comp_id].push(r);
     });
 
+    renderVenueMapAndDirectory(regByComp);
+
+    const roomBanner = document.getElementById('compRoomFilterBanner');
+    const roomBannerName = document.getElementById('compRoomFilterName');
+    if (roomBanner) {
+      roomBanner.classList.toggle('hidden', state.compRoomFilter === 'ALL');
+    }
+    if (roomBannerName && state.compRoomFilter !== 'ALL') {
+      roomBannerName.textContent = state.compRoomFilter;
+    }
+
     const baseFiltered = state.competitions.filter(function (c) {
       if (areaFilter !== 'ALL' && c.learning_area !== areaFilter) return false;
       if (levelFilter !== 'ALL' && c.level !== levelFilter) return false;
+      if (state.compRoomFilter !== 'ALL') {
+        const cRoom = (c.venue_room || 'อาคารเรียนรวม ห้อง 101').trim();
+        if (cRoom !== state.compRoomFilter) return false;
+      }
       if (keyword) {
         const hay = (
           c.comp_id +
@@ -3178,6 +3902,8 @@
           c.learning_area +
           ' ' +
           c.level +
+          ' ' +
+          (c.venue_building || '') +
           ' ' +
           (c.venue_room || '')
         ).toLowerCase();
@@ -3244,11 +3970,17 @@
           ' • ' +
           (c.comp_time || '09.00 - 12.00 น.') +
           ' • ' +
+          (c.venue_building ? c.venue_building + ' • ' : '') +
           (c.venue_room || 'อาคารเรียนรวม ห้อง 101');
+
+        const showScores = shouldShowScoresInTables();
+        const canPrintScoreSheet = Boolean(
+          state.isAdmin || isFeatureOpenToPublic('results') || isFeatureOpenToPublic('judges')
+        );
 
         let schoolsTableHtml = '';
         if (hasRegs) {
-          const scoreHeaderHtml = ENABLE_PHASE_2 ? '<th class="py-2 px-2 text-center">ผลคะแนน</th>' : '';
+          const scoreHeaderHtml = showScores ? '<th class="py-2 px-2 text-center">ผลคะแนน</th>' : '';
           schoolsTableHtml =
             '<div class="mt-3 pt-3 border-t border-slate-100 overflow-x-auto">' +
             '<table class="w-full text-xs text-left">' +
@@ -3271,15 +4003,17 @@
                 const tchText = (r.teachers || [])
                   .map((t, i) => (i + 1) + '. ' + formatResponsiveNameHtml(t.prefix, t.name))
                   .join('<br/>');
-                const medal = r.medal || calculateMedalFromScore(r.score);
-                const scoreHtml =
-                  r.score !== null && r.score !== undefined && r.score !== ''
-                    ? '<div class="font-heading font-bold text-[#37352F]">' +
-                      Number(r.score).toFixed(2) +
-                      '</div>' +
-                      renderMedalBadgeHtml(medal)
-                    : '<span class="text-slate-400">รอผล</span>';
-                const scoreTdHtml = ENABLE_PHASE_2
+                const isAbsent = isRegistrationAbsent(r);
+                const medal = isAbsent ? 'ไม่มาแข่งขัน' : r.medal || calculateMedalFromScore(r.score);
+                const scoreHtml = isAbsent
+                  ? renderMedalBadgeHtml('ไม่มาแข่งขัน')
+                  : hasValidScore(r)
+                  ? '<div class="font-heading font-bold text-[#37352F]">' +
+                    Number(r.score).toFixed(2) +
+                    '</div>' +
+                    renderMedalBadgeHtml(medal)
+                  : '<span class="text-slate-400">รอผล</span>';
+                const scoreTdHtml = showScores
                   ? '<td class="py-2 px-2 text-center">' + scoreHtml + '</td>'
                   : '';
                 return (
@@ -3314,47 +4048,73 @@
         const exportCompExcelBtnHtml = hasRegs
           ? '<button type="button" data-export-comp-excel="' +
             escapeHtml(c.comp_id) +
-            '" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] font-heading text-xs font-medium transition">' +
+            '" title="ดาวน์โหลดรายชื่อโรงเรียนและนักเรียนในรายการนี้เป็นไฟล์ Excel (.xlsx)" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-[#F1F1EF] text-[#37352F] font-heading text-xs font-medium transition cursor-pointer">' +
             ICONS.table +
             '<span>ดาวน์โหลด Excel</span></button>'
+          : '';
+
+        const scoreSheetBtnHtml = canPrintScoreSheet
+          ? '<button type="button" data-print-scoresheet="' +
+            escapeHtml(c.comp_id) +
+            '" title="พิมพ์ใบสรุปคะแนนกรรมการตัดสินสำหรับรายการนี้ (A4 แนวนอน)" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-[#F1F1EF] text-[#37352F] font-heading text-xs font-medium transition cursor-pointer">' +
+            ICONS.clipboard +
+            '<span>ใบคะแนนกรรมการ</span></button>'
           : '';
 
         const printCheckinBtnHtml = hasRegs
           ? '<button type="button" data-print-checkin="' +
             escapeHtml(c.comp_id) +
-            '" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] font-heading text-xs font-medium transition">' +
+            '" title="พิมพ์ใบรายชื่อจัดสนาม (ฝ่ายสถานที่) หรือใบลงชื่อรายงานตัวหน้าห้องสอบ (A4)" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-[#F1F1EF] text-[#37352F] font-heading text-xs font-medium transition cursor-pointer">' +
             ICONS.print +
-            '<span>ใบลงชื่อหน้าห้อง</span></button>'
+            '<span>พิมพ์ใบรายชื่อ / หน้าห้อง</span></button>' +
+            scoreSheetBtnHtml
           : '';
 
         const adminBtnsHtml =
           ENABLE_PHASE_2 && state.isAdmin
             ? '<button type="button" data-open-schedule="' +
               escapeHtml(c.comp_id) +
-              '" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading text-xs font-medium transition">' +
+              '" title="กำหนดวัน-เวลา อาคาร และห้องสอบของรายการนี้ (เฉพาะแอดมิน)" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-heading text-xs font-medium transition cursor-pointer">' +
               ICONS.calendar +
               '<span>ตั้งค่าห้องสอบ</span></button>' +
               (hasRegs
                 ? '<button type="button" data-open-score="' +
                   escapeHtml(c.comp_id) +
-                  '" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-heading text-xs font-medium transition">' +
+                  '" title="บันทึกคะแนนผลการแข่งขันและจัดอันดับทีมของรายการนี้ (เฉพาะแอดมิน)" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-heading text-xs font-medium transition cursor-pointer">' +
                   ICONS.award +
                   '<span>บันทึกคะแนน</span></button>'
                 : '')
             : '';
 
-        const scheduleInfoLineHtml = ENABLE_PHASE_2
-          ? '<div class="inline-flex items-center gap-1.5 text-xs text-[#787774]">' +
-            ICONS.calendar +
-            '<span>' +
-            escapeHtml(scheduleInfo) +
-            '</span></div>'
+        const actionBarContent = exportCompExcelBtnHtml + printCheckinBtnHtml + adminBtnsHtml;
+        const actionToolbarHtml = actionBarContent
+          ? '<div class="mt-3 p-2.5 rounded-lg bg-[#F7F7F5] border border-slate-200/80 flex flex-wrap items-center gap-2 no-print">' +
+            '<span class="text-[11px] font-heading font-semibold text-[#787774] mr-1">เครื่องมือรายการนี้:</span>' +
+            actionBarContent +
+            '</div>'
           : '';
+
+        const isVenuePublic = isFeatureOpenToPublic('venue');
+        const venueHiddenTagHtml =
+          state.isAdmin && !isVenuePublic
+            ? ' <span class="ml-1.5 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-heading font-semibold">ซ่อนห้องจากสาธารณะ</span>'
+            : '';
+
+        const scheduleInfoLineHtml =
+          ENABLE_PHASE_2 && canUserAccessFeature('venue')
+            ? '<div class="inline-flex flex-wrap items-center gap-1.5 text-xs text-[#787774]">' +
+              ICONS.calendar +
+              '<span>' +
+              escapeHtml(scheduleInfo) +
+              '</span>' +
+              venueHiddenTagHtml +
+              '</div>'
+            : '';
 
         return (
           '<div class="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 transition">' +
-          '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">' +
-          '<div class="space-y-1">' +
+          '<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">' +
+          '<div class="space-y-1 min-w-0 flex-1">' +
           '<div class="flex flex-wrap items-center gap-1.5">' +
           '<span class="px-2 py-0.5 rounded bg-[#E7F3F8] text-[#337EA9] font-heading font-semibold text-xs">' +
           escapeHtml(c.comp_id) +
@@ -3378,17 +4138,15 @@
           '</div>' +
           '<div class="flex flex-wrap items-center gap-2 shrink-0">' +
           badgeHtml +
-          exportCompExcelBtnHtml +
-          printCheckinBtnHtml +
-          adminBtnsHtml +
           '<button type="button" data-quick-register="' +
           escapeHtml(c.comp_id) +
-          '" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#37352F] hover:bg-slate-800 text-white font-heading text-xs font-medium transition">' +
+          '" title="เปิดหน้าลงทะเบียนโดยเลือกรายการนี้ให้อัตโนมัติ" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#37352F] hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer">' +
           ICONS.plus +
           '<span>สมัครรายการนี้</span>' +
           '</button>' +
           '</div>' +
           '</div>' +
+          actionToolbarHtml +
           schoolsTableHtml +
           '</div>'
         );
@@ -3419,6 +4177,12 @@
       });
     });
 
+    container.querySelectorAll('[data-print-scoresheet]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        printCompetitionJudgeScoreSheet(btn.getAttribute('data-print-scoresheet'));
+      });
+    });
+
     container.querySelectorAll('[data-export-comp-excel]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         exportCompetitionExcel(btn.getAttribute('data-export-comp-excel'));
@@ -3438,16 +4202,96 @@
     });
   }
 
-  // Print Competition Check-in Sheet (แบบลงทะเบียนนักเรียนผู้เข้าแข่งขัน - A4 แนวนอน TH Sarabun New 16pt)
-  function printCompetitionCheckinSheet(compId) {
+  // Unified Multi-Mode Printable Form per Competition (A4 แนวนอน TH Sarabun New 16pt)
+  // Mode 'venue': ใบรายชื่อผู้เข้าแข่งขัน (ฝ่ายสถานที่ / จัดเตรียมสนาม — ไม่มีคะแนน)
+  // Mode 'checkin': ใบลงชื่อรายงานตัวหน้าห้องสอบ (ไม่มีคะแนน)
+  // Mode 'scoresheet': ใบบันทึกคะแนนกรรมการตัดสิน (แสดงเฉพาะแอดมิน หรือเมื่อเปิดโหมดวันแข่งขัน)
+  function printCompetitionCheckinSheet(compId, initialMode) {
     const comp = state.competitions.find((c) => c.comp_id === compId);
     if (!comp) return;
+    // Maintain exact same ordering as Score Entry Modal so admin can read line-by-line
     const regs = state.registrations.filter((r) => r.comp_id === compId);
+    const allowScoreSheet = Boolean(
+      state.isAdmin || isFeatureOpenToPublic('results') || isFeatureOpenToPublic('judges')
+    );
 
-    const rowsHtml = regs
+    let startMode = initialMode || 'checkin';
+    if (startMode === 'scoresheet' && !allowScoreSheet) {
+      startMode = 'venue';
+    }
+
+    const totalTeams = regs.length;
+    const totalStudents = regs.reduce((sum, r) => sum + ((r.students || []).length), 0);
+    const totalTeachers = regs.reduce((sum, r) => sum + ((r.teachers || []).length), 0);
+
+    const buildingName = comp.venue_building || 'โรงเรียนบ้านวังยาววิทยายน';
+    const roomName = comp.venue_room || 'อาคารเรียนรวม ห้อง 101';
+    const compDateStr = comp.comp_date || '24–25 พฤศจิกายน 2569';
+    const compTimeStr = comp.comp_time || '09.00 - 12.00 น.';
+    const showVenueSchedule = isFeatureOpenToPublic('venue');
+
+    // 1. Rows for Venue Prep Sheet (ฝ่ายสถานที่ — ไม่มีคะแนน ไม่มีช่องลายเซ็น)
+    const venueRowsHtml =
+      regs.length > 0
+        ? regs
+            .map(function (r, idx) {
+              const sch = state.schools.find((s) => s.school_name === r.school_name);
+              const subdistrict = sch ? sch.subdistrict : '';
+              const students = r.students || [];
+              const teachers = r.teachers || [];
+              const stuHtml = students
+                .map(function (s, i) {
+                  return (
+                    '<div class="row-subitem">' +
+                    (i + 1) +
+                    '. ' +
+                    escapeHtml(formatFullNameForPrint(s.prefix, s.name)) +
+                    ' (' +
+                    escapeHtml(s.grade || '-') +
+                    ')</div>'
+                  );
+                })
+                .join('');
+              const tchHtml = teachers
+                .map(function (t, i) {
+                  return (
+                    '<div class="row-subitem">' +
+                    (i + 1) +
+                    '. ' +
+                    escapeHtml(formatFullNameForPrint(t.prefix, t.name)) +
+                    '</div>'
+                  );
+                })
+                .join('');
+              return (
+                '<tr>' +
+                '<td class="text-center font-bold">' +
+                (idx + 1) +
+                '</td>' +
+                '<td class="font-bold">' +
+                escapeHtml(r.school_name) +
+                '</td>' +
+                '<td class="text-center">' +
+                escapeHtml(subdistrict || '-') +
+                '</td>' +
+                '<td>' +
+                (stuHtml || '-') +
+                '</td>' +
+                '<td>' +
+                (tchHtml || '-') +
+                '</td>' +
+                '<td class="text-center">จำนวน ' +
+                students.length +
+                ' คน</td>' +
+                '</tr>'
+              );
+            })
+            .join('')
+        : '<tr><td colspan="6" class="text-center">ยังไม่มีโรงเรียนลงทะเบียนในรายการนี้</td></tr>';
+
+    // 2. Rows for Check-in Sheet (ลงชื่อรายงานตัวหน้าห้องสอบ — ไม่มีคะแนน)
+    const checkinRowsHtml = regs
       .map(function (r, idx) {
-        const sch = state.schools.find((s) => s.school_name === r.school_name);
-        const subdistrict = sch ? sch.subdistrict : '';
         const students = r.students || [];
         const teachers = r.teachers || [];
 
@@ -3459,7 +4303,7 @@
               '. ' +
               escapeHtml(formatFullNameForPrint(s.prefix, s.name)) +
               ' (' +
-              escapeHtml(s.grade) +
+              escapeHtml(s.grade || '-') +
               ')</div>'
             );
           })
@@ -3473,7 +4317,13 @@
 
         const tchHtml = teachers
           .map(function (t, i) {
-            return '<div class="row-subitem">' + (i + 1) + '. ' + escapeHtml(formatFullNameForPrint(t.prefix, t.name)) + '</div>';
+            return (
+              '<div class="row-subitem">' +
+              (i + 1) +
+              '. ' +
+              escapeHtml(formatFullNameForPrint(t.prefix, t.name)) +
+              '</div>'
+            );
           })
           .join('');
 
@@ -3499,12 +4349,10 @@
       })
       .join('');
 
-    // If fewer than 2 registrations, add extra blank rows for committee note/addition if needed
-    let blankRowsHtml = '';
-    const currentCount = regs.length;
-    if (currentCount < 3) {
-      for (let b = currentCount + 1; b <= 3; b++) {
-        blankRowsHtml +=
+    let checkinBlankRowsHtml = '';
+    if (regs.length < 3) {
+      for (let b = regs.length + 1; b <= 3; b++) {
+        checkinBlankRowsHtml +=
           '<tr class="blank-row">' +
           '<td class="text-center">' +
           b +
@@ -3517,113 +4365,304 @@
       }
     }
 
-    const w = window.open('', '_blank', 'width=1100,height=800');
+    // 3. Rows & Judges for Official Judge Score Sheet (ใบบันทึกคะแนนกรรมการตัดสิน)
+    const roleRank = { 'ประธานกรรมการ': 1, 'กรรมการ': 2, 'กรรมการและเลขานุการ': 3 };
+    const compJudges = (state.judges || [])
+      .filter((j) => j.comp_id === compId)
+      .slice()
+      .sort((a, b) => (roleRank[a.role] || 9) - (roleRank[b.role] || 9));
+
+    const judgeCellsHtml = [0, 1, 2]
+      .map(function (i) {
+        const j = compJudges[i];
+        if (j) {
+          const jName = formatFullNameForPrint(j.prefix, j.judge_name || j.full_name || '');
+          const jRole = j.role || 'กรรมการตัดสิน';
+          return (
+            '<td>ลงชื่อ ............................................................<br/>( ' +
+            escapeHtml(jName) +
+            ' )<br/>' +
+            escapeHtml(jRole) +
+            (j.school_name ? ' • ' + escapeHtml(j.school_name) : '') +
+            '</td>'
+          );
+        }
+        return (
+          '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>' +
+          (i === 0 ? 'ประธานกรรมการ' : i === 2 ? 'กรรมการและเลขานุการ' : 'กรรมการตัดสิน') +
+          '</td>'
+        );
+      })
+      .join('');
+
+    let scoreSectionHtml = '';
+    if (allowScoreSheet) {
+      const scoreRowsHtml = regs
+        .map(function (r, idx) {
+          const students = r.students || [];
+          const stuHtml = students
+            .map(function (s, i) {
+              return (
+                '<div class="row-subitem">' +
+                (i + 1) +
+                '. ' +
+                escapeHtml(formatFullNameForPrint(s.prefix, s.name)) +
+                ' (' +
+                escapeHtml(s.grade || '-') +
+                ')</div>'
+              );
+            })
+            .join('');
+          return (
+            '<tr>' +
+            '<td class="text-center font-bold">' +
+            (idx + 1) +
+            '</td>' +
+            '<td class="font-bold">' +
+            escapeHtml(r.school_name) +
+            '</td>' +
+            '<td>' +
+            (stuHtml || '-') +
+            '</td>' +
+            '<td></td>' +
+            '<td></td>' +
+            '<td></td>' +
+            '<td></td>' +
+            '<td></td>' +
+            '<td></td>' +
+            '<td></td>' +
+            '</tr>'
+          );
+        })
+        .join('');
+
+      let scoreBlankRowsHtml = '';
+      if (regs.length < 3) {
+        for (let b = regs.length + 1; b <= 3; b++) {
+          scoreBlankRowsHtml +=
+            '<tr><td class="text-center">' +
+            b +
+            '</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+        }
+      }
+
+      scoreSectionHtml =
+        '<div id="docJudgeScoreSheet" class="doc-section">' +
+        '<div class="header-title">' +
+        '<div class="title-1">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>' +
+        '<div class="title-2">ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>' +
+        '<div class="title-3">ใบสรุปผลการตัดสินและบันทึกคะแนนการแข่งขัน (ส่งกองอำนวยการเพื่อประกาศผล)</div>' +
+        '</div>' +
+        '<div class="meta-row">' +
+        '<div><strong>กิจกรรม:</strong> [' +
+        escapeHtml(comp.comp_id) +
+        '] ' +
+        escapeHtml(comp.comp_name) +
+        '</div>' +
+        '<div><strong>หมวด:</strong> ' +
+        escapeHtml(comp.learning_area) +
+        ' • <strong>ระดับ:</strong> ' +
+        escapeHtml(comp.level) +
+        ' (' +
+        escapeHtml(comp.team_type) +
+        ')</div>' +
+        '</div>' +
+        (showVenueSchedule
+          ? '<div class="meta-row">' +
+            '<div><strong>วันที่แข่งขัน:</strong> ' +
+            escapeHtml(compDateStr) +
+            ' • <strong>เวลา:</strong> ' +
+            escapeHtml(compTimeStr) +
+            '</div>' +
+            '<div><strong>สถานที่/ห้องสอบ:</strong> ' +
+            escapeHtml(buildingName) +
+            ' (' +
+            escapeHtml(roomName) +
+            ')</div>' +
+            '</div>'
+          : '') +
+        '<table class="official-table score-table">' +
+        '<thead>' +
+        '<tr>' +
+        '<th style="width:36px;">ที่</th>' +
+        '<th style="width:170px;">โรงเรียน</th>' +
+        '<th>รายชื่อนักเรียนผู้เข้าแข่งขัน</th>' +
+        '<th style="width:76px;">กรรมการ<br/>คนที่ 1 (100)</th>' +
+        '<th style="width:76px;">กรรมการ<br/>คนที่ 2 (100)</th>' +
+        '<th style="width:76px;">กรรมการ<br/>คนที่ 3 (100)</th>' +
+        '<th style="width:72px;">คะแนนรวม<br/>(300)</th>' +
+        '<th style="width:78px;">คะแนนเฉลี่ย<br/>(100)</th>' +
+        '<th style="width:105px;">เหรียญ /<br/>อันดับที่ได้</th>' +
+        '<th style="width:105px;">หมายเหตุ<br/>(ขาดสอบ/ชี้ขาด)</th>' +
+        '</tr>' +
+        '</thead>' +
+        '<tbody>' +
+        scoreRowsHtml +
+        scoreBlankRowsHtml +
+        '</tbody>' +
+        '</table>' +
+        '<div class="criteria-note">' +
+        '<strong>เกณฑ์เหรียญรางวัล (คะแนนเต็ม 100):</strong> ร้อยละ 80.00–100.00 = เหรียญทอง • 70.00–79.99 = เหรียญเงิน • 60.00–69.99 = เหรียญทองแดง • ต่ำกว่า 60.00 = เข้าร่วม • ' +
+        '<strong>หมายเหตุ:</strong> กรณีไม่มาแข่งขันให้ระบุคำว่า "ขาดสอบ" ในช่องหมายเหตุ และหากมีทีมคะแนนเท่ากันให้คณะกรรมการพิจารณาชี้ขาดอันดับให้ชัดเจนเพื่อคัดเลือกตัวแทนกลุ่มโรงเรียน' +
+        '</div>' +
+        '<div class="judges-section">' +
+        '<table class="judges-table"><tr>' +
+        judgeCellsHtml +
+        '</tr></table>' +
+        '</div>' +
+        '</div>';
+    }
+
+    const w = window.open('', '_blank', 'width=1150,height=800');
     if (!w) {
-      window.print();
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป โปรดอนุญาต Pop-up เพื่อพิมพ์เอกสาร', 'warning');
       return;
     }
+
+    const scoreBtnHtml = allowScoreSheet
+      ? '<button type="button" id="btnModeScore" class="mode-btn' +
+        (startMode === 'scoresheet' ? ' active-mode' : '') +
+        '" onclick="setDocMode(\'scoresheet\')">3. ใบบันทึกคะแนนกรรมการตัดสิน</button>'
+      : '';
 
     const htmlDoc =
       '<!DOCTYPE html>' +
       '<html lang="th">' +
       '<head>' +
       '<meta charset="UTF-8">' +
-      '<title>แบบลงทะเบียนผู้เข้าแข่งขัน - ' +
+      '<title>เอกสารรายการแข่งขัน - ' +
       escapeHtml(comp.comp_id) +
       '</title>' +
+      '<script>' +
+      'function setDocMode(mode){' +
+      '  if(document.body) document.body.setAttribute("data-mode", mode);' +
+      '  var map = { venue: "btnModeVenue", checkin: "btnModeCheckin", scoresheet: "btnModeScore" };' +
+      '  Object.keys(map).forEach(function(k){' +
+      '    var el = document.getElementById(map[k]);' +
+      '    if(el){ if(k === mode) el.classList.add("active-mode"); else el.classList.remove("active-mode"); }' +
+      '  });' +
+      '}' +
+      '<\/script>' +
       '<link rel="preconnect" href="https://fonts.googleapis.com">' +
       '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
-      '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
+      '<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
       '<style>' +
-      '@page {' +
-      '  size: A4 landscape;' +
-      '  margin: 10mm 15mm 10mm 15mm;' +
-      '}' +
+      '@page { size: A4 landscape; margin: 10mm 14mm; }' +
       '* { box-sizing: border-box; }' +
-      'body {' +
-      '  font-family: "TH Sarabun New", "TH Sarabun PSK", "Sarabun", sans-serif;' +
-      '  font-size: 16pt;' +
-      '  line-height: 1.35;' +
-      '  color: #000;' +
-      '  background: #fff;' +
-      '  margin: 0;' +
-      '  padding: 0;' +
-      '  -webkit-print-color-adjust: exact;' +
-      '  print-color-adjust: exact;' +
-      '}' +
-      '.header-title {' +
-      '  text-align: center;' +
-      '  margin-bottom: 10px;' +
-      '}' +
+      'body { font-family: "TH Sarabun New", "TH Sarabun PSK", "Sarabun", sans-serif; font-size: 16pt; line-height: 1.35; color: #000; background: #fff; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
+      '.no-print { padding: 10px 16px; background: #0f172a; color: #fff; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; font-family: "Prompt", "Sarabun", sans-serif; font-size: 12px; }' +
+      '.no-print-modes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }' +
+      '.mode-btn { background: #1e293b; color: #e2e8f0; border: 1px solid #475569; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; font-family: "Prompt", sans-serif; font-size: 12px; }' +
+      '.mode-btn.active-mode { background: #38bdf8; color: #0f172a; border-color: #38bdf8; }' +
+      '.print-btn { background: #f59e0b; color: #0f172a; border: none; padding: 7px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; font-family: "Prompt", sans-serif; font-size: 12.5px; }' +
+      '.doc-section { display: none; padding: 0 4px; }' +
+      'body[data-mode="venue"] #docVenueList { display: block; }' +
+      'body[data-mode="checkin"] #docCheckinSheet { display: block; }' +
+      'body[data-mode="scoresheet"] #docJudgeScoreSheet { display: block; }' +
+      '@media print { .no-print { display: none !important; } .doc-section { padding: 0; } }' +
+      '.header-title { text-align: center; margin-bottom: 10px; }' +
       '.title-1 { font-size: 19pt; font-weight: bold; line-height: 1.25; }' +
       '.title-2 { font-size: 17pt; font-weight: bold; line-height: 1.25; }' +
       '.title-3 { font-size: 18pt; font-weight: bold; margin-top: 2px; text-decoration: underline; }' +
-      '.meta-row {' +
-      '  display: flex;' +
-      '  justify-content: space-between;' +
-      '  font-size: 16pt;' +
-      '  margin-bottom: 2px;' +
-      '}' +
-      'table.official-table {' +
-      '  width: 100%;' +
-      '  border-collapse: collapse;' +
-      '  margin-top: 8px;' +
-      '  font-size: 16pt;' +
-      '}' +
-      'table.official-table th {' +
-      '  border: 1px solid #000;' +
-      '  padding: 6px 6px;' +
-      '  background-color: #f2f2f2;' +
-      '  font-weight: bold;' +
-      '  text-align: center;' +
-      '}' +
-      'table.official-table td {' +
-      '  border: 1px solid #000;' +
-      '  padding: 6px 6px;' +
-      '  vertical-align: top;' +
-      '}' +
+      '.meta-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 16pt; margin-bottom: 2px; }' +
+      '.venue-summary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid #334155; background: #f8fafc; padding: 5px 12px; margin-top: 6px; font-size: 15.5pt; }' +
+      'table.official-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 16pt; }' +
+      'table.official-table.score-table { font-size: 14.5pt; margin-top: 6px; }' +
+      'table.official-table th { border: 1px solid #000; padding: 6px 6px; background-color: #f2f2f2; font-weight: bold; text-align: center; vertical-align: middle; }' +
+      'table.official-table td { border: 1px solid #000; padding: 6px 6px; vertical-align: top; min-height: 30px; }' +
       '.text-center { text-align: center; }' +
       '.font-bold { font-weight: bold; }' +
-      '.row-subitem {' +
-      '  min-height: 28px;' +
-      '  line-height: 28px;' +
-      '}' +
-      '.sig-cell {' +
-      '  color: #444;' +
-      '  text-align: center;' +
-      '  white-space: nowrap;' +
-      '}' +
-      '.judges-section {' +
-      '  margin-top: 20px;' +
-      '  page-break-inside: avoid;' +
-      '}' +
-      '.judges-title {' +
-      '  font-size: 16pt;' +
-      '  font-weight: bold;' +
-      '  margin-bottom: 6px;' +
-      '}' +
-      'table.judges-table {' +
-      '  width: 100%;' +
-      '  border: none;' +
-      '  font-size: 16pt;' +
-      '  border-collapse: collapse;' +
-      '}' +
-      'table.judges-table td {' +
-      '  border: none;' +
-      '  text-align: center;' +
-      '  width: 33.33%;' +
-      '  padding: 4px;' +
-      '  vertical-align: top;' +
-      '  line-height: 1.6;' +
-      '}' +
-      '.footer-note {' +
-      '  font-size: 13pt;' +
-      '  color: #555;' +
-      '  margin-top: 8px;' +
-      '}' +
+      '.row-subitem { min-height: 26px; line-height: 26px; }' +
+      '.sig-cell { color: #444; text-align: center; white-space: nowrap; }' +
+      '.criteria-note { font-size: 13.5pt; margin-top: 6px; padding: 5px 8px; border: 1px solid #999; background: #fafafa; }' +
+      '.judges-section { margin-top: 18px; page-break-inside: avoid; }' +
+      '.judges-title { font-size: 16pt; font-weight: bold; margin-bottom: 6px; }' +
+      'table.judges-table { width: 100%; border: none; font-size: 15.5pt; border-collapse: collapse; }' +
+      'table.judges-table td { border: none; text-align: center; width: 33.33%; padding: 4px; vertical-align: top; line-height: 1.55; }' +
+      '.footer-note { font-size: 13pt; color: #555; margin-top: 8px; }' +
       '</style>' +
       '</head>' +
-      '<body>' +
+      '<body data-mode="' +
+      escapeHtml(startMode) +
+      '">' +
+      '<div class="no-print">' +
+      '<div class="no-print-modes">' +
+      '<span style="font-weight:700;color:#94a3b8;margin-right:4px;">เลือกรูปแบบพิมพ์:</span>' +
+      '<button type="button" id="btnModeVenue" class="mode-btn' +
+      (startMode === 'venue' ? ' active-mode' : '') +
+      '" onclick="setDocMode(\'venue\')">1. ใบรายชื่อผู้เข้าแข่งขัน (ฝ่ายสถานที่ / ไม่มีคะแนน)</button>' +
+      '<button type="button" id="btnModeCheckin" class="mode-btn' +
+      (startMode === 'checkin' ? ' active-mode' : '') +
+      '" onclick="setDocMode(\'checkin\')">2. ใบลงชื่อรายงานตัวหน้าห้องสอบ</button>' +
+      scoreBtnHtml +
+      '</div>' +
+      '<button type="button" class="print-btn" onclick="window.print()">สั่งพิมพ์หน้านี้ (A4 แนวนอน)</button>' +
+      '</div>' +
+      // Section 1: Venue List (No scores, no check-in signature lines)
+      '<div id="docVenueList" class="doc-section">' +
+      '<div class="header-title">' +
+      '<div class="title-1">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>' +
+      '<div class="title-2">ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>' +
+      '<div class="title-3">บัญชีรายชื่อผู้เข้าแข่งขันและข้อมูลการจัดเตรียมสถานที่ (สำหรับฝ่ายสถานที่)</div>' +
+      '</div>' +
+      '<div class="meta-row">' +
+      '<div><strong>กิจกรรม:</strong> [' +
+      escapeHtml(comp.comp_id) +
+      '] ' +
+      escapeHtml(comp.comp_name) +
+      '</div>' +
+      '<div><strong>ระดับ:</strong> ' +
+      escapeHtml(comp.level) +
+      ' • <strong>ประเภท:</strong> ' +
+      escapeHtml(comp.team_type) +
+      ' • <strong>หมวด:</strong> ' +
+      escapeHtml(comp.learning_area) +
+      '</div>' +
+      '</div>' +
+      (showVenueSchedule
+        ? '<div class="meta-row">' +
+          '<div><strong>สถานที่/ห้องสอบ:</strong> ' +
+          escapeHtml(buildingName) +
+          ' (' +
+          escapeHtml(roomName) +
+          ')</div>' +
+          '<div><strong>กำหนดการแข่งขัน:</strong> ' +
+          escapeHtml(compDateStr) +
+          ' เวลา ' +
+          escapeHtml(compTimeStr) +
+          '</div>' +
+          '</div>'
+        : '') +
+      '<div class="venue-summary">' +
+      '<div><strong>ผู้เข้าแข่งขันรวม:</strong> ' +
+      totalTeams +
+      ' โรงเรียน</div>' +
+      '<div><strong>จำนวนนักเรียน (โต๊ะ-เก้าอี้สอบที่ต้องเตรียม):</strong> ' +
+      totalStudents +
+      ' ที่นั่ง</div>' +
+      '<div><strong>ครูผู้ฝึกซ้อมรวม:</strong> ' +
+      totalTeachers +
+      ' คน</div>' +
+      '</div>' +
+      '<table class="official-table">' +
+      '<thead>' +
+      '<tr>' +
+      '<th style="width:45px;">ลำดับ</th>' +
+      '<th style="width:210px;">โรงเรียน</th>' +
+      '<th style="width:105px;">ตำบล</th>' +
+      '<th>ผู้เข้าแข่งขัน (นักเรียน)</th>' +
+      '<th style="width:220px;">ครูผู้ฝึกซ้อม</th>' +
+      '<th style="width:120px;">หมายเหตุจัดสถานที่</th>' +
+      '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+      venueRowsHtml +
+      '</tbody>' +
+      '</table>' +
+      '<div class="footer-note">เอกสารสำหรับฝ่ายสถานที่และกองอำนวยการเพื่อจัดเตรียมห้องสอบ โต๊ะ-เก้าอี้ และอุปกรณ์ (ไม่มีข้อมูลคะแนน)</div>' +
+      '</div>' +
+      // Section 2: Check-in Sheet (No scores)
+      '<div id="docCheckinSheet" class="doc-section">' +
       '<div class="header-title">' +
       '<div class="title-1">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>' +
       '<div class="title-2">ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>' +
@@ -3645,7 +4684,17 @@
       ' &nbsp;&nbsp; <strong>หมวดกิจกรรม:</strong> ' +
       escapeHtml(comp.learning_area) +
       '</div>' +
-      '<div><strong>สถานที่แข่งขัน:</strong> ณ โรงเรียนบ้านวังยาววิทยายน</div>' +
+      (showVenueSchedule
+        ? '<div><strong>สถานที่/เวลา:</strong> ' +
+          escapeHtml(buildingName) +
+          ' (' +
+          escapeHtml(roomName) +
+          ') • ' +
+          escapeHtml(compDateStr) +
+          ' ' +
+          escapeHtml(compTimeStr) +
+          '</div>'
+        : '') +
       '</div>' +
       '<table class="official-table">' +
       '<thead>' +
@@ -3658,27 +4707,32 @@
       '</tr>' +
       '</thead>' +
       '<tbody>' +
-      rowsHtml +
-      blankRowsHtml +
+      checkinRowsHtml +
+      checkinBlankRowsHtml +
       '</tbody>' +
       '</table>' +
       '<div class="judges-section">' +
       '<div class="judges-title">กรรมการตัดสิน</div>' +
       '<table class="judges-table">' +
       '<tr>' +
-      '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>เบอร์โทร ....................................................</td>' +
-      '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>เบอร์โทร ....................................................</td>' +
-      '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>เบอร์โทร ....................................................</td>' +
+      judgeCellsHtml +
       '</tr>' +
       '</table>' +
-      '<div class="footer-note">นัดหมายประชุมคณะกรรมการตัดสิน: วันจันทร์ที่ 23 พฤศจิกายน 2569 เวลา 13.30 น. ณ โรงเรียนบ้านวังยาววิทยายน • กำหนดการแข่งขัน 24–25 พ.ย. 2569 • หมายเหตุ ศูนย์พัฒนาวิชาการปรับใช้ได้ตามความเหมาะสม</div>' +
+      '<div class="footer-note">นัดหมายประชุมคณะกรรมการตัดสิน: วันจันทร์ที่ 23 พฤศจิกายน 2569 เวลา 13.30 น. ณ โรงเรียนบ้านวังยาววิทยายน • กำหนดการแข่งขัน 24–25 พ.ย. 2569</div>' +
       '</div>' +
-      '<script>window.onload=function(){window.print();};<\/script>' +
+      '</div>' +
+      scoreSectionHtml +
       '</body>' +
       '</html>';
 
+    w.document.open();
     w.document.write(htmlDoc);
     w.document.close();
+  }
+
+  // Open Unified Printable Sheet directly in Official Judge Score Sheet mode
+  function printCompetitionJudgeScoreSheet(compId) {
+    printCompetitionCheckinSheet(compId, 'scoresheet');
   }
 
   // Print Competition Table of Contents (สารบัญรายการแข่งขัน - A4 แนวนอน TH Sarabun New 16pt)
@@ -4196,7 +5250,8 @@
 
     let seq = 1;
     state.registrations.forEach(function (r) {
-      const scoreVal = r.score !== '' && r.score !== undefined && r.score !== null ? r.score : '';
+      if (isRegistrationAbsent(r)) return;
+      const scoreVal = hasValidScore(r) ? r.score : '';
       const medalVal = r.medal || (scoreVal !== '' ? calculateMedalFromScore(scoreVal) : 'เข้าร่วม');
       const awardVal = r.award_title || medalVal;
       const baseCert = r.cert_code || ('CERT-74-' + r.comp_id);
@@ -4465,20 +5520,97 @@
       regsByComp[r.comp_id].push(r);
     });
 
-    // 1. Render Subview: By Competition
+    // 1. Render Progress & Quick Filter Bar
+    const activeCompsAll = state.competitions.filter((c) => (regsByComp[c.comp_id] || []).length > 0);
+    let announcedActiveCount = 0;
+    let unresolvedTieCount = 0;
+    activeCompsAll.forEach(function (c) {
+      const regs = regsByComp[c.comp_id] || [];
+      const hasEvaluated = regs.some((r) => hasValidScore(r) || isRegistrationAbsent(r));
+      if (c.result_status === 'ประกาศผลแล้ว' || hasEvaluated) announcedActiveCount++;
+      if (getCompetitionTieStats(c.comp_id).hasUnresolvedTie) unresolvedTieCount++;
+    });
+    const pendingActiveCount = Math.max(0, activeCompsAll.length - announcedActiveCount);
+    const pctDone = activeCompsAll.length > 0 ? Math.round((announcedActiveCount / activeCompsAll.length) * 100) : 0;
+
+    const resStatusEl = document.getElementById('resStatusFilter');
+    const resStatus = resStatusEl ? resStatusEl.value || 'ACTIVE' : 'ACTIVE';
+
+    const progressBarEl = document.getElementById('resultsAdminProgressBar');
+    if (progressBarEl) {
+      const quickPills = [
+        { key: 'ACTIVE', label: 'ทั้งหมดที่มีทีมแข่ง (' + activeCompsAll.length + ')' },
+        { key: 'PENDING', label: 'รอบันทึกผล (' + pendingActiveCount + ')' },
+        { key: 'ANNOUNCED', label: 'ประกาศผลแล้ว (' + announcedActiveCount + ')' },
+        { key: 'TIED', label: 'คะแนนเท่ากันรอชี้ขาด (' + unresolvedTieCount + ')' }
+      ];
+      const pillsHtml = quickPills
+        .map(function (p) {
+          const isAct = resStatus === p.key;
+          const cls = isAct
+            ? 'bg-slate-900 text-white border-slate-900'
+            : p.key === 'TIED' && unresolvedTieCount > 0
+            ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100';
+          return (
+            '<button type="button" data-res-quick-filter="' +
+            p.key +
+            '" class="px-2.5 py-1 rounded-lg border font-heading text-xs font-medium transition cursor-pointer ' +
+            cls +
+            '">' +
+            escapeHtml(p.label) +
+            '</button>'
+          );
+        })
+        .join('');
+
+      progressBarEl.innerHTML =
+        '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">' +
+        '<div class="font-heading text-slate-800">' +
+        '<span class="font-bold">ความคืบหน้าการบันทึกคะแนน:</span> ประกาศผลแล้ว ' +
+        '<strong class="text-emerald-700">' +
+        announcedActiveCount +
+        '</strong> / ' +
+        activeCompsAll.length +
+        ' รายการที่มีทีมแข่ง (' +
+        pctDone +
+        '%)' +
+        '</div>' +
+        '<div class="w-full sm:w-56 h-2 rounded-full bg-slate-200 overflow-hidden">' +
+        '<div class="h-full bg-emerald-600 transition-all duration-300" style="width:' +
+        pctDone +
+        '%"></div>' +
+        '</div>' +
+        '</div>' +
+        '<div class="flex flex-wrap items-center gap-1.5">' +
+        pillsHtml +
+        '</div>';
+
+      progressBarEl.querySelectorAll('[data-res-quick-filter]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          if (resStatusEl) {
+            resStatusEl.value = btn.getAttribute('data-res-quick-filter');
+            renderResultsTab();
+          }
+        });
+      });
+    }
+
+    // 2. Render Subview: By Competition
     const resArea = (document.getElementById('resAreaFilter') || {}).value || 'ALL';
-    const resStatus = (document.getElementById('resStatusFilter') || {}).value || 'ACTIVE';
     const resSearch = ((document.getElementById('resSearchInput') || {}).value || '').trim().toLowerCase();
 
     const filteredComps = state.competitions.filter(function (c) {
       const regs = regsByComp[c.comp_id] || [];
-      const hasScores = regs.some((r) => r.score !== '' && r.score !== undefined && r.score !== null);
-      const isAnnounced = c.result_status === 'ประกาศผลแล้ว' || hasScores;
+      const hasEvaluated = regs.some((r) => hasValidScore(r) || isRegistrationAbsent(r));
+      const isAnnounced = c.result_status === 'ประกาศผลแล้ว' || hasEvaluated;
+      const tieInfo = getCompetitionTieStats(c.comp_id);
 
       if (resArea !== 'ALL' && c.learning_area !== resArea) return false;
       if (resStatus === 'ACTIVE' && regs.length === 0) return false;
       if (resStatus === 'ANNOUNCED' && !isAnnounced) return false;
       if (resStatus === 'PENDING' && (regs.length === 0 || isAnnounced)) return false;
+      if (resStatus === 'TIED' && !tieInfo.hasUnresolvedTie) return false;
 
       if (resSearch) {
         const regSchools = regs.map((r) => r.school_name).join(' ');
@@ -4500,12 +5632,23 @@
         listContainer.innerHTML = filteredComps
           .map(function (c) {
             const regs = (regsByComp[c.comp_id] || []).slice().sort(function (a, b) {
-              const sa = a.score !== '' && a.score !== undefined && a.score !== null ? Number(a.score) : -1;
-              const sb = b.score !== '' && b.score !== undefined && b.score !== null ? Number(b.score) : -1;
-              return sb - sa;
+              const aAbs = isRegistrationAbsent(a);
+              const bAbs = isRegistrationAbsent(b);
+              if (aAbs !== bAbs) return aAbs ? 1 : -1;
+              const aValid = hasValidScore(a);
+              const bValid = hasValidScore(b);
+              if (aValid !== bValid) return aValid ? -1 : 1;
+              if (aValid && bValid) {
+                const ra = Number(a.rank) > 0 ? Number(a.rank) : 9999;
+                const rb = Number(b.rank) > 0 ? Number(b.rank) : 9999;
+                if (ra !== rb) return ra - rb;
+                return Number(b.score) - Number(a.score);
+              }
+              return 0;
             });
-            const hasScores = regs.some((r) => r.score !== '' && r.score !== undefined && r.score !== null);
-            const isAnnounced = c.result_status === 'ประกาศผลแล้ว' || hasScores;
+            const hasEvaluated = regs.some((r) => hasValidScore(r) || isRegistrationAbsent(r));
+            const isAnnounced = c.result_status === 'ประกาศผลแล้ว' || hasEvaluated;
+            const tieInfo = getCompetitionTieStats(c.comp_id);
 
             const statusBadge = isAnnounced
               ? `<span class="px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-heading text-xs font-semibold">ประกาศผลแล้ว</span>`
@@ -4513,9 +5656,18 @@
               ? `<span class="px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-heading text-xs font-medium">รอบันทึกผล (${regs.length} ทีม)</span>`
               : `<span class="px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-500 font-heading text-xs">ไม่มีทีมสมัคร</span>`;
 
+            const tieBadge = tieInfo.hasUnresolvedTie
+              ? `<span class="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-heading text-xs font-semibold">คะแนนเท่ากันรอชี้ขาด</span>`
+              : '';
+
             const adminBtn = state.isAdmin
               ? `<button type="button" data-open-score="${escapeHtml(c.comp_id)}" class="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-heading text-xs font-semibold transition">บันทึก/แก้ไขคะแนน</button>`
               : '';
+
+            const printScoreSheetBtn =
+              regs.length > 0
+                ? `<button type="button" data-print-scoresheet="${escapeHtml(c.comp_id)}" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading text-xs font-medium transition">ใบคะแนนกรรมการ</button>`
+                : '';
 
             const printResultBtn =
               regs.length > 0
@@ -4527,19 +5679,22 @@
                 ? `<tr><td colspan="6" class="py-4 text-center text-xs text-slate-400">ยังไม่มีโรงเรียนส่งเข้าแข่งขันในรายการนี้</td></tr>`
                 : regs
                     .map(function (r) {
-                      const hasSc = r.score !== '' && r.score !== undefined && r.score !== null;
-                      const scoreDisplay = hasSc ? Number(r.score).toFixed(2) : '-';
-                      const medal = r.medal || (hasSc ? calculateMedalFromScore(r.score) : '');
-                      const rankDisplay = r.rank ? 'อันดับ ' + r.rank : '-';
-                      const awardDisplay = r.award_title || (hasSc ? getAwardTitleFromRank(r.rank, medal) : 'รอประกาศผล');
-                      const isRep = Number(r.rank) === 1 && hasSc && Number(r.score) >= 80;
+                      const isAbs = isRegistrationAbsent(r);
+                      const hasSc = hasValidScore(r);
+                      const scoreDisplay = isAbs ? '-' : hasSc ? Number(r.score).toFixed(2) : '-';
+                      const medal = isAbs ? 'ไม่มาแข่งขัน' : r.medal || (hasSc ? calculateMedalFromScore(r.score) : '');
+                      const rankDisplay = isAbs ? '-' : r.rank ? 'อันดับ ' + r.rank : '-';
+                      const awardDisplay = isAbs
+                        ? 'ไม่มาแข่งขัน (ขาดสอบ)'
+                        : r.award_title || (hasSc ? getAwardTitleFromRank(r.rank, medal) : 'รอประกาศผล');
+                      const isRep = isDistrictRepresentative(r);
                       const repBadge = isRep
                         ? `<span class="ml-1.5 inline-block px-2 py-0.5 rounded bg-slate-900 text-white font-heading text-[10px] font-semibold">ตัวแทนกลุ่มฯ</span>`
                         : '';
                       const stuNames = (r.students || []).map((s, idx) => idx + 1 + '. ' + formatResponsiveNameHtml(s.prefix, s.name)).join('<br>');
 
                       return `
-                        <tr class="hover:bg-slate-50">
+                        <tr class="hover:bg-slate-50 ${isAbs ? 'bg-rose-50/30 text-slate-500' : ''}">
                           <td class="py-2.5 px-3 font-heading font-semibold text-slate-900 text-center w-24">${escapeHtml(rankDisplay)}</td>
                           <td class="py-2.5 px-3 font-heading font-semibold text-slate-900">
                             ${escapeHtml(r.school_name)}
@@ -4548,7 +5703,7 @@
                           <td class="py-2.5 px-3 text-xs text-slate-700">${stuNames}</td>
                           <td class="py-2.5 px-3 text-center font-heading font-bold text-slate-900">${escapeHtml(scoreDisplay)}</td>
                           <td class="py-2.5 px-3 text-center">${renderMedalBadgeHtml(medal)}</td>
-                          <td class="py-2.5 px-3 text-xs font-heading text-slate-700">${escapeHtml(awardDisplay)}</td>
+                          <td class="py-2.5 px-3 text-xs font-heading ${isAbs ? 'text-rose-700' : 'text-slate-700'}">${escapeHtml(awardDisplay)}</td>
                         </tr>
                       `;
                     })
@@ -4563,6 +5718,7 @@
                       <span class="px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-heading text-xs">${escapeHtml(c.learning_area)}</span>
                       <span class="px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-heading text-xs">${escapeHtml(c.level)}</span>
                       ${statusBadge}
+                      ${tieBadge}
                     </div>
                     <h3 class="text-sm sm:text-base font-bold font-heading text-slate-900">${escapeHtml(c.comp_name)}</h3>
                     <p class="text-[11px] text-slate-500 mt-0.5">
@@ -4571,6 +5727,7 @@
                   </div>
                   <div class="flex flex-wrap items-center gap-2 shrink-0">
                     ${adminBtn}
+                    ${printScoreSheetBtn}
                     ${printResultBtn}
                   </div>
                 </div>
@@ -4600,6 +5757,12 @@
           });
         });
 
+        listContainer.querySelectorAll('[data-print-scoresheet]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            printCompetitionJudgeScoreSheet(btn.getAttribute('data-print-scoresheet'));
+          });
+        });
+
         listContainer.querySelectorAll('[data-print-result]').forEach(function (btn) {
           btn.addEventListener('click', function () {
             printCompetitionResultSheet(btn.getAttribute('data-print-result'));
@@ -4619,15 +5782,22 @@
       let silver = 0;
       let bronze = 0;
       let part = 0;
+      let absent = 0;
 
       regs.forEach(function (r) {
+        if (isRegistrationAbsent(r)) {
+          absent++;
+          return;
+        }
+        if (!hasValidScore(r)) return;
+
         const rk = Number(r.rank || 0);
         if (rk === 1) rank1++;
         else if (rk === 2) rank2++;
         else if (rk === 3) rank3++;
         else if (rk > 3) rankOther++;
 
-        const m = r.medal || (r.score !== '' && r.score !== undefined ? calculateMedalFromScore(r.score) : '');
+        const m = r.medal || calculateMedalFromScore(r.score);
         if (m === 'เหรียญทอง') gold++;
         else if (m === 'เหรียญเงิน') silver++;
         else if (m === 'เหรียญทองแดง') bronze++;
@@ -4645,6 +5815,7 @@
         silver: silver,
         bronze: bronze,
         part: part,
+        absent: absent,
         total_medals: gold + silver + bronze + part
       };
     });
@@ -4716,6 +5887,7 @@
               <td class="py-2.5 px-3 text-center font-heading font-semibold text-slate-700">${st.silver}</td>
               <td class="py-2.5 px-3 text-center font-heading font-semibold text-orange-800">${st.bronze}</td>
               <td class="py-2.5 px-3 text-center font-heading text-slate-600">${st.part}</td>
+              <td class="py-2.5 px-3 text-center font-heading text-rose-700">${st.absent}</td>
               <td class="py-2.5 px-3 text-center font-heading font-bold text-slate-900">${st.total_medals}</td>
             </tr>
           `;
@@ -4725,8 +5897,169 @@
   }
 
   // ==========================================
-  // PHASE 2: SCORE ENTRY & SCHEDULE MODALS (ADMIN)
+  // PHASE 2: FAST SCORE ENTRY CENTER & BULK SCHEDULE MODALS (ADMIN)
   // ==========================================
+  function getScoreQueueCompetitions() {
+    const regCountMap = {};
+    state.registrations.forEach(function (r) {
+      regCountMap[r.comp_id] = (regCountMap[r.comp_id] || 0) + 1;
+    });
+    return state.competitions.filter((c) => (regCountMap[c.comp_id] || 0) > 0);
+  }
+
+  function applyScoreModal3JudgesVisibility() {
+    const toggle = document.getElementById('scoreModal3JudgesToggle');
+    const modal = document.getElementById('scoreEntryModal');
+    if (!modal || !toggle) return;
+    const show = Boolean(toggle.checked);
+    modal.querySelectorAll('.col-3judges').forEach(function (el) {
+      el.classList.toggle('hidden', !show);
+    });
+  }
+
+  function recalculateScoreModalPreview() {
+    const tbody = document.getElementById('scoreModalTableBody');
+    if (!tbody) return;
+    const rowEls = Array.from(tbody.querySelectorAll('tr[data-score-reg-id]'));
+
+    const activeScored = [];
+    rowEls.forEach(function (tr) {
+      const attSel = tr.querySelector('.score-attendance-select');
+      const isAbsent = attSel && attSel.value === 'ABSENT';
+      const inp = tr.querySelector('.score-input-field');
+      const jFields = tr.querySelectorAll('.score-j1-field, .score-j2-field, .score-j3-field');
+      const rankSel = tr.querySelector('.score-rank-select');
+
+      if (isAbsent) {
+        if (inp) {
+          inp.value = '';
+          inp.disabled = true;
+          inp.classList.add('bg-slate-100', 'text-slate-400');
+        }
+        jFields.forEach((jf) => {
+          jf.disabled = true;
+          jf.classList.add('bg-slate-100');
+        });
+        if (rankSel) {
+          rankSel.value = '';
+          rankSel.disabled = true;
+        }
+        return;
+      }
+
+      if (inp) {
+        inp.disabled = false;
+        inp.classList.remove('bg-slate-100', 'text-slate-400');
+      }
+      jFields.forEach((jf) => {
+        jf.disabled = false;
+        jf.classList.remove('bg-slate-100');
+      });
+
+      const valStr = inp ? inp.value.trim() : '';
+      const num = valStr !== '' ? Number(valStr) : null;
+      if (num !== null && !Number.isNaN(num)) {
+        const clamped = Math.min(100, Math.max(0, num));
+        activeScored.push({ tr: tr, score: clamped });
+      }
+    });
+
+    activeScored.sort((a, b) => b.score - a.score);
+    let currentRank = 1;
+    const scoreFreq = {};
+    for (let i = 0; i < activeScored.length; i++) {
+      if (i > 0 && activeScored[i].score < activeScored[i - 1].score) {
+        currentRank = i + 1;
+      }
+      activeScored[i].autoRank = currentRank;
+      const key = activeScored[i].score.toFixed(2);
+      scoreFreq[key] = (scoreFreq[key] || 0) + 1;
+    }
+
+    const finalRankCounts = {};
+    const tiedScoresList = Object.keys(scoreFreq).filter((k) => scoreFreq[k] > 1);
+
+    rowEls.forEach(function (tr) {
+      const attSel = tr.querySelector('.score-attendance-select');
+      const isAbsent = attSel && attSel.value === 'ABSENT';
+      const medalCell = tr.querySelector('.score-preview-medal');
+      const rankSel = tr.querySelector('.score-rank-select');
+      const awardEl = tr.querySelector('.score-award-preview');
+
+      tr.classList.remove('bg-rose-50/40', 'bg-amber-50/50', 'bg-emerald-50/30');
+
+      if (isAbsent) {
+        tr.classList.add('bg-rose-50/40');
+        if (medalCell) medalCell.innerHTML = renderMedalBadgeHtml('ไม่มาแข่งขัน');
+        if (awardEl) awardEl.textContent = 'ไม่มาแข่งขัน (ตัดสิทธิ์เกียรติบัตร)';
+        return;
+      }
+
+      const found = activeScored.find((x) => x.tr === tr);
+      if (!found) {
+        if (medalCell) medalCell.innerHTML = renderMedalBadgeHtml('');
+        if (rankSel) {
+          rankSel.value = '';
+          rankSel.disabled = true;
+        }
+        if (awardEl) awardEl.textContent = 'รอระบุคะแนน';
+        return;
+      }
+
+      const medal = calculateMedalFromScore(found.score);
+      if (medalCell) medalCell.innerHTML = renderMedalBadgeHtml(medal);
+
+      if (rankSel) {
+        rankSel.disabled = false;
+        let effectiveRank = found.autoRank;
+        if (tr.dataset.rankOverridden === 'true' && rankSel.value !== '' && Number(rankSel.value) > 0) {
+          effectiveRank = Number(rankSel.value);
+        } else {
+          rankSel.value = String(found.autoRank);
+        }
+        found.effectiveRank = effectiveRank;
+        finalRankCounts[effectiveRank] = (finalRankCounts[effectiveRank] || 0) + 1;
+        if (awardEl) awardEl.textContent = getAwardTitleFromRank(effectiveRank, medal);
+      }
+    });
+
+    // Check tie status across tied scores
+    let hasUnresolvedTie = false;
+    activeScored.forEach(function (item) {
+      const key = item.score.toFixed(2);
+      if (scoreFreq[key] > 1) {
+        if (finalRankCounts[item.effectiveRank] > 1) {
+          hasUnresolvedTie = true;
+          item.tr.classList.add('bg-amber-50/50');
+        } else {
+          item.tr.classList.add('bg-emerald-50/30');
+        }
+      }
+    });
+
+    const tieAlertEl = document.getElementById('scoreModalTieAlert');
+    if (tieAlertEl) {
+      if (tiedScoresList.length === 0) {
+        tieAlertEl.classList.add('hidden');
+        tieAlertEl.innerHTML = '';
+      } else if (hasUnresolvedTie) {
+        tieAlertEl.className = 'p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 text-xs flex items-start gap-2.5';
+        tieAlertEl.innerHTML =
+          ICONS.warning +
+          '<div><strong>พบทีมที่ได้คะแนนเท่ากัน (' +
+          tiedScoresList.join(', ') +
+          ' คะแนน)</strong> — กรุณาเลือกชี้ขาดลำดับที่ในคอลัมน์ <em>"อันดับ / รางวัล (ชี้ขาดได้)"</em> ตามมติคณะกรรมการ เพื่อไม่ให้มีทีมอันดับซ้ำกัน</div>';
+      } else {
+        tieAlertEl.className = 'p-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 text-xs flex items-start gap-2.5';
+        tieAlertEl.innerHTML =
+          ICONS.check +
+          '<div><strong>คะแนนเท่ากัน (' +
+          tiedScoresList.join(', ') +
+          ' คะแนน) ได้รับการชี้ขาดอันดับครบถ้วนแล้ว</strong> (อันดับไม่ซ้ำกัน พร้อมบันทึก)</div>';
+      }
+    }
+  }
+
   function openScoreEntryModal(compId) {
     if (!state.isAdmin) {
       showToast('เฉพาะแอดมินเท่านั้นที่สามารถบันทึกคะแนนได้', 'error');
@@ -4741,75 +6074,268 @@
       return;
     }
 
+    const queue = getScoreQueueCompetitions();
+    const queueIdx = queue.findIndex((c) => c.comp_id === compId);
+    const queueBadge = document.getElementById('scoreModalCompQueueBadge');
+    if (queueBadge) {
+      queueBadge.textContent =
+        queueIdx !== -1 ? 'รายการที่ ' + (queueIdx + 1) + ' / ' + queue.length + ' (ที่มีทีมแข่ง)' : 'รายการแข่งขัน';
+    }
+    const prevBtn = document.getElementById('btnScoreModalPrevComp');
+    const nextBtn = document.getElementById('btnScoreModalNextComp');
+    if (prevBtn) prevBtn.disabled = queueIdx <= 0;
+    if (nextBtn) nextBtn.disabled = queueIdx === -1 || queueIdx >= queue.length - 1;
+
     document.getElementById('scoreModalCompId').value = compId;
     document.getElementById('scoreModalCompTitle').textContent =
       '[' + comp.comp_id + '] ' + comp.comp_name + ' (' + comp.level + ')';
+    const metaEl = document.getElementById('scoreModalCompMeta');
+    if (metaEl) {
+      metaEl.textContent =
+        (comp.learning_area || '') +
+        ' • ห้องสอบ: ' +
+        (comp.venue_room || 'อาคารเรียนรวม ห้อง 101') +
+        ' (' +
+        regs.length +
+        ' ทีม)';
+    }
+
+    // Determine initial auto-ranks to detect previously saved manual tie-break overrides
+    const initialScored = regs
+      .filter((r) => hasValidScore(r))
+      .map((r) => ({ reg_id: r.reg_id, score: Number(r.score) }))
+      .sort((a, b) => b.score - a.score);
+    let initRank = 1;
+    const autoRankByRegId = {};
+    for (let i = 0; i < initialScored.length; i++) {
+      if (i > 0 && initialScored[i].score < initialScored[i - 1].score) {
+        initRank = i + 1;
+      }
+      autoRankByRegId[initialScored[i].reg_id] = initRank;
+    }
+
+    const hasAnyJudgeScores = regs.some(
+      (r) => Array.isArray(r.judge_scores) && r.judge_scores.some((v) => v !== '' && v !== null && v !== undefined)
+    );
+    const toggle3J = document.getElementById('scoreModal3JudgesToggle');
+    if (toggle3J && hasAnyJudgeScores) {
+      toggle3J.checked = true;
+    }
+
+    const maxRankOpt = Math.max(regs.length, 6);
+    function buildRankOptionsHtml(selectedVal) {
+      let opts = '<option value="">-</option>';
+      for (let k = 1; k <= maxRankOpt; k++) {
+        const label =
+          k === 1
+            ? 'อันดับ 1 (ชนะเลิศ)'
+            : k === 2
+            ? 'อันดับ 2 (รองฯ 1)'
+            : k === 3
+            ? 'อันดับ 3 (รองฯ 2)'
+            : 'อันดับ ' + k;
+        opts +=
+          '<option value="' +
+          k +
+          '"' +
+          (String(selectedVal) === String(k) ? ' selected' : '') +
+          '>' +
+          label +
+          '</option>';
+      }
+      return opts;
+    }
 
     const tbody = document.getElementById('scoreModalTableBody');
     tbody.innerHTML = regs
       .map(function (r) {
-        const stuText = (r.students || []).map((s, i) => i + 1 + '. ' + formatResponsiveNameHtml(s.prefix, s.name)).join('<br>');
-        const scVal = r.score !== '' && r.score !== undefined && r.score !== null ? r.score : '';
-        const medal = scVal !== '' ? calculateMedalFromScore(scVal) : '';
+        const stuText = (r.students || [])
+          .map((s, i) => i + 1 + '. ' + formatResponsiveNameHtml(s.prefix, s.name))
+          .join('<br>');
+        const isAbs = isRegistrationAbsent(r);
+        const scVal = !isAbs && hasValidScore(r) ? r.score : '';
+        const medal = isAbs ? 'ไม่มาแข่งขัน' : scVal !== '' ? calculateMedalFromScore(scVal) : '';
+        const jArr = Array.isArray(r.judge_scores) ? r.judge_scores : ['', '', ''];
+        const savedRank = !isAbs && Number(r.rank) > 0 ? Number(r.rank) : '';
+        const isOverridden =
+          savedRank !== '' && autoRankByRegId[r.reg_id] && Number(savedRank) !== autoRankByRegId[r.reg_id];
+
         return `
-          <tr data-score-reg-id="${escapeHtml(r.reg_id)}">
-            <td class="py-2.5 px-3 font-heading font-semibold text-slate-900">${escapeHtml(r.school_name)}</td>
-            <td class="py-2.5 px-3 text-xs text-slate-600">${stuText}</td>
-            <td class="py-2.5 px-3 text-center">
-              <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(scVal)}" placeholder="0 - 100" class="score-input-field w-28 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm text-center font-heading font-bold focus:border-slate-900 focus:outline-none" />
+          <tr data-score-reg-id="${escapeHtml(r.reg_id)}" data-rank-overridden="${isOverridden ? 'true' : ''}">
+            <td class="py-2.5 px-3">
+              <div class="font-heading font-semibold text-slate-900 text-xs sm:text-sm">${escapeHtml(r.school_name)}</div>
+              <div class="text-[11px] text-slate-500 mt-0.5 leading-snug">${stuText}</div>
             </td>
-            <td class="py-2.5 px-3 text-center score-preview-medal">${renderMedalBadgeHtml(medal)}</td>
-            <td class="py-2.5 px-3 text-center text-xs font-heading text-slate-700 score-preview-rank">${escapeHtml(r.award_title || '-')}</td>
+            <td class="py-2.5 px-2 text-center">
+              <select class="score-attendance-select w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-heading font-medium text-slate-800">
+                <option value="PRESENT"${!isAbs ? ' selected' : ''}>เข้าแข่งขัน</option>
+                <option value="ABSENT"${isAbs ? ' selected' : ''}>ขาดสอบ</option>
+              </select>
+            </td>
+            <td class="py-2.5 px-1.5 text-center col-3judges hidden">
+              <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(jArr[0] !== undefined && jArr[0] !== null ? jArr[0] : '')}" placeholder="คนที่ 1" title="คะแนนกรรมการคนที่ 1 (0-100)" class="score-j1-field w-20 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs text-center font-heading" />
+            </td>
+            <td class="py-2.5 px-1.5 text-center col-3judges hidden">
+              <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(jArr[1] !== undefined && jArr[1] !== null ? jArr[1] : '')}" placeholder="คนที่ 2" title="คะแนนกรรมการคนที่ 2 (0-100)" class="score-j2-field w-20 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs text-center font-heading" />
+            </td>
+            <td class="py-2.5 px-1.5 text-center col-3judges hidden">
+              <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(jArr[2] !== undefined && jArr[2] !== null ? jArr[2] : '')}" placeholder="คนที่ 3" title="คะแนนกรรมการคนที่ 3 (0-100)" class="score-j3-field w-20 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs text-center font-heading" />
+            </td>
+            <td class="py-2.5 px-2 text-center">
+              <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(scVal)}" placeholder="0 - 100" class="score-input-field w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-center font-heading font-bold focus:border-slate-900 focus:outline-none" />
+            </td>
+            <td class="py-2.5 px-2 text-center score-preview-medal">${renderMedalBadgeHtml(medal)}</td>
+            <td class="py-2.5 px-2 text-center space-y-1">
+              <select class="score-rank-select w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-heading font-semibold text-slate-800">
+                ${buildRankOptionsHtml(savedRank)}
+              </select>
+              <div class="text-[10px] font-heading text-slate-500 score-award-preview">${escapeHtml(r.award_title || '-')}</div>
+            </td>
           </tr>
         `;
       })
       .join('');
 
-    function recalculateLivePreview() {
-      const rowEls = Array.from(tbody.querySelectorAll('tr[data-score-reg-id]'));
-      const scored = rowEls
-        .map(function (tr) {
-          const valStr = tr.querySelector('.score-input-field').value.trim();
-          const num = valStr !== '' ? Number(valStr) : null;
-          return { tr: tr, score: num };
+    // Wire row inputs inside freshly created tbody
+    const allRows = Array.from(tbody.querySelectorAll('tr[data-score-reg-id]'));
+
+    function handleJudgeInputChange(tr) {
+      const vals = ['.score-j1-field', '.score-j2-field', '.score-j3-field']
+        .map(function (sel) {
+          const el = tr.querySelector(sel);
+          const raw = el ? el.value.trim() : '';
+          return raw !== '' && !Number.isNaN(Number(raw)) ? Math.min(100, Math.max(0, Number(raw))) : null;
         })
-        .filter((x) => x.score !== null && !Number.isNaN(x.score))
-        .sort((a, b) => b.score - a.score);
-
-      let currentRank = 1;
-      for (let i = 0; i < scored.length; i++) {
-        if (i > 0 && scored[i].score < scored[i - 1].score) {
-          currentRank = i + 1;
-        }
-        scored[i].rank = currentRank;
-      }
-
-      rowEls.forEach(function (tr) {
-        const valStr = tr.querySelector('.score-input-field').value.trim();
-        const medalCell = tr.querySelector('.score-preview-medal');
-        const rankCell = tr.querySelector('.score-preview-rank');
-        if (valStr === '' || Number.isNaN(Number(valStr))) {
-          medalCell.innerHTML = renderMedalBadgeHtml('');
-          rankCell.textContent = '-';
+        .filter((v) => v !== null);
+      const netInput = tr.querySelector('.score-input-field');
+      if (netInput) {
+        if (vals.length > 0) {
+          const avg = vals.reduce((sum, v) => sum + v, 0) / vals.length;
+          netInput.value = (Math.round(avg * 100) / 100).toFixed(2);
         } else {
-          const sc = Number(valStr);
-          const medal = calculateMedalFromScore(sc);
-          const found = scored.find((x) => x.tr === tr);
-          const rk = found ? found.rank : '';
-          medalCell.innerHTML = renderMedalBadgeHtml(medal);
-          rankCell.textContent = getAwardTitleFromRank(rk, medal);
+          netInput.value = '';
         }
-      });
+      }
+      tr.dataset.rankOverridden = '';
+      recalculateScoreModalPreview();
     }
 
-    tbody.querySelectorAll('.score-input-field').forEach(function (inp) {
-      inp.addEventListener('input', recalculateLivePreview);
+    allRows.forEach(function (tr, rowIdx) {
+      const attSel = tr.querySelector('.score-attendance-select');
+      const netInp = tr.querySelector('.score-input-field');
+      const rankSel = tr.querySelector('.score-rank-select');
+      const jFields = [
+        tr.querySelector('.score-j1-field'),
+        tr.querySelector('.score-j2-field'),
+        tr.querySelector('.score-j3-field')
+      ];
+
+      if (attSel) {
+        attSel.addEventListener('change', function () {
+          tr.dataset.rankOverridden = '';
+          recalculateScoreModalPreview();
+        });
+      }
+
+      if (netInp) {
+        netInp.addEventListener('input', function () {
+          tr.dataset.rankOverridden = '';
+          recalculateScoreModalPreview();
+        });
+        netInp.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter' || ev.key === 'ArrowDown') {
+            ev.preventDefault();
+            for (let next = rowIdx + 1; next < allRows.length; next++) {
+              const targetInp = allRows[next].querySelector('.score-input-field');
+              if (targetInp && !targetInp.disabled) {
+                targetInp.focus();
+                targetInp.select();
+                return;
+              }
+            }
+            if (ev.key === 'Enter') {
+              const saveNextBtn = document.getElementById('btnSaveAndNextScore');
+              if (saveNextBtn) saveNextBtn.focus();
+            }
+          } else if (ev.key === 'ArrowUp') {
+            ev.preventDefault();
+            for (let prev = rowIdx - 1; prev >= 0; prev--) {
+              const targetInp = allRows[prev].querySelector('.score-input-field');
+              if (targetInp && !targetInp.disabled) {
+                targetInp.focus();
+                targetInp.select();
+                return;
+              }
+            }
+          }
+        });
+      }
+
+      jFields.forEach(function (jf, jIdx) {
+        if (!jf) return;
+        jf.addEventListener('input', function () {
+          handleJudgeInputChange(tr);
+        });
+        jf.addEventListener('keydown', function (ev) {
+          const selClass = '.score-j' + (jIdx + 1) + '-field';
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            if (jIdx < 2 && jFields[jIdx + 1] && !jFields[jIdx + 1].disabled) {
+              jFields[jIdx + 1].focus();
+              jFields[jIdx + 1].select();
+            } else {
+              for (let next = rowIdx + 1; next < allRows.length; next++) {
+                const nextJ1 = allRows[next].querySelector('.score-j1-field');
+                if (nextJ1 && !nextJ1.disabled) {
+                  nextJ1.focus();
+                  nextJ1.select();
+                  return;
+                }
+              }
+            }
+          } else if (ev.key === 'ArrowDown') {
+            ev.preventDefault();
+            for (let next = rowIdx + 1; next < allRows.length; next++) {
+              const target = allRows[next].querySelector(selClass);
+              if (target && !target.disabled) {
+                target.focus();
+                target.select();
+                return;
+              }
+            }
+          } else if (ev.key === 'ArrowUp') {
+            ev.preventDefault();
+            for (let prev = rowIdx - 1; prev >= 0; prev--) {
+              const target = allRows[prev].querySelector(selClass);
+              if (target && !target.disabled) {
+                target.focus();
+                target.select();
+                return;
+              }
+            }
+          }
+        });
+      });
+
+      if (rankSel) {
+        rankSel.addEventListener('change', function () {
+          tr.dataset.rankOverridden = rankSel.value !== '' ? 'true' : '';
+          recalculateScoreModalPreview();
+        });
+      }
     });
-    recalculateLivePreview();
+
+    applyScoreModal3JudgesVisibility();
+    recalculateScoreModalPreview();
 
     const modal = document.getElementById('scoreEntryModal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+
+    setTimeout(function () {
+      const firstInput = tbody.querySelector('.score-input-field:not(:disabled)');
+      if (firstInput) firstInput.focus();
+    }, 60);
   }
 
   function closeScoreEntryModal() {
@@ -4819,9 +6345,9 @@
     modal.classList.remove('flex');
   }
 
-  async function handleScoreEntrySubmit(e) {
-    e.preventDefault();
-    if (!state.isAdmin) return;
+  async function saveScoreModalData(options) {
+    if (!state.isAdmin) return false;
+    const opts = options || { closeAfter: true, goNextPending: false };
 
     const compId = document.getElementById('scoreModalCompId').value;
     const publishNow = document.getElementById('scoreModalPublishCheck').checked;
@@ -4830,35 +6356,59 @@
 
     const entries = rowEls.map(function (tr) {
       const regId = tr.getAttribute('data-score-reg-id');
+      const attSel = tr.querySelector('.score-attendance-select');
+      const isAbsent = Boolean(attSel && attSel.value === 'ABSENT');
       const valStr = tr.querySelector('.score-input-field').value.trim();
-      const num = valStr !== '' && !Number.isNaN(Number(valStr)) ? Number(valStr) : '';
-      return { reg_id: regId, score: num };
+      const num = !isAbsent && valStr !== '' && !Number.isNaN(Number(valStr)) ? Math.min(100, Math.max(0, Number(valStr))) : '';
+      const rankSel = tr.querySelector('.score-rank-select');
+      const manualRank =
+        !isAbsent && tr.dataset.rankOverridden === 'true' && rankSel && rankSel.value !== ''
+          ? Number(rankSel.value)
+          : null;
+      const judgeScores = ['.score-j1-field', '.score-j2-field', '.score-j3-field'].map(function (s) {
+        const el = tr.querySelector(s);
+        return el && el.value.trim() !== '' ? Number(el.value.trim()) : '';
+      });
+      return {
+        reg_id: regId,
+        isAbsent: isAbsent,
+        score: num,
+        manualRank: manualRank,
+        judgeScores: judgeScores
+      };
     });
 
-    // Rank calculation
-    const valid = entries.filter((x) => x.score !== '').sort((a, b) => b.score - a.score);
+    // Calculate auto-rank for non-absent scored entries
+    const valid = entries.filter((x) => !x.isAbsent && x.score !== '').sort((a, b) => b.score - a.score);
     let currentRank = 1;
     for (let i = 0; i < valid.length; i++) {
       if (i > 0 && valid[i].score < valid[i - 1].score) {
         currentRank = i + 1;
       }
-      valid[i].rank = currentRank;
+      valid[i].autoRank = currentRank;
     }
 
     const batchPayload = [];
     entries.forEach(function (item) {
       const reg = state.registrations.find((r) => r.reg_id === item.reg_id);
       if (!reg) return;
-      if (item.score === '') {
+      reg.judge_scores = item.judgeScores;
+
+      if (item.isAbsent) {
+        reg.score = '';
+        reg.medal = 'ไม่มาแข่งขัน';
+        reg.rank = '';
+        reg.award_title = 'ไม่มาแข่งขัน (ขาดสอบ)';
+      } else if (item.score === '') {
         reg.score = '';
         reg.medal = '';
         reg.rank = '';
         reg.award_title = '';
       } else {
-        const sc = Math.min(100, Math.max(0, Number(item.score)));
+        const sc = item.score;
         const medal = calculateMedalFromScore(sc);
         const found = valid.find((v) => v.reg_id === item.reg_id);
-        const rk = found ? found.rank : '';
+        const rk = item.manualRank && item.manualRank > 0 ? item.manualRank : found ? found.autoRank : '';
         const award = getAwardTitleFromRank(rk, medal);
         const cert = reg.cert_code || ('CERT-74-' + compId + '-' + String(rk || 1).padStart(2, '0'));
         reg.score = sc;
@@ -4867,6 +6417,7 @@
         reg.award_title = award;
         reg.cert_code = cert;
       }
+
       batchPayload.push({
         reg_id: reg.reg_id,
         score: reg.score,
@@ -4883,7 +6434,6 @@
     }
 
     saveState();
-    closeScoreEntryModal();
     renderAll();
 
     await postToGoogleSheets({
@@ -4894,7 +6444,39 @@
       admin_pin: state.adminPin
     });
 
+    if (opts.goNextPending) {
+      const queue = getScoreQueueCompetitions();
+      const curIdx = queue.findIndex((c) => c.comp_id === compId);
+      const isCompPending = function (c) {
+        const cRegs = state.registrations.filter((r) => r.comp_id === c.comp_id);
+        const hasEval = cRegs.some((r) => hasValidScore(r) || isRegistrationAbsent(r));
+        return c.result_status !== 'ประกาศผลแล้ว' && !hasEval;
+      };
+      let nextComp = queue.slice(curIdx + 1).find(isCompPending);
+      if (!nextComp) nextComp = queue.slice(0, Math.max(0, curIdx)).find(isCompPending);
+      if (!nextComp && curIdx !== -1 && curIdx + 1 < queue.length) {
+        nextComp = queue[curIdx + 1];
+      }
+      if (nextComp && nextComp.comp_id !== compId) {
+        showToast('บันทึก [' + compId + '] แล้ว — เปิดรายการถัดไป [' + nextComp.comp_id + ']', 'success');
+        openScoreEntryModal(nextComp.comp_id);
+      } else {
+        closeScoreEntryModal();
+        showToast('บันทึกคะแนนครบทุกรายการที่มีทีมแข่งขันแล้ว', 'success');
+      }
+      return true;
+    }
+
+    if (opts.closeAfter) {
+      closeScoreEntryModal();
+    }
     showToast('บันทึกคะแนนและคำนวณเหรียญรางวัลเรียบร้อยแล้ว', 'success');
+    return true;
+  }
+
+  async function handleScoreEntrySubmit(e) {
+    e.preventDefault();
+    await saveScoreModalData({ closeAfter: true, goNextPending: false });
   }
 
   function openScheduleEditModal(compId) {
@@ -4908,7 +6490,7 @@
     document.getElementById('scheduleDateInput').value = comp.comp_date || '24–25 พฤศจิกายน 2569';
     document.getElementById('scheduleTimeInput').value = comp.comp_time || '09.00 - 12.00 น.';
     document.getElementById('scheduleBuildingInput').value =
-      comp.venue_building || 'สนามแข่งขันกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+      comp.venue_building || 'โรงเรียนบ้านวังยาววิทยายน';
     document.getElementById('scheduleRoomInput').value = comp.venue_room || 'อาคารเรียนหลัก';
 
     const modal = document.getElementById('scheduleEditModal');
@@ -4953,6 +6535,215 @@
     showToast('อัปเดตวันเวลาและสถานที่แข่งขันเรียบร้อยแล้ว', 'success');
   }
 
+  // Bulk Schedule & Room Editor State & Functions
+  let bulkScheduleDrafts = {};
+
+  function getFilteredBulkScheduleComps() {
+    const areaVal = (document.getElementById('bulkSchedAreaFilter') || {}).value || 'ALL';
+    const activeOnly = Boolean((document.getElementById('bulkSchedActiveOnly') || {}).checked);
+    const regCounts = {};
+    state.registrations.forEach(function (r) {
+      regCounts[r.comp_id] = (regCounts[r.comp_id] || 0) + 1;
+    });
+    return state.competitions.filter(function (c) {
+      if (areaVal !== 'ALL' && c.learning_area !== areaVal) return false;
+      if (activeOnly && !(regCounts[c.comp_id] > 0)) return false;
+      return true;
+    });
+  }
+
+  function renderBulkScheduleTable() {
+    const tbody = document.getElementById('bulkScheduleTableBody');
+    const badge = document.getElementById('bulkSchedCountBadge');
+    if (!tbody) return;
+
+    const regCounts = {};
+    state.registrations.forEach(function (r) {
+      regCounts[r.comp_id] = (regCounts[r.comp_id] || 0) + 1;
+    });
+
+    const list = getFilteredBulkScheduleComps();
+    if (badge) badge.textContent = list.length + ' รายการ';
+
+    if (list.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="5" class="py-8 text-center text-slate-400">ไม่พบรายการแข่งขันตามตัวกรองที่เลือก</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = list
+      .map(function (c) {
+        const draft = bulkScheduleDrafts[c.comp_id] || {};
+        const dt = draft.comp_date !== undefined ? draft.comp_date : c.comp_date || '24–25 พฤศจิกายน 2569';
+        const tm = draft.comp_time !== undefined ? draft.comp_time : c.comp_time || '09.00 - 12.00 น.';
+        const bld =
+          draft.venue_building !== undefined
+            ? draft.venue_building
+            : c.venue_building || 'โรงเรียนบ้านวังยาววิทยายน';
+        const rm = draft.venue_room !== undefined ? draft.venue_room : c.venue_room || 'อาคารเรียนรวม ห้อง 101';
+        const cnt = regCounts[c.comp_id] || 0;
+        const cntTag =
+          cnt > 0
+            ? '<span class="ml-1.5 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">' +
+              cnt +
+              ' ทีม</span>'
+            : '';
+
+        return (
+          '<tr data-bulk-comp-id="' +
+          escapeHtml(c.comp_id) +
+          '" class="hover:bg-slate-50/80">' +
+          '<td class="py-2 px-3">' +
+          '<div class="font-heading font-semibold text-slate-900 text-xs">[' +
+          escapeHtml(c.comp_id) +
+          '] ' +
+          escapeHtml(c.comp_name) +
+          cntTag +
+          '</div>' +
+          '<div class="text-[10px] text-slate-500">' +
+          escapeHtml(c.level) +
+          ' • ' +
+          escapeHtml(c.team_type) +
+          '</div>' +
+          '</td>' +
+          '<td class="py-1.5 px-1.5"><input type="text" data-col="comp_date" value="' +
+          escapeHtml(dt) +
+          '" class="bulk-sched-inp w-full rounded-md border border-slate-300 px-2 py-1 text-xs" /></td>' +
+          '<td class="py-1.5 px-1.5"><input type="text" data-col="comp_time" value="' +
+          escapeHtml(tm) +
+          '" class="bulk-sched-inp w-full rounded-md border border-slate-300 px-2 py-1 text-xs" /></td>' +
+          '<td class="py-1.5 px-1.5"><input type="text" data-col="venue_building" value="' +
+          escapeHtml(bld) +
+          '" class="bulk-sched-inp w-full rounded-md border border-slate-300 px-2 py-1 text-xs" /></td>' +
+          '<td class="py-1.5 px-1.5"><input type="text" data-col="venue_room" value="' +
+          escapeHtml(rm) +
+          '" class="bulk-sched-inp w-full rounded-md border border-slate-300 px-2 py-1 text-xs font-medium" /></td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    const rowEls = Array.from(tbody.querySelectorAll('tr[data-bulk-comp-id]'));
+    rowEls.forEach(function (tr, rowIdx) {
+      const cid = tr.getAttribute('data-bulk-comp-id');
+      tr.querySelectorAll('.bulk-sched-inp').forEach(function (inp) {
+        inp.addEventListener('input', function () {
+          const col = inp.getAttribute('data-col');
+          if (!bulkScheduleDrafts[cid]) bulkScheduleDrafts[cid] = {};
+          bulkScheduleDrafts[cid][col] = inp.value;
+        });
+        inp.addEventListener('keydown', function (ev) {
+          const col = inp.getAttribute('data-col');
+          if (ev.key === 'Enter' || ev.key === 'ArrowDown') {
+            ev.preventDefault();
+            if (rowIdx + 1 < rowEls.length) {
+              const target = rowEls[rowIdx + 1].querySelector('input[data-col="' + col + '"]');
+              if (target) {
+                target.focus();
+                target.select();
+              }
+            }
+          } else if (ev.key === 'ArrowUp') {
+            ev.preventDefault();
+            if (rowIdx - 1 >= 0) {
+              const target = rowEls[rowIdx - 1].querySelector('input[data-col="' + col + '"]');
+              if (target) {
+                target.focus();
+                target.select();
+              }
+            }
+          }
+        });
+      });
+    });
+  }
+
+  function openBulkScheduleModal() {
+    if (!state.isAdmin) {
+      showToast('เฉพาะแอดมินเท่านั้นที่สามารถจัดการตารางห้องสอบทั้งหมดได้', 'error');
+      return;
+    }
+    bulkScheduleDrafts = {};
+    renderBulkScheduleTable();
+    const modal = document.getElementById('bulkScheduleModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+  }
+
+  function closeBulkScheduleModal() {
+    const modal = document.getElementById('bulkScheduleModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  }
+
+  function applyBulkQuickFill() {
+    const qDate = (document.getElementById('bulkQuickDate').value || '').trim();
+    const qTime = (document.getElementById('bulkQuickTime').value || '').trim();
+    const qBuilding = (document.getElementById('bulkQuickBuilding').value || '').trim();
+    const qRoom = (document.getElementById('bulkQuickRoom').value || '').trim();
+
+    if (!qDate && !qTime && !qBuilding && !qRoom) {
+      showToast('กรุณากรอกอย่างน้อย 1 ช่องในแถบตั้งค่าด่วน', 'warning');
+      return;
+    }
+
+    const visibleComps = getFilteredBulkScheduleComps();
+    visibleComps.forEach(function (c) {
+      if (!bulkScheduleDrafts[c.comp_id]) bulkScheduleDrafts[c.comp_id] = {};
+      if (qDate) bulkScheduleDrafts[c.comp_id].comp_date = qDate;
+      if (qTime) bulkScheduleDrafts[c.comp_id].comp_time = qTime;
+      if (qBuilding) bulkScheduleDrafts[c.comp_id].venue_building = qBuilding;
+      if (qRoom) bulkScheduleDrafts[c.comp_id].venue_room = qRoom;
+    });
+
+    renderBulkScheduleTable();
+    showToast('เติมค่าด่วนลงใน ' + visibleComps.length + ' รายการที่แสดงเรียบร้อย (กดบันทึกเพื่อยืนยัน)', 'info');
+  }
+
+  async function saveBulkScheduleChanges() {
+    if (!state.isAdmin) return;
+    const changedIds = Object.keys(bulkScheduleDrafts);
+    if (changedIds.length === 0) {
+      closeBulkScheduleModal();
+      showToast('ไม่มีรายการที่มีการแก้ไขเปลี่ยนแปลง', 'info');
+      return;
+    }
+
+    const payloadSchedules = [];
+    changedIds.forEach(function (cid) {
+      const comp = state.competitions.find((c) => c.comp_id === cid);
+      const draft = bulkScheduleDrafts[cid];
+      if (!comp || !draft) return;
+      if (draft.comp_date !== undefined) comp.comp_date = draft.comp_date.trim() || comp.comp_date;
+      if (draft.comp_time !== undefined) comp.comp_time = draft.comp_time.trim() || comp.comp_time;
+      if (draft.venue_building !== undefined) comp.venue_building = draft.venue_building.trim() || comp.venue_building;
+      if (draft.venue_room !== undefined) comp.venue_room = draft.venue_room.trim() || comp.venue_room;
+      payloadSchedules.push({
+        comp_id: comp.comp_id,
+        comp_date: comp.comp_date,
+        comp_time: comp.comp_time,
+        venue_building: comp.venue_building,
+        venue_room: comp.venue_room
+      });
+    });
+
+    saveState();
+    closeBulkScheduleModal();
+    renderAll();
+
+    await postToGoogleSheets({
+      action: 'update_schedule_batch',
+      schedules: payloadSchedules,
+      admin_pin: state.adminPin
+    });
+
+    showToast('บันทึกตารางเวลาและห้องสอบ ' + payloadSchedules.length + ' รายการเรียบร้อยแล้ว', 'success');
+  }
+
   // ==========================================
   // PHASE 2: TAB 7 — ONLINE CERTIFICATES (เกียรติบัตรออนไลน์)
   // ==========================================
@@ -4960,9 +6751,16 @@
     const entries = [];
     const prefix = (state.config && state.config.certPrefix) ? state.config.certPrefix : 'WYK74-2569-';
     state.registrations.forEach(function (r) {
-      const hasScore = r.score !== '' && r.score !== undefined && r.score !== null;
-      const medal = r.medal || (hasScore ? calculateMedalFromScore(r.score) : 'เข้าร่วมการแข่งขัน');
-      const award = r.award_title || (hasScore ? getAwardTitleFromRank(r.rank, medal) : 'เข้าร่วมการแข่งขัน');
+      // Never generate certificates for absent / no-show teams
+      if (isRegistrationAbsent(r)) return;
+      const compObj = state.competitions.find((c) => c.comp_id === r.comp_id);
+      const isPublished = !compObj || compObj.result_status === 'ประกาศผลแล้ว';
+      const hasScore = hasValidScore(r);
+      const certReady = Boolean(hasScore && isPublished);
+      const medal = certReady ? r.medal || calculateMedalFromScore(r.score) : 'รอประกาศผล';
+      const award = certReady
+        ? r.award_title || getAwardTitleFromRank(r.rank, medal)
+        : 'รอสรุปผลคะแนน';
       const baseCert = r.cert_code || (prefix + r.comp_id);
 
       (r.students || []).forEach(function (s, idx) {
@@ -4979,7 +6777,8 @@
           level: r.level,
           score: r.score,
           medal: medal,
-          award_title: award
+          award_title: award,
+          cert_ready: certReady
         });
       });
 
@@ -4997,7 +6796,8 @@
           level: r.level,
           score: r.score,
           medal: medal,
-          award_title: 'ครูผู้ฝึกซ้อมนักเรียน รางวัล' + award
+          award_title: certReady ? 'ครูผู้ฝึกซ้อมนักเรียน รางวัล' + award : 'รอสรุปผลคะแนน',
+          cert_ready: certReady
         });
       });
     });
@@ -5017,7 +6817,8 @@
         level: j.level || '',
         score: '',
         medal: 'คณะกรรมการตัดสิน',
-        award_title: 'ปฏิบัติหน้าที่ ' + (j.role || 'กรรมการตัดสิน')
+        award_title: 'ปฏิบัติหน้าที่ ' + (j.role || 'กรรมการตัดสิน'),
+        cert_ready: true
       });
     });
 
@@ -5077,6 +6878,16 @@
             ? '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-heading text-xs">ครูผู้ฝึกซ้อม</span>'
             : '<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-heading text-xs">กรรมการตัดสิน</span>';
 
+        const medalCellHtml =
+          item.cert_ready === false
+            ? '<span class="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-500 font-heading text-xs">รอประกาศผล</span>'
+            : renderMedalBadgeHtml(item.medal);
+
+        const actionCellHtml =
+          item.cert_ready === false
+            ? '<span class="inline-block px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-200 font-heading text-xs cursor-not-allowed" title="รายการนี้ยังไม่ได้บันทึกคะแนนและประกาศผล — จะเปิดให้พิมพ์เมื่อแอดมินประกาศผลแล้ว">รอสรุปผลคะแนน</span>'
+            : `<button type="button" data-print-cert-idx="${idx}" title="พิมพ์เกียรติบัตร (PDF 2 หน้า: หน้าแรกเลขไทย หน้าที่สองเลขอารบิก)" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer">พิมพ์เกียรติบัตร</button>`;
+
         return `
           <tr class="hover:bg-slate-50 transition">
             <td class="py-2.5 px-3 font-mono text-xs text-slate-600">${escapeHtml(item.cert_code)}</td>
@@ -5086,12 +6897,8 @@
             <td class="py-2.5 px-3 text-xs text-slate-700">
               <span class="font-heading font-medium text-slate-900">[${escapeHtml(item.comp_id)}]</span> ${escapeHtml(item.comp_name)} (${escapeHtml(item.level)})
             </td>
-            <td class="py-2.5 px-2 text-center">${renderMedalBadgeHtml(item.medal)}</td>
-            <td class="py-2.5 px-2 text-right">
-              <button type="button" data-print-cert-idx="${idx}" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition">
-                พิมพ์เกียรติบัตร
-              </button>
-            </td>
+            <td class="py-2.5 px-2 text-center">${medalCellHtml}</td>
+            <td class="py-2.5 px-2 text-right">${actionCellHtml}</td>
           </tr>
         `;
       })
@@ -5116,17 +6923,29 @@
     });
   }
 
-  // Print Official Landscape Certificates (Thai Luxury Khit / Mudmee Background + Official MOE & OBEC Logos)
+  // Utility: Convert Thai numerals to Arabic digits (เลขอารบิก)
+  function toArabicNumerals(str) {
+    if (str === null || str === undefined) return '';
+    const thaiDigits = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
+    return String(str).replace(/[๐-๙]/g, function (d) {
+      const idx = thaiDigits.indexOf(d);
+      return idx !== -1 ? String(idx) : d;
+    });
+  }
+
+  // Print Official Landscape Certificates (Dual-Page PDF: Page 1 Pure Thai Numerals + Page 2 Pure Arabic Numerals)
   function printCertificatesWindow(entries) {
-    if (!entries || entries.length === 0) {
-      showToast('ไม่มีรายการเกียรติบัตรที่เลือกพิมพ์', 'warning');
+    const printable = (entries || []).filter(function (item) {
+      return item && item.cert_ready !== false;
+    });
+    if (printable.length === 0) {
+      showToast('ยังไม่มีรายการที่บันทึกคะแนนและประกาศผลแล้วสำหรับพิมพ์เกียรติบัตร', 'warning');
       return;
     }
 
     const cfg = state.config || DEFAULT_CONFIG;
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
     const defaultCertBgUrl = baseDir + 'assets/cert-bg-thai.jpg';
-    const logoMoeUrl = baseDir + 'assets/logo-moe.svg';
     const logoObecUrl = baseDir + 'assets/logo-obec.svg';
     const certWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
 
@@ -5136,108 +6955,121 @@
     const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
     const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
     const rawIssueDate = cfg.certIssueDate || '25 พฤศจิกายน พุทธศักราช 2569';
-    let thaiIssueDate = toThaiNumerals(rawIssueDate);
-    if (!thaiIssueDate.includes('เดือน')) {
-      thaiIssueDate = thaiIssueDate.replace(/^([^\s]+)\s+([^\s]+)\s+/, '$1 เดือน $2 ');
+    let formattedIssueDate = rawIssueDate;
+    if (!formattedIssueDate.includes('เดือน')) {
+      formattedIssueDate = formattedIssueDate.replace(/^([^\s]+)\s+([^\s]+)\s+/, '$1 เดือน $2 ');
     }
 
-    const pagesHtml = entries
-      .map(function (c) {
-        const verifyUrl = encodeURIComponent('https://campingroom.github.io/talent69/#cert=' + c.cert_code);
-        const sigHtml = cfg.certSignatureUrl
-          ? `<div class="sign-img-wrap"><img src="${cfg.certSignatureUrl}" alt="ลายมือชื่อ" class="cert-signature-img" /></div>`
-          : `<div class="sign-line">........................................................</div>`;
-        const signerNameHtml = signerName
-          ? `<div class="sign-name">(${escapeHtml(signerName)})</div>`
+    function renderCertPage(c, useThaiNumerals) {
+      const fmtNum = function (val) {
+        return useThaiNumerals ? toThaiNumerals(val) : toArabicNumerals(val);
+      };
+      const verifyUrl = encodeURIComponent(
+        'https://campingroom.github.io/talent69/#cert=' + toArabicNumerals(c.cert_code)
+      );
+      const sigHtml = cfg.certSignatureUrl
+        ? `<div class="sign-img-wrap"><img src="${cfg.certSignatureUrl}" alt="ลายมือชื่อ" class="cert-signature-img" /></div>`
+        : `<div class="sign-line">........................................................</div>`;
+      const signerNameHtml = signerName
+        ? `<div class="sign-name">(${escapeHtml(signerName)})</div>`
+        : '';
+
+      const isJudge = c.role_type === 'JUDGE' || c.role_type === 'REFEREE';
+      let awardRaw = '';
+      if (isJudge) {
+        awardRaw = 'ได้ปฏิบัติหน้าที่คณะกรรมการตัดสินการแข่งขัน';
+      } else {
+        const medalRaw = c.medal ? String(c.medal) : 'เข้าร่วมการแข่งขัน';
+        const titleRaw = String(c.award_title || 'รางวัลเข้าร่วม');
+        awardRaw = titleRaw.includes(medalRaw) ? titleRaw : `ได้รับรางวัลระดับ${medalRaw} ${titleRaw}`;
+      }
+
+      let schoolRaw = '';
+      if (isJudge) {
+        schoolRaw = c.grade_or_pos
+          ? String(c.grade_or_pos)
+          : (c.school_name ? `โรงเรียน${String(c.school_name).replace(/^โรงเรียน/, '')}` : 'คณะกรรมการตัดสิน');
+      } else {
+        schoolRaw = c.school_name
+          ? `โรงเรียน${String(c.school_name).replace(/^โรงเรียน/, '')}`
           : '';
+      }
 
-        const isJudge = c.role_type === 'JUDGE' || c.role_type === 'REFEREE';
-        let awardDisplay = '';
-        if (isJudge) {
-          awardDisplay = 'ได้ปฏิบัติหน้าที่คณะกรรมการตัดสินการแข่งขัน';
-        } else {
-          const medal = c.medal ? escapeHtml(c.medal) : 'เข้าร่วมการแข่งขัน';
-          const title = escapeHtml(c.award_title || 'รางวัลเข้าร่วม');
-          awardDisplay = title.includes(medal) ? title : `ได้รับรางวัลระดับ${medal} ${title}`;
-        }
+      const cleanCompName = (c.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
+      const cleanLevel = (c.level || '').trim();
+      const activityRaw = cleanLevel
+        ? `กิจกรรม ${cleanCompName} ระดับชั้น ${cleanLevel}`
+        : `กิจกรรม ${cleanCompName}`;
 
-        let schoolDisplay = '';
-        if (isJudge) {
-          schoolDisplay = c.grade_or_pos
-            ? escapeHtml(c.grade_or_pos)
-            : (c.school_name ? `โรงเรียน${escapeHtml(c.school_name.replace(/^โรงเรียน/, ''))}` : 'คณะกรรมการตัดสิน');
-        } else {
-          schoolDisplay = c.school_name
-            ? `โรงเรียน${escapeHtml(c.school_name.replace(/^โรงเรียน/, ''))}`
-            : '';
-        }
+      const eventTitleRaw =
+        'งานศิลปหัตถกรรมนักเรียน ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง ครั้งที่ 74 ประจำปีการศึกษา 2569';
+      const eventDatesRaw = 'ระหว่างวันที่ 24 - 25 พฤศจิกายน พ.ศ. 2569';
 
-        const cleanCompName = (c.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
-        const cleanLevel = (c.level || '').trim();
-        const activityText = cleanLevel
-          ? `กิจกรรม ${escapeHtml(cleanCompName)} ระดับชั้น ${escapeHtml(cleanLevel)}`
-          : `กิจกรรม ${escapeHtml(cleanCompName)}`;
-
-        return `
-          <div class="cert-page">
-            <div class="cert-watermark-layer">
-              <img src="${certWatermarkUrl}" alt="" class="cert-watermark-img" />
+      return `
+        <div class="cert-page">
+          <div class="cert-watermark-layer">
+            <img src="${certWatermarkUrl}" alt="" class="cert-watermark-img" />
+          </div>
+          <div class="cert-inner">
+            <!-- Top Row: Certificate Code -->
+            <div class="cert-top-row">
+              <div class="cert-top-code-pill">เลขที่ ${escapeHtml(fmtNum(c.cert_code))}</div>
             </div>
-            <div class="cert-inner">
-              <!-- Top Row: Certificate Code -->
-              <div class="cert-top-row">
-                <div class="cert-top-code-pill">เลขที่ ${escapeHtml(toThaiNumerals(c.cert_code))}</div>
-              </div>
 
-              <!-- Central Official Emblem: OBEC (ตรา สพฐ.) -->
-              <div class="cert-logos-row">
-                <img src="${logoObecUrl}" alt="ตราสำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน" class="cert-logo-img cert-logo-obec" />
-              </div>
+            <!-- Central Official Emblem: OBEC (ตรา สพฐ.) -->
+            <div class="cert-logos-row">
+              <img src="${logoObecUrl}" alt="ตราสำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน" class="cert-logo-img cert-logo-obec" />
+            </div>
 
-              <!-- Header Organization -->
-              <div class="cert-header-block">
-                <div class="cert-header-org">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
-                <div class="cert-header-suborg">${escapeHtml(toThaiNumerals(signerOrg))}</div>
-                <div class="cert-subtitle">ขอมอบเกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า</div>
-              </div>
+            <!-- Header Organization -->
+            <div class="cert-header-block">
+              <div class="cert-header-org">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
+              <div class="cert-header-suborg">${escapeHtml(fmtNum(signerOrg))}</div>
+              <div class="cert-subtitle">ขอมอบเกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า</div>
+            </div>
 
-              <!-- Recipient Section -->
-              <div class="cert-recipient-block">
-                <div class="cert-recipient-name">${escapeHtml(formatFullNameForPrint('', c.recipient_name))}</div>
-                <div class="cert-recipient-school">${schoolDisplay}</div>
-              </div>
+            <!-- Recipient Section -->
+            <div class="cert-recipient-block">
+              <div class="cert-recipient-name">${escapeHtml(formatFullNameForPrint('', c.recipient_name))}</div>
+              <div class="cert-recipient-school">${escapeHtml(fmtNum(schoolRaw))}</div>
+            </div>
 
-              <!-- Award & Activity Section -->
-              <div class="cert-award-block">
-                <div class="cert-award">${awardDisplay}</div>
-                <div class="cert-activity">${activityText}</div>
-              </div>
+            <!-- Award & Activity Section -->
+            <div class="cert-award-block">
+              <div class="cert-award">${escapeHtml(fmtNum(awardRaw))}</div>
+              <div class="cert-activity">${escapeHtml(fmtNum(activityRaw))}</div>
+            </div>
 
-              <!-- Event & Ceremony Details -->
-              <div class="cert-event-block">
-                <div class="cert-event-title">งานศิลปหัตถกรรมนักเรียน ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง ครั้งที่ ๗๔ ประจำปีการศึกษา ๒๕๖๙</div>
-                <div class="cert-event-dates">ระหว่างวันที่ ๒๔ - ๒๕ พฤศจิกายน พ.ศ. ๒๕๖๙</div>
-                <div class="cert-blessing">ขอให้มีความวิริยะ อุตสาหะ และความสามารถของท่านเป็นที่ประจักษ์ต่อไป</div>
-                <div class="cert-issue-date">ให้ไว้ ณ วันที่ ${escapeHtml(thaiIssueDate)}</div>
-              </div>
+            <!-- Event & Ceremony Details -->
+            <div class="cert-event-block">
+              <div class="cert-event-title">${escapeHtml(fmtNum(eventTitleRaw))}</div>
+              <div class="cert-event-dates">${escapeHtml(fmtNum(eventDatesRaw))}</div>
+              <div class="cert-blessing">ขอให้มีความวิริยะ อุตสาหะ และความสามารถของท่านเป็นที่ประจักษ์ต่อไป</div>
+              <div class="cert-issue-date">ให้ไว้ ณ วันที่ ${escapeHtml(fmtNum(formattedIssueDate))}</div>
+            </div>
 
-              <!-- Footer: QR Verification & Authorized Signer -->
-              <div class="cert-footer">
-                <div class="cert-qr">
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${verifyUrl}" alt="QR Verify" class="cert-qr-img" width="64" height="64" />
-                  <div class="cert-qr-label">สแกนตรวจสอบเกียรติบัตร</div>
-                  <div class="cert-qr-code">${escapeHtml(c.cert_code)}</div>
-                </div>
-                <div class="cert-sign">
-                  ${sigHtml}
-                  ${signerNameHtml}
-                  <div class="sign-pos">${escapeHtml(signerPos)}</div>
-                  <div class="sign-org">${escapeHtml(signerOrg)}</div>
-                </div>
+            <!-- Footer: QR Verification & Authorized Signer -->
+            <div class="cert-footer">
+              <div class="cert-qr">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${verifyUrl}" alt="QR Verify" class="cert-qr-img" width="64" height="64" />
+                <div class="cert-qr-label">สแกนตรวจสอบเกียรติบัตร</div>
+                <div class="cert-qr-code">${escapeHtml(fmtNum(c.cert_code))}</div>
+              </div>
+              <div class="cert-sign">
+                ${sigHtml}
+                ${signerNameHtml}
+                <div class="sign-pos">${escapeHtml(fmtNum(signerPos))}</div>
+                <div class="sign-org">${escapeHtml(fmtNum(signerOrg))}</div>
               </div>
             </div>
           </div>
-        `;
+        </div>
+      `;
+    }
+
+    const pagesHtml = printable
+      .map(function (c) {
+        return renderCertPage(c, true) + renderCertPage(c, false);
       })
       .join('');
 
@@ -5574,7 +7406,7 @@
 </head>
 <body>
   <div class="no-print-bar">
-    <div>ตัวอย่างก่อนพิมพ์เกียรติบัตรออนไลน์ (${entries.length} ใบ) — มาตรฐานกระดาษแนวนอน A4 Landscape (297 x 210 มม.)</div>
+    <div>เกียรติบัตรออนไลน์ (${printable.length} คน • รวม ${printable.length * 2} หน้า PDF: หน้าที่ 1 เลขไทยล้วน / หน้าที่ 2 เลขอารบิกล้วน — A4 Landscape)</div>
     <button onclick="window.print()">สั่งพิมพ์ / บันทึกเป็น PDF</button>
   </div>
   ${pagesHtml}
@@ -6684,6 +8516,7 @@
     const cardWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
     const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
     const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+    const showVenueSchedule = isFeatureOpenToPublic('venue');
     const sigHtml = cfg.certSignatureUrl
       ? `<div class="back-sign-img-wrap"><img src="${escapeHtml(cfg.certSignatureUrl)}" alt="ลายมือชื่อ" class="back-sign-img" /></div>`
       : `<div class="back-sign-line">..................................................</div>`;
@@ -6779,7 +8612,9 @@
                   <span class="info-sep">:</span>
                   <span class="info-val">${escapeHtml(c.level_and_type)}</span>
                 </div>
-                <div class="info-row">
+                ${
+                  showVenueSchedule
+                    ? `<div class="info-row">
                   <span class="info-label">วัน/เวลา</span>
                   <span class="info-sep">:</span>
                   <span class="info-val">${escapeHtml(c.comp_date)} (${escapeHtml(c.comp_time)})</span>
@@ -6788,7 +8623,9 @@
                   <span class="info-label">สนาม/ห้อง</span>
                   <span class="info-sep">:</span>
                   <span class="info-val">${escapeHtml(c.venue_room)}</span>
-                </div>
+                </div>`
+                    : ''
+                }
               </div>
 
               <!-- Holder Signature & SVG Barcode Strip -->
@@ -7462,22 +9299,35 @@
       .filter((r) => r.comp_id === compId)
       .slice()
       .sort(function (a, b) {
-        const sa = a.score !== '' && a.score !== undefined ? Number(a.score) : -1;
-        const sb = b.score !== '' && b.score !== undefined ? Number(b.score) : -1;
-        return sb - sa;
+        const aAbs = isRegistrationAbsent(a);
+        const bAbs = isRegistrationAbsent(b);
+        if (aAbs !== bAbs) return aAbs ? 1 : -1;
+        const aValid = hasValidScore(a);
+        const bValid = hasValidScore(b);
+        if (aValid !== bValid) return aValid ? -1 : 1;
+        if (aValid && bValid) {
+          const ra = Number(a.rank) > 0 ? Number(a.rank) : 9999;
+          const rb = Number(b.rank) > 0 ? Number(b.rank) : 9999;
+          if (ra !== rb) return ra - rb;
+          return Number(b.score) - Number(a.score);
+        }
+        return 0;
       });
 
     const rowsHtml = regs
       .map(function (r) {
-        const hasSc = r.score !== '' && r.score !== undefined && r.score !== null;
-        const scText = hasSc ? Number(r.score).toFixed(2) : '-';
-        const medal = r.medal || (hasSc ? calculateMedalFromScore(r.score) : '-');
-        const award = r.award_title || (hasSc ? getAwardTitleFromRank(r.rank, medal) : '-');
+        const isAbs = isRegistrationAbsent(r);
+        const hasSc = hasValidScore(r);
+        const scText = isAbs ? '-' : hasSc ? Number(r.score).toFixed(2) : '-';
+        const medal = isAbs ? 'ไม่มาแข่งขัน' : r.medal || (hasSc ? calculateMedalFromScore(r.score) : '-');
+        const award = isAbs
+          ? 'ไม่มาแข่งขัน (ขาดสอบ)'
+          : r.award_title || (hasSc ? getAwardTitleFromRank(r.rank, medal) : '-');
         const stuList = (r.students || []).map((s, i) => (i + 1) + '. ' + escapeHtml(formatFullNameForPrint(s.prefix, s.name))).join('<br/>');
         const tchList = (r.teachers || []).map((t, i) => (i + 1) + '. ' + escapeHtml(formatFullNameForPrint(t.prefix, t.name))).join('<br/>');
         return `
           <tr>
-            <td style="text-align:center;font-weight:700;">${escapeHtml(r.rank ? 'อันดับ ' + r.rank : '-')}</td>
+            <td style="text-align:center;font-weight:700;">${escapeHtml(!isAbs && r.rank ? 'อันดับ ' + r.rank : '-')}</td>
             <td><strong>${escapeHtml(r.school_name)}</strong></td>
             <td>${stuList}</td>
             <td>${tchList}</td>
@@ -7898,6 +9748,21 @@
       schoolViewSelect.addEventListener('change', renderSchoolViewTab);
     }
 
+    const btnToggleAdminScorePreview = document.getElementById('btnToggleAdminScorePreview');
+    if (btnToggleAdminScorePreview) {
+      btnToggleAdminScorePreview.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        state.adminShowScoresInLists = !state.adminShowScoresInLists;
+        renderAll();
+        showToast(
+          state.adminShowScoresInLists
+            ? 'เปิดแสดงคอลัมน์ผลคะแนนในตารางรายโรงเรียน/รายรายการ (เห็นเฉพาะแอดมิน)'
+            : 'ซ่อนคอลัมน์คะแนนในตาราง (โหมดเตรียมสนามฝ่ายสถานที่)',
+          'info'
+        );
+      });
+    }
+
     const btnRegisterForThisSchool = document.getElementById('btnRegisterForThisSchool');
     if (btnRegisterForThisSchool) {
       btnRegisterForThisSchool.addEventListener('click', function () {
@@ -7955,6 +9820,102 @@
     if (compSearch) {
       compSearch.addEventListener('input', renderCompetitionViewTab);
     }
+
+    // Venue Map & Room Directory Events
+    const btnToggleVenueMap = document.getElementById('btnToggleVenueMap');
+    if (btnToggleVenueMap) {
+      btnToggleVenueMap.addEventListener('click', function () {
+        state.venueMapExpanded = !state.venueMapExpanded;
+        renderCompetitionViewTab();
+      });
+    }
+
+    const btnToggleVenuePublic = document.getElementById('btnToggleVenuePublic');
+    if (btnToggleVenuePublic) {
+      btnToggleVenuePublic.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const nextAction = isFeatureOpenToPublic('venue') ? 'hidden' : 'open';
+        setFeatureVisibility('venue', nextAction);
+      });
+    }
+
+    const btnVenueBannerPublishNow = document.getElementById('btnVenueBannerPublishNow');
+    if (btnVenueBannerPublishNow) {
+      btnVenueBannerPublishNow.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        setFeatureVisibility('venue', 'open');
+      });
+    }
+
+    const btnPrintVenueDirectory = document.getElementById('btnPrintVenueDirectory');
+    if (btnPrintVenueDirectory) {
+      btnPrintVenueDirectory.addEventListener('click', printVenueDirectoryAndDoorSigns);
+    }
+
+    ['btnClearCompRoomFilter', 'btnResetVenueRoomFilter'].forEach(function (id) {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', function () {
+          state.compRoomFilter = 'ALL';
+          renderCompetitionViewTab();
+        });
+      }
+    });
+
+    const venueMapFileInput = document.getElementById('venueMapFileInput');
+    if (venueMapFileInput) {
+      venueMapFileInput.addEventListener('change', function (e) {
+        if (!state.isAdmin) return;
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (file.size > 4 * 1024 * 1024) {
+          showToast('ไฟล์รูปแผนผังสนามมีขนาดใหญ่เกิน 4 MB', 'warning');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function (ev) {
+          state.config.venueMapImageUrl = ev.target.result;
+          saveState();
+          renderAll();
+          showToast('อัปโหลดภาพแผนผังสนามแข่งขันเรียบร้อยแล้ว', 'success');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    const btnClearVenueMapImage = document.getElementById('btnClearVenueMapImage');
+    if (btnClearVenueMapImage) {
+      btnClearVenueMapImage.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        state.config.venueMapImageUrl = '';
+        const inp = document.getElementById('venueMapFileInput');
+        if (inp) inp.value = '';
+        saveState();
+        renderAll();
+        showToast('สลับกลับมาใช้แผนผังโซนอาคารของระบบแล้ว', 'info');
+      });
+    }
+
+    // Bulk Schedule Modal Events
+    const btnOpenBulkScheduleModal = document.getElementById('btnOpenBulkScheduleModal');
+    if (btnOpenBulkScheduleModal) {
+      btnOpenBulkScheduleModal.addEventListener('click', openBulkScheduleModal);
+    }
+    const btnCloseBulkScheduleModal = document.getElementById('btnCloseBulkScheduleModal');
+    const btnCancelBulkSchedule = document.getElementById('btnCancelBulkSchedule');
+    if (btnCloseBulkScheduleModal) btnCloseBulkScheduleModal.addEventListener('click', closeBulkScheduleModal);
+    if (btnCancelBulkSchedule) btnCancelBulkSchedule.addEventListener('click', closeBulkScheduleModal);
+
+    const bulkSchedAreaFilter = document.getElementById('bulkSchedAreaFilter');
+    const bulkSchedActiveOnly = document.getElementById('bulkSchedActiveOnly');
+    if (bulkSchedAreaFilter) bulkSchedAreaFilter.addEventListener('change', renderBulkScheduleTable);
+    if (bulkSchedActiveOnly) bulkSchedActiveOnly.addEventListener('change', renderBulkScheduleTable);
+
+    const btnBulkQuickFill = document.getElementById('btnBulkQuickFill');
+    if (btnBulkQuickFill) btnBulkQuickFill.addEventListener('click', applyBulkQuickFill);
+
+    const btnSaveBulkSchedule = document.getElementById('btnSaveBulkSchedule');
+    if (btnSaveBulkSchedule) btnSaveBulkSchedule.addEventListener('click', saveBulkScheduleChanges);
 
     // Tab 5: Admin Tools & Settings
     const btnToggleRegOpen = document.getElementById('btnToggleRegistrationOpen');
@@ -8293,7 +10254,13 @@
     const btnPrintFilteredCerts = document.getElementById('btnPrintFilteredCerts');
     if (btnPrintFilteredCerts) {
       btnPrintFilteredCerts.addEventListener('click', function () {
-        const list = getFilteredCertificateEntries().slice(0, 20);
+        const list = getFilteredCertificateEntries()
+          .filter((item) => item && item.cert_ready !== false)
+          .slice(0, 20);
+        if (list.length === 0) {
+          showToast('ยังไม่มีรายการที่บันทึกคะแนนและประกาศผลแล้วในกลุ่มที่กรอง', 'warning');
+          return;
+        }
         printCertificatesWindow(list);
       });
     }
@@ -8303,6 +10270,45 @@
     const btnCancelScoreModal = document.getElementById('btnCancelScoreModal');
     if (btnCloseScoreModal) btnCloseScoreModal.addEventListener('click', closeScoreEntryModal);
     if (btnCancelScoreModal) btnCancelScoreModal.addEventListener('click', closeScoreEntryModal);
+
+    const scoreModal3JudgesToggle = document.getElementById('scoreModal3JudgesToggle');
+    if (scoreModal3JudgesToggle) {
+      scoreModal3JudgesToggle.addEventListener('change', applyScoreModal3JudgesVisibility);
+    }
+
+    const btnScoreModalPrevComp = document.getElementById('btnScoreModalPrevComp');
+    const btnScoreModalNextComp = document.getElementById('btnScoreModalNextComp');
+    if (btnScoreModalPrevComp) {
+      btnScoreModalPrevComp.addEventListener('click', function () {
+        const curId = document.getElementById('scoreModalCompId').value;
+        const q = getScoreQueueCompetitions();
+        const idx = q.findIndex((c) => c.comp_id === curId);
+        if (idx > 0) openScoreEntryModal(q[idx - 1].comp_id);
+      });
+    }
+    if (btnScoreModalNextComp) {
+      btnScoreModalNextComp.addEventListener('click', function () {
+        const curId = document.getElementById('scoreModalCompId').value;
+        const q = getScoreQueueCompetitions();
+        const idx = q.findIndex((c) => c.comp_id === curId);
+        if (idx !== -1 && idx + 1 < q.length) openScoreEntryModal(q[idx + 1].comp_id);
+      });
+    }
+
+    const btnScoreModalPrintSheet = document.getElementById('btnScoreModalPrintSheet');
+    if (btnScoreModalPrintSheet) {
+      btnScoreModalPrintSheet.addEventListener('click', function () {
+        const curId = document.getElementById('scoreModalCompId').value;
+        if (curId) printCompetitionJudgeScoreSheet(curId);
+      });
+    }
+
+    const btnSaveAndNextScore = document.getElementById('btnSaveAndNextScore');
+    if (btnSaveAndNextScore) {
+      btnSaveAndNextScore.addEventListener('click', function () {
+        saveScoreModalData({ closeAfter: false, goNextPending: true });
+      });
+    }
 
     const scoreEntryForm = document.getElementById('scoreEntryForm');
     if (scoreEntryForm) {
@@ -8418,7 +10424,7 @@
         state.config.featureVisibility.results = 'open';
         state.config.featureVisibility.certificates = 'open';
         saveState();
-        updateFeatureVisibilityUI();
+        renderAll();
         showToast('เปิดทุกฟีเจอร์จัดการแข่งขันต่อสาธารณะทันทีเรียบร้อยแล้ว', 'success');
       });
     }
@@ -8429,14 +10435,15 @@
         if (!state.isAdmin) return;
         if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
         if (!state.config.featureVisibility) state.config.featureVisibility = {};
+        state.config.featureVisibility.venue = 'hidden';
         state.config.featureVisibility.judges = 'auto';
         state.config.featureVisibility.results = 'auto';
         state.config.featureVisibility.certificates = 'auto';
         state.config.featureVisibility.id_cards = 'hidden';
         state.config.featureVisibility.substitution_form = 'hidden';
         saveState();
-        updateFeatureVisibilityUI();
-        showToast('รีเซ็ตทุกฟีเจอร์เป็นค่ามาตรฐานแล้ว (คงสถานะปิดปุ่มพิมพ์บัตร/ใบเปลี่ยนตัว)', 'info');
+        renderAll();
+        showToast('รีเซ็ตทุกฟีเจอร์เป็นค่ามาตรฐานแล้ว (คงสถานะปิดห้องสอบ/ปุ่มพิมพ์บัตร/ใบเปลี่ยนตัว)', 'info');
       });
     }
 

@@ -129,6 +129,8 @@ function doPost(e) {
       return handleSaveScores_(ss, body);
     } else if (action === 'update_schedule' || action === 'update_competition_schedule') {
       return handleUpdateSchedule_(ss, body);
+    } else if (action === 'update_schedule_batch') {
+      return handleUpdateScheduleBatch_(ss, body);
     } else if (action === 'add_judge') {
       return handleAddJudge_(ss, body.judge);
     } else if (action === 'delete_judge') {
@@ -334,6 +336,44 @@ function handleUpdateSchedule_(ss, body) {
     }
   }
   return jsonResponse_({ ok: false, error: 'ไม่พบรหัสรายการแข่งขันที่ระบุ' });
+}
+
+function handleUpdateScheduleBatch_(ss, body) {
+  const schedules = Array.isArray(body.schedules) ? body.schedules : [];
+  if (schedules.length === 0) {
+    return jsonResponse_({ ok: true, updatedCount: 0 });
+  }
+
+  const compSheet = ss.getSheetByName('Competitions');
+  if (!compSheet) {
+    return jsonResponse_({ ok: false, error: 'ไม่พบแผ่นงาน Competitions' });
+  }
+
+  const compData = compSheet.getDataRange().getValues();
+  const rowIndexMap = {};
+  for (let i = 1; i < compData.length; i++) {
+    const cid = String(compData[i][0] || '').trim();
+    if (cid) rowIndexMap[cid] = i;
+  }
+
+  let updatedCount = 0;
+  schedules.forEach(function (item) {
+    if (!item || !item.comp_id) return;
+    const cid = String(item.comp_id).trim();
+    const idx = rowIndexMap[cid];
+    if (idx === undefined) return;
+    const rowNum = idx + 1;
+    const existingRow = compData[idx];
+    compSheet.getRange(rowNum, 12, 1, 4).setValues([[
+      String(item.comp_date || existingRow[11] || '24–25 พฤศจิกายน 2569'),
+      String(item.comp_time || existingRow[12] || '09.00 - 12.00 น.'),
+      String(item.venue_building || existingRow[13] || 'โรงเรียนบ้านวังยาววิทยายน'),
+      String(item.venue_room || existingRow[14] || 'อาคารเรียนรวม ห้อง 101')
+    ]]);
+    updatedCount++;
+  });
+
+  return jsonResponse_({ ok: true, updatedCount: updatedCount });
 }
 
 function handleAddJudge_(ss, judge) {
