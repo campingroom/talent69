@@ -6105,7 +6105,7 @@
 
     const rowsHtml =
       regs.length === 0
-        ? '<tr><td colspan="7" class="text-center" style="padding:18px 8px;">ยังไม่มีรายการลงทะเบียนเข้าแข่งขันในระบบ</td></tr>'
+        ? '<tr><td colspan="6" class="text-center" style="padding:18px 8px;">ยังไม่มีรายการลงทะเบียนเข้าแข่งขันในระบบ</td></tr>'
         : regs
             .map(function (r, idx) {
               const stuLines = (r.students || [])
@@ -6126,7 +6126,6 @@
               return (
                 '<tr>' +
                 '<td class="text-center">' + (idx + 1) + '</td>' +
-                '<td class="text-center nowrap font-bold">' + escapeHtml(r.comp_id || '-') + '</td>' +
                 '<td>' + escapeHtml(r.learning_area || '-') + '</td>' +
                 '<td class="font-bold">' + escapeHtml(compTitle || '-') + '</td>' +
                 '<td class="text-center nowrap">' +
@@ -6272,14 +6271,36 @@
       width: 50%;
       text-align: center;
       vertical-align: top;
-      padding: 6px 12px;
+      padding: 6px 8px;
       line-height: 1.55;
     }
-    .print-note {
-      margin-top: 8px;
-      font-size: 13.5pt;
-      color: #444444;
+    .sign-grid-box {
+      display: inline-grid;
+      grid-template-columns: auto max-content auto;
+      column-gap: 4px;
+      row-gap: 2px;
+      align-items: baseline;
+      text-align: left;
+    }
+    .sign-prefix {
       text-align: right;
+      white-space: nowrap;
+    }
+    .sign-mid {
+      text-align: center;
+      white-space: nowrap;
+    }
+    .sign-suffix {
+      text-align: left;
+      white-space: nowrap;
+    }
+    .sign-title-center {
+      width: 0;
+      min-width: 100%;
+      display: flex;
+      justify-content: center;
+      white-space: nowrap;
+      overflow: visible;
     }
     @media print {
       body {
@@ -6328,12 +6349,11 @@
       <thead>
         <tr>
           <th style="width: 5%;">ที่</th>
-          <th style="width: 10%;">รหัส</th>
-          <th style="width: 17%;">หมวดกิจกรรม</th>
-          <th style="width: 20%;">รายการแข่งขัน</th>
-          <th style="width: 10%;">ระดับชั้น /<br/>ประเภท</th>
-          <th style="width: 20%;">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
-          <th style="width: 18%;">รายชื่อครูผู้ฝึกซ้อม</th>
+          <th style="width: 19%;">หมวดกิจกรรม</th>
+          <th style="width: 22%;">รายการแข่งขัน</th>
+          <th style="width: 11%;">ระดับชั้น /<br/>ประเภท</th>
+          <th style="width: 23%;">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
+          <th style="width: 20%;">รายชื่อครูผู้ฝึกซ้อม</th>
         </tr>
       </thead>
       <tbody>
@@ -6345,18 +6365,33 @@
       <table class="sign-table">
         <tr>
           <td>
-            <div>ลงชื่อ ............................................................ ผู้สรุปข้อมูล/ผู้ประสานงาน</div>
-            <div>(............................................................)</div>
-            <div>ตำแหน่ง ............................................................</div>
+            <div class="sign-grid-box">
+              <div class="sign-prefix">ลงชื่อ</div>
+              <div class="sign-mid">......................................................</div>
+              <div class="sign-suffix">ผู้สรุปข้อมูล/ผู้ประสานงาน</div>
+              <div class="sign-prefix"></div>
+              <div class="sign-mid">(....................................................)</div>
+              <div class="sign-suffix"></div>
+              <div class="sign-prefix">ตำแหน่ง</div>
+              <div class="sign-mid">......................................................</div>
+              <div class="sign-suffix"></div>
+            </div>
           </td>
           <td>
-            <div>ลงชื่อ ............................................................ ผู้รับรองข้อมูล</div>
-            <div>(............................................................)</div>
-            <div>ผู้อำนวยการ${escapeHtml(targetSchool)}</div>
+            <div class="sign-grid-box">
+              <div class="sign-prefix">ลงชื่อ</div>
+              <div class="sign-mid">......................................................</div>
+              <div class="sign-suffix">ผู้รับรองข้อมูล</div>
+              <div class="sign-prefix"></div>
+              <div class="sign-mid">(....................................................)</div>
+              <div class="sign-suffix"></div>
+              <div class="sign-prefix"></div>
+              <div class="sign-mid"><div class="sign-title-center"><span>ผู้อำนวยการ${escapeHtml(targetSchool)}</span></div></div>
+              <div class="sign-suffix"></div>
+            </div>
           </td>
         </tr>
       </table>
-      <div class="print-note">พิมพ์จากระบบลงทะเบียนงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 (กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง)</div>
     </div>
   </div>
 </body>
