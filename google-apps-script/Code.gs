@@ -11,7 +11,22 @@
  */
 
 const SPREADSHEET_ID = '1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ';
-const DEFAULT_ADMIN_PIN = '7469';
+// Default admin PIN is verified via SHA-256 hash so no plaintext PIN is exposed in source
+const DEFAULT_ADMIN_PIN_HASH = 'cf66a6b6499f8f04366edb73ea50dac507b0fc013ba6b5fd7e3a8856226bbcd0';
+
+function sha256Hex_(input) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(input || ''),
+    Utilities.Charset.UTF_8
+  );
+  return digest
+    .map(function (b) {
+      const val = (b < 0 ? b + 256 : b).toString(16);
+      return val.length === 1 ? '0' + val : val;
+    })
+    .join('');
+}
 
 function getSpreadsheet_() {
   let ss = null;
@@ -36,11 +51,6 @@ function jsonResponse_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function getAdminPin_() {
-  const props = PropertiesService.getScriptProperties();
-  return props.getProperty('ADMIN_PIN') || DEFAULT_ADMIN_PIN;
-}
-
 function isRegistrationOpen_() {
   const props = PropertiesService.getScriptProperties();
   const val = props.getProperty('REGISTRATION_OPEN');
@@ -49,7 +59,13 @@ function isRegistrationOpen_() {
 
 function verifyAdminPin_(pin) {
   if (!pin) return false;
-  return String(pin).trim() === String(getAdminPin_()).trim();
+  const cleanPin = String(pin).trim();
+  const props = PropertiesService.getScriptProperties();
+  const storedPin = props.getProperty('ADMIN_PIN');
+  if (storedPin) {
+    return cleanPin === String(storedPin).trim();
+  }
+  return sha256Hex_(cleanPin) === DEFAULT_ADMIN_PIN_HASH;
 }
 
 function verifyPhoneMatch_(savedPhone, verifyInput) {
