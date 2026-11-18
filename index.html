@@ -2306,8 +2306,8 @@
                 <input type="text" id="cfgCertSignerOrgInput" placeholder="สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
               </div>
 
-              <!-- Digital Signature Upload -->
-              <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
+              <!-- Digital Signature Upload & Position Customizer -->
+              <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-3">
                 <div class="flex items-center justify-between">
                   <div class="font-heading font-semibold text-slate-800">ลายมือชื่อดิจิทัล (PNG พื้นหลังโปร่งใส)</div>
                   <button type="button" id="btnClearCertSig" class="hidden text-[11px] text-rose-600 hover:underline">ลบลายเซ็น</button>
@@ -2319,6 +2319,47 @@
                   <div class="flex-1">
                     <input type="file" id="cfgCertSigFileInput" accept="image/png,image/jpeg" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-white hover:file:bg-slate-800" />
                     <p class="text-[10px] text-slate-400 mt-1">แนะนำ: ไฟล์ PNG โปร่งใส ไม่มีพื้นหลัง</p>
+                  </div>
+                </div>
+
+                <!-- Live Signature Position & Size Controls -->
+                <div id="certSigPositionControls" class="pt-2.5 border-t border-slate-200 space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="font-heading font-semibold text-slate-700 text-[11px]">ปรับตำแหน่งและขนาดลายเซ็นบนเกียรติบัตร</span>
+                    <button type="button" id="btnResetCertSigPos" class="px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-100 text-[11px] text-slate-700 font-heading cursor-pointer transition">
+                      รีเซ็ตตำแหน่งเริ่มต้น
+                    </button>
+                  </div>
+                  <!-- Live proportional preview over signer name -->
+                  <div id="cfgCertSigLiveBox" class="rounded-lg border border-amber-200/80 bg-[#fcf7e8] py-3 px-4 text-center overflow-hidden">
+                    <div class="h-[52px] flex items-end justify-center overflow-visible">
+                      <img id="cfgCertSigLiveImg" src="assets/signature-kitipoom.png" alt="ตัวอย่างตำแหน่งลายเซ็น" class="max-h-[52px] max-w-[195px] object-contain pointer-events-none select-none" />
+                    </div>
+                    <div id="cfgCertSigLiveName" class="text-[13px] font-bold text-slate-900 leading-snug">(นายกิจภูมิ บุญอบ)</div>
+                    <div id="cfgCertSigLivePos" class="text-[11px] font-medium text-slate-700">ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <label class="block text-[11px] text-slate-700">
+                      <span class="flex justify-between mb-0.5">
+                        <span>ซ้าย ↔ ขวา</span>
+                        <span id="valCertSigOffsetX" class="font-mono font-semibold text-slate-900">+18 px</span>
+                      </span>
+                      <input type="range" id="cfgCertSigOffsetX" min="-120" max="120" step="1" value="18" class="w-full accent-slate-900 cursor-pointer" />
+                    </label>
+                    <label class="block text-[11px] text-slate-700">
+                      <span class="flex justify-between mb-0.5">
+                        <span>ขึ้น ↕ ลง</span>
+                        <span id="valCertSigOffsetY" class="font-mono font-semibold text-slate-900">-2 px</span>
+                      </span>
+                      <input type="range" id="cfgCertSigOffsetY" min="-60" max="40" step="1" value="-2" class="w-full accent-slate-900 cursor-pointer" />
+                    </label>
+                    <label class="block text-[11px] text-slate-700">
+                      <span class="flex justify-between mb-0.5">
+                        <span>ขนาด</span>
+                        <span id="valCertSigScale" class="font-mono font-semibold text-slate-900">105%</span>
+                      </span>
+                      <input type="range" id="cfgCertSigScale" min="60" max="180" step="1" value="105" class="w-full accent-slate-900 cursor-pointer" />
+                    </label>
                   </div>
                 </div>
               </div>

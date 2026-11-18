@@ -26,6 +26,9 @@
     certNumeralMode: 'both', // Admin controls allowed download mode: 'thai', 'arabic', or 'both'
     certSignatureUrl: 'assets/signature-kitipoom.png',
     certSignatureCleared: false,
+    certSigOffsetX: 18,
+    certSigOffsetY: -2,
+    certSigScale: 105,
     certBgMode: 'standard', // 'standard' or 'canva'
     certBgImageUrl: '',
     venueMapImageUrl: '',
@@ -935,16 +938,47 @@
     if (signerPosInput && document.activeElement !== signerPosInput) signerPosInput.value = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
     if (signerOrgInput && document.activeElement !== signerOrgInput) signerOrgInput.value = cfg.certSignerOrg || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3';
 
-    // Signature Preview
+    // Signature Preview & Live Position Controls
     const sigPreview = document.getElementById('cfgCertSigPreview');
     const btnClearSig = document.getElementById('btnClearCertSig');
+    const sigPosControls = document.getElementById('certSigPositionControls');
+    const sigLiveImg = document.getElementById('cfgCertSigLiveImg');
+    const sigLiveName = document.getElementById('cfgCertSigLiveName');
+    const sigLivePos = document.getElementById('cfgCertSigLivePos');
+    const rangeX = document.getElementById('cfgCertSigOffsetX');
+    const rangeY = document.getElementById('cfgCertSigOffsetY');
+    const rangeScale = document.getElementById('cfgCertSigScale');
+    const valXEl = document.getElementById('valCertSigOffsetX');
+    const valYEl = document.getElementById('valCertSigOffsetY');
+    const valScaleEl = document.getElementById('valCertSigScale');
+
+    const offX = Number.isFinite(Number(cfg.certSigOffsetX)) ? Number(cfg.certSigOffsetX) : DEFAULT_CONFIG.certSigOffsetX;
+    const offY = Number.isFinite(Number(cfg.certSigOffsetY)) ? Number(cfg.certSigOffsetY) : DEFAULT_CONFIG.certSigOffsetY;
+    const scalePct = Number.isFinite(Number(cfg.certSigScale)) ? Number(cfg.certSigScale) : DEFAULT_CONFIG.certSigScale;
+
+    if (rangeX) rangeX.value = String(offX);
+    if (rangeY) rangeY.value = String(offY);
+    if (rangeScale) rangeScale.value = String(scalePct);
+    if (valXEl) valXEl.textContent = (offX > 0 ? '+' : '') + offX + ' px';
+    if (valYEl) valYEl.textContent = (offY > 0 ? '+' : '') + offY + ' px';
+    if (valScaleEl) valScaleEl.textContent = scalePct + '%';
+    if (sigLiveName) sigLiveName.textContent = cfg.certSignerName ? '(' + cfg.certSignerName + ')' : '';
+    if (sigLivePos) sigLivePos.textContent = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+
     if (sigPreview) {
       if (cfg.certSignatureUrl) {
         sigPreview.innerHTML = '<img src="' + escapeHtml(cfg.certSignatureUrl) + '" class="max-h-10 max-w-full object-contain" alt="Signature" />';
         if (btnClearSig) btnClearSig.classList.remove('hidden');
+        if (sigPosControls) sigPosControls.classList.remove('hidden');
+        if (sigLiveImg) {
+          sigLiveImg.src = cfg.certSignatureUrl;
+          sigLiveImg.style.transform = 'translate(' + offX + 'px, ' + offY + 'px) scale(' + (scalePct / 100).toFixed(2) + ')';
+          sigLiveImg.style.transformOrigin = 'bottom center';
+        }
       } else {
         sigPreview.innerHTML = '<span class="text-[10px] text-slate-400">ไม่มีลายเซ็น</span>';
         if (btnClearSig) btnClearSig.classList.add('hidden');
+        if (sigPosControls) sigPosControls.classList.add('hidden');
       }
     }
 
@@ -7087,6 +7121,10 @@
     const resolvedSigUrl = rawSigUrl
       ? (/^(data:|https?:|blob:|\/)/i.test(rawSigUrl) ? rawSigUrl : baseDir + rawSigUrl)
       : '';
+    const sigOffsetX = Number.isFinite(Number(cfg.certSigOffsetX)) ? Number(cfg.certSigOffsetX) : DEFAULT_CONFIG.certSigOffsetX;
+    const sigOffsetY = Number.isFinite(Number(cfg.certSigOffsetY)) ? Number(cfg.certSigOffsetY) : DEFAULT_CONFIG.certSigOffsetY;
+    const sigScale = Number.isFinite(Number(cfg.certSigScale)) ? Number(cfg.certSigScale) : DEFAULT_CONFIG.certSigScale;
+    const sigTransformStyle = `transform: translate(${sigOffsetX}px, ${sigOffsetY}px) scale(${(sigScale / 100).toFixed(2)}); transform-origin: bottom center;`;
 
     const certBgUrl =
       cfg.certBgMode === 'canva' && cfg.certBgImageUrl ? cfg.certBgImageUrl : defaultCertBgUrl;
@@ -7108,7 +7146,7 @@
         'https://campingroom.github.io/talent69/#cert=' + toArabicNumerals(c.cert_code)
       );
       const sigHtml = resolvedSigUrl
-        ? `<div class="sign-img-wrap"><img src="${escapeHtml(resolvedSigUrl)}" alt="ลายมือชื่อ" class="cert-signature-img" /></div>`
+        ? `<div class="sign-img-wrap"><img src="${escapeHtml(resolvedSigUrl)}" alt="ลายมือชื่อ" class="cert-signature-img" style="${sigTransformStyle}" /></div>`
         : `<div class="sign-line">........................................................</div>`;
       const signerNameHtml = signerName
         ? `<div class="sign-name">(${escapeHtml(signerName)})</div>`
@@ -7558,7 +7596,9 @@
       display: flex;
       align-items: flex-end;
       justify-content: center;
-      margin-bottom: -2px;
+      margin-bottom: 0;
+      overflow: visible;
+      position: relative;
     }
     .cert-signature-img {
       max-height: 52px;
@@ -10788,6 +10828,40 @@
         saveState();
         updateCertConfigUI();
         showToast('ลบลายมือชื่อดิจิทัลแล้ว', 'info');
+      });
+    }
+
+    // Live Signature Position & Size Controls (Admin)
+    [
+      { id: 'cfgCertSigOffsetX', key: 'certSigOffsetX' },
+      { id: 'cfgCertSigOffsetY', key: 'certSigOffsetY' },
+      { id: 'cfgCertSigScale', key: 'certSigScale' }
+    ].forEach(function (slider) {
+      const el = document.getElementById(slider.id);
+      if (!el) return;
+      el.addEventListener('input', function () {
+        if (!state.isAdmin) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        state.config[slider.key] = Number(el.value);
+        updateCertConfigUI();
+      });
+      el.addEventListener('change', function () {
+        if (!state.isAdmin) return;
+        saveState();
+      });
+    });
+
+    const btnResetCertSigPos = document.getElementById('btnResetCertSigPos');
+    if (btnResetCertSigPos) {
+      btnResetCertSigPos.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        state.config.certSigOffsetX = DEFAULT_CONFIG.certSigOffsetX;
+        state.config.certSigOffsetY = DEFAULT_CONFIG.certSigOffsetY;
+        state.config.certSigScale = DEFAULT_CONFIG.certSigScale;
+        saveState();
+        updateCertConfigUI();
+        showToast('รีเซ็ตตำแหน่งและขนาดลายเซ็นเป็นค่าเริ่มต้นแล้ว', 'info');
       });
     }
 
