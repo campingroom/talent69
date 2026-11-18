@@ -1795,8 +1795,20 @@
             <h2 class="text-base font-bold font-heading text-slate-900">ระบบพิมพ์เกียรติบัตรออนไลน์ (นักเรียน • ครูผู้ฝึกซ้อม • คณะกรรมการตัดสิน)</h2>
             <p class="text-xs text-slate-500">ค้นหารายชื่อหรือเลือกโรงเรียนเพื่อสั่งพิมพ์เกียรติบัตรรายบุคคล หรือพิมพ์ทั้งโรงเรียนได้ทันที พร้อมรหัสอ้างอิงและ QR Code ตรวจสอบ</p>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" id="btnPrintFilteredCerts" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition">
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="certLockedNumeralBadge" class="hidden px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-700 font-heading text-xs font-medium"></span>
+            <div id="certUserNumeralControls" class="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 border border-slate-200" role="group" aria-label="รูปแบบตัวเลขเกียรติบัตร">
+              <button type="button" data-cert-numeral-mode="thai" title="ดาวน์โหลด/พิมพ์เฉพาะหน้าเลขไทย (1 หน้าต่อคน)" class="cert-numeral-mode-btn px-2.5 py-1.5 rounded-md font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer">
+                แบบเลขไทย
+              </button>
+              <button type="button" data-cert-numeral-mode="arabic" title="ดาวน์โหลด/พิมพ์เฉพาะหน้าเลขอารบิก (1 หน้าต่อคน)" class="cert-numeral-mode-btn px-2.5 py-1.5 rounded-md font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer">
+                แบบเลขอารบิก
+              </button>
+              <button type="button" data-cert-numeral-mode="both" title="ดาวน์โหลด/พิมพ์คู่ทั้งเลขไทยและเลขอารบิก (2 หน้าต่อคน)" class="cert-numeral-mode-btn px-2.5 py-1.5 rounded-md font-heading text-xs font-semibold bg-white text-slate-900 shadow-2xs transition cursor-pointer">
+                ทั้งสองแบบ
+              </button>
+            </div>
+            <button type="button" id="btnPrintFilteredCerts" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer">
               พิมพ์เกียรติบัตรตามรายการที่กรอง (สูงสุด 20 ใบ/ครั้ง)
             </button>
           </div>
@@ -1973,24 +1985,46 @@
           </div>
 
           <!-- Item 3: Certificates -->
-          <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                <span class="font-heading font-semibold text-slate-900 text-sm">3. เกียรติบัตรออนไลน์</span>
-                <span id="badgeVisibilityCerts" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700">ตามกำหนดการ</span>
+          <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-heading font-semibold text-slate-900 text-sm">3. เกียรติบัตรออนไลน์</span>
+                  <span id="badgeVisibilityCerts" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700">ตามกำหนดการ</span>
+                </div>
+                <p class="text-slate-500 text-[11px]">กำหนดการอัตโนมัติ: วันที่ 25 พ.ย. 2569 (วันสรุปผลการแข่งขัน — พิมพ์ได้เฉพาะรายการที่บันทึกคะแนนและประกาศผลแล้ว)</p>
               </div>
-              <p class="text-slate-500 text-[11px]">กำหนดการอัตโนมัติ: วันที่ 25 พ.ย. 2569 (วันสรุปผลการแข่งขัน — พิมพ์ได้เฉพาะรายการที่บันทึกคะแนนและประกาศผลแล้ว)</p>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" data-feature-toggle="certificates" data-action="open" title="เปิดหน้าเกียรติบัตรออนไลน์ให้คนทั่วไปเข้าดูได้ทันที (พิมพ์ได้เฉพาะรายการที่ประกาศผลแล้ว)" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                  เปิดทันที
+                </button>
+                <button type="button" data-feature-toggle="certificates" data-action="auto" title="เปิดหน้าเกียรติบัตรอัตโนมัติในวันที่ 25 พ.ย. 2569" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                  ตามกำหนดการ
+                </button>
+                <button type="button" data-feature-toggle="certificates" data-action="hidden" title="ซ่อนหน้าเกียรติบัตรออนไลน์ไว้ตรวจสอบภายในเฉพาะแอดมิน" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                  ซ่อนเฉพาะแอดมิน
+                </button>
+              </div>
             </div>
-            <div class="flex items-center gap-1.5 shrink-0">
-              <button type="button" data-feature-toggle="certificates" data-action="open" title="เปิดหน้าเกียรติบัตรออนไลน์ให้คนทั่วไปเข้าดูได้ทันที (พิมพ์ได้เฉพาะรายการที่ประกาศผลแล้ว)" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
-                เปิดทันที
-              </button>
-              <button type="button" data-feature-toggle="certificates" data-action="auto" title="เปิดหน้าเกียรติบัตรอัตโนมัติในวันที่ 25 พ.ย. 2569" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
-                ตามกำหนดการ
-              </button>
-              <button type="button" data-feature-toggle="certificates" data-action="hidden" title="ซ่อนหน้าเกียรติบัตรออนไลน์ไว้ตรวจสอบภายในเฉพาะแอดมิน" class="btn-vis-toggle-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
-                ซ่อนเฉพาะแอดมิน
-              </button>
+            <div class="pt-2.5 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div class="space-y-0.5">
+                <div class="flex items-center gap-2">
+                  <span class="font-heading font-semibold text-slate-800 text-xs">รูปแบบตัวเลขเกียรติบัตรที่เปิดให้ดาวน์โหลด (กำหนดโดยแอดมิน):</span>
+                  <span id="badgeAdminCertNumeralMode" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-blue-100 text-blue-800">ทั้งสองแบบ</span>
+                </div>
+                <p class="text-slate-500 text-[11px]">เลือกให้ดาวน์โหลดเฉพาะเลขไทย เฉพาะเลขอารบิก หรือเปิดทั้งสองแบบให้ผู้ใช้เลือกได้</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                <button type="button" data-admin-cert-numeral-mode="thai" title="เปิดให้ดาวน์โหลดได้เฉพาะแบบเลขไทยล้วน" class="px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                  แบบเลขไทย
+                </button>
+                <button type="button" data-admin-cert-numeral-mode="arabic" title="เปิดให้ดาวน์โหลดได้เฉพาะแบบเลขอารบิกล้วน" class="px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                  แบบเลขอารบิก
+                </button>
+                <button type="button" data-admin-cert-numeral-mode="both" title="เปิดให้ดาวน์โหลดได้ทั้งแบบเลขไทย แบบเลขอารบิก หรือคู่ 2 หน้า" class="px-3 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer">
+                  ทั้งสองแบบ
+                </button>
+              </div>
             </div>
           </div>
 

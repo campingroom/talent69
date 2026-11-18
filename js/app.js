@@ -23,7 +23,9 @@
     certSignerPos: 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
     certSignerOrg: 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3',
     certIssueDate: '25 พฤศจิกายน พุทธศักราช 2569',
-    certSignatureUrl: '',
+    certNumeralMode: 'both', // Admin controls allowed download mode: 'thai', 'arabic', or 'both'
+    certSignatureUrl: 'assets/signature-kitipoom.png',
+    certSignatureCleared: false,
     certBgMode: 'standard', // 'standard' or 'canva'
     certBgImageUrl: '',
     venueMapImageUrl: '',
@@ -243,6 +245,7 @@
     compRoomFilter: 'ALL',
     venueMapExpanded: true,
     resultSubview: 'by-comp',
+    certNumeralMode: 'both', // 'thai' | 'arabic' | 'both'
     lastAddedRegId: null,
     gasWebAppUrl: '',
     isAdmin: false,
@@ -692,6 +695,9 @@
         state.schools = normalizeSchoolsList(state.schools);
         if (!state.config.certSignerName || state.config.certSignerName === 'นายวิทยา มโนการณ์') {
           state.config.certSignerName = 'นายกิจภูมิ บุญอบ';
+        }
+        if (!state.config.certSignatureUrl && !state.config.certSignatureCleared) {
+          state.config.certSignatureUrl = 'assets/signature-kitipoom.png';
         }
         return;
       } catch (e) {
@@ -1199,6 +1205,8 @@
       });
     });
 
+    syncCertNumeralModeUI();
+
     // 9. Venue / Room Schedule Public vs Admin Controls & Print Button Gating
     const venueSetting = getFeatureVisibilitySetting('venue');
     const isVenuePublic = isFeatureOpenToPublic('venue');
@@ -1315,6 +1323,64 @@
     if (btn) {
       btn.addEventListener('click', openAdminModal);
     }
+  }
+
+  function getAdminCertNumeralMode() {
+    const raw = (state.config && state.config.certNumeralMode) || 'both';
+    return ['thai', 'arabic', 'both'].indexOf(raw) !== -1 ? raw : 'both';
+  }
+
+  function syncCertNumeralModeUI() {
+    const adminMode = getAdminCertNumeralMode();
+    const labelMap = {
+      thai: 'เฉพาะแบบเลขไทย',
+      arabic: 'เฉพาะแบบเลขอารบิก',
+      both: 'ทั้งสองแบบ (ไทย + อารบิก)'
+    };
+
+    const badgeAdminEl = document.getElementById('badgeAdminCertNumeralMode');
+    if (badgeAdminEl) {
+      badgeAdminEl.textContent = labelMap[adminMode];
+      badgeAdminEl.className =
+        adminMode === 'both'
+          ? 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-blue-100 text-blue-800'
+          : 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-100 text-emerald-800';
+    }
+
+    document.querySelectorAll('[data-admin-cert-numeral-mode]').forEach(function (btn) {
+      const m = btn.getAttribute('data-admin-cert-numeral-mode');
+      btn.className =
+        m === adminMode
+          ? 'px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white border border-slate-900 transition cursor-pointer'
+          : 'px-3 py-1.5 rounded-lg font-heading text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition cursor-pointer';
+    });
+
+    if (adminMode !== 'both') {
+      state.certNumeralMode = adminMode;
+    } else if (['thai', 'arabic', 'both'].indexOf(state.certNumeralMode) === -1) {
+      state.certNumeralMode = 'both';
+    }
+
+    const userControlsEl = document.getElementById('certUserNumeralControls');
+    const lockedBadgeEl = document.getElementById('certLockedNumeralBadge');
+    if (userControlsEl) {
+      userControlsEl.classList.toggle('hidden', adminMode !== 'both');
+      userControlsEl.classList.toggle('inline-flex', adminMode === 'both');
+    }
+    if (lockedBadgeEl) {
+      lockedBadgeEl.classList.toggle('hidden', adminMode === 'both');
+      if (adminMode !== 'both') {
+        lockedBadgeEl.textContent = 'รูปแบบที่แอดมินเปิดให้ดาวน์โหลด: ' + labelMap[adminMode];
+      }
+    }
+
+    document.querySelectorAll('[data-cert-numeral-mode]').forEach(function (btn) {
+      const m = btn.getAttribute('data-cert-numeral-mode');
+      btn.className =
+        m === state.certNumeralMode
+          ? 'cert-numeral-mode-btn px-2.5 py-1.5 rounded-md font-heading text-xs font-semibold bg-white text-slate-900 shadow-2xs transition cursor-pointer'
+          : 'cert-numeral-mode-btn px-2.5 py-1.5 rounded-md font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer';
+    });
   }
 
   function setFeatureVisibility(featureKey, action) {
@@ -6995,8 +7061,8 @@
     });
   }
 
-  // Print Official Landscape Certificates (Dual-Page PDF: Page 1 Pure Thai Numerals + Page 2 Pure Arabic Numerals)
-  function printCertificatesWindow(entries) {
+  // Print Official Landscape Certificates (Supports 3 Numeral Modes: 'thai', 'arabic', or 'both')
+  function printCertificatesWindow(entries, initialNumeralMode) {
     const printable = (entries || []).filter(function (item) {
       return item && item.cert_ready !== false;
     });
@@ -7005,11 +7071,22 @@
       return;
     }
 
+    const adminAllowedMode = getAdminCertNumeralMode();
+    const canSwitchInPopup = adminAllowedMode === 'both';
+    const modeRaw = String(initialNumeralMode || state.certNumeralMode || 'both');
+    const activeNumeralMode = canSwitchInPopup
+      ? (['thai', 'arabic', 'both'].indexOf(modeRaw) !== -1 ? modeRaw : 'both')
+      : adminAllowedMode;
+
     const cfg = state.config || DEFAULT_CONFIG;
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
     const defaultCertBgUrl = baseDir + 'assets/cert-bg-thai.jpg';
     const logoObecUrl = baseDir + 'assets/logo-obec.svg';
     const certWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
+    const rawSigUrl = String(cfg.certSignatureUrl || '').trim();
+    const resolvedSigUrl = rawSigUrl
+      ? (/^(data:|https?:|blob:|\/)/i.test(rawSigUrl) ? rawSigUrl : baseDir + rawSigUrl)
+      : '';
 
     const certBgUrl =
       cfg.certBgMode === 'canva' && cfg.certBgImageUrl ? cfg.certBgImageUrl : defaultCertBgUrl;
@@ -7026,11 +7103,12 @@
       const fmtNum = function (val) {
         return useThaiNumerals ? toThaiNumerals(val) : toArabicNumerals(val);
       };
+      const pageVariantCls = useThaiNumerals ? 'cert-page-thai' : 'cert-page-arabic';
       const verifyUrl = encodeURIComponent(
         'https://campingroom.github.io/talent69/#cert=' + toArabicNumerals(c.cert_code)
       );
-      const sigHtml = cfg.certSignatureUrl
-        ? `<div class="sign-img-wrap"><img src="${cfg.certSignatureUrl}" alt="ลายมือชื่อ" class="cert-signature-img" /></div>`
+      const sigHtml = resolvedSigUrl
+        ? `<div class="sign-img-wrap"><img src="${escapeHtml(resolvedSigUrl)}" alt="ลายมือชื่อ" class="cert-signature-img" /></div>`
         : `<div class="sign-line">........................................................</div>`;
       const signerNameHtml = signerName
         ? `<div class="sign-name">(${escapeHtml(signerName)})</div>`
@@ -7068,7 +7146,7 @@
       const eventDatesRaw = 'ระหว่างวันที่ 24 - 25 พฤศจิกายน พ.ศ. 2569';
 
       return `
-        <div class="cert-page">
+        <div class="cert-page ${pageVariantCls}">
           <div class="cert-watermark-layer">
             <img src="${certWatermarkUrl}" alt="" class="cert-watermark-img" />
           </div>
@@ -7131,9 +7209,19 @@
 
     const pagesHtml = printable
       .map(function (c) {
+        if (adminAllowedMode === 'thai') return renderCertPage(c, true);
+        if (adminAllowedMode === 'arabic') return renderCertPage(c, false);
         return renderCertPage(c, true) + renderCertPage(c, false);
       })
       .join('');
+
+    const initialTotalPages = activeNumeralMode === 'both' ? printable.length * 2 : printable.length;
+    const switcherButtonsHtml = canSwitchInPopup
+      ? `
+      <button type="button" id="btnCertModeThai" class="mode-switch-btn ${activeNumeralMode === 'thai' ? 'active' : ''}" onclick="setCertNumeralMode('thai')">1. แบบเลขไทย</button>
+      <button type="button" id="btnCertModeArabic" class="mode-switch-btn ${activeNumeralMode === 'arabic' ? 'active' : ''}" onclick="setCertNumeralMode('arabic')">2. แบบเลขอารบิก</button>
+      <button type="button" id="btnCertModeBoth" class="mode-switch-btn ${activeNumeralMode === 'both' ? 'active' : ''}" onclick="setCertNumeralMode('both')">3. ทั้งสองแบบ</button>`
+      : '';
 
     const html = `<!DOCTYPE html>
 <html lang="th">
@@ -7141,6 +7229,41 @@
   <meta charset="UTF-8" />
   <base href="${baseDir}" />
   <title>เกียรติบัตรออนไลน์ - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74</title>
+  <script>
+    function setCertNumeralMode(mode) {
+      var m = (mode === 'thai' || mode === 'arabic' || mode === 'both') ? mode : 'both';
+      document.body.setAttribute('data-numeral-mode', m);
+      var btnMap = { thai: 'btnCertModeThai', arabic: 'btnCertModeArabic', both: 'btnCertModeBoth' };
+      Object.keys(btnMap).forEach(function (k) {
+        var el = document.getElementById(btnMap[k]);
+        if (el) el.classList.toggle('active', k === m);
+      });
+      var count = ${printable.length};
+      var total = m === 'both' ? count * 2 : count;
+      var descMap = {
+        thai: 'แบบเลขไทยล้วน',
+        arabic: 'แบบเลขอารบิกล้วน',
+        both: 'ทั้งสองแบบ (หน้า 1 เลขไทยล้วน / หน้า 2 เลขอารบิกล้วน)'
+      };
+      var infoEl = document.getElementById('certNumeralInfoText');
+      if (infoEl) {
+        infoEl.textContent = 'เกียรติบัตรออนไลน์ (' + count + ' คน • รวม ' + total + ' หน้า PDF • ' + descMap[m] + ' — A4 แนวนอน)';
+      }
+      var pages = document.querySelectorAll('.cert-page');
+      var lastVisible = null;
+      pages.forEach(function (pg) {
+        pg.style.pageBreakAfter = '';
+        var show = m === 'both' || (m === 'thai' && pg.classList.contains('cert-page-thai')) || (m === 'arabic' && pg.classList.contains('cert-page-arabic'));
+        if (show) lastVisible = pg;
+      });
+      if (lastVisible) {
+        lastVisible.style.pageBreakAfter = 'auto';
+      }
+    }
+    window.addEventListener('DOMContentLoaded', function () {
+      setCertNumeralMode('${activeNumeralMode}');
+    });
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Niramit:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Prompt:wght@500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     @page { size: A4 landscape; margin: 0; }
@@ -7154,21 +7277,46 @@
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
+    body[data-numeral-mode="thai"] .cert-page-arabic { display: none !important; }
+    body[data-numeral-mode="arabic"] .cert-page-thai { display: none !important; }
     .no-print-bar {
-      padding: 12px 24px;
+      padding: 10px 20px;
       background: #0f172a;
       color: #ffffff;
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
+      gap: 10px;
       font-family: 'Prompt', sans-serif;
+      font-size: 12.5px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.12);
     }
-    .no-print-bar button {
+    .no-print-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .mode-switch-btn {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+      padding: 7px 13px;
+      border-radius: 7px;
+      font-family: 'Prompt', sans-serif;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-switch-btn:hover { background: #334155; color: #ffffff; }
+    .mode-switch-btn.active { background: #38bdf8; color: #0f172a; border-color: #38bdf8; }
+    .print-action-btn {
       background: #f59e0b;
       color: #0f172a;
       border: none;
-      padding: 8px 22px;
+      padding: 8px 20px;
       border-radius: 8px;
       font-family: 'Prompt', sans-serif;
       font-weight: 700;
@@ -7176,7 +7324,7 @@
       cursor: pointer;
       transition: background 0.15s;
     }
-    .no-print-bar button:hover {
+    .print-action-btn:hover {
       background: #d97706;
       color: #ffffff;
     }
@@ -7406,15 +7554,15 @@
       margin: 0 auto;
     }
     .sign-img-wrap {
-      height: 48px;
+      height: 52px;
       display: flex;
       align-items: flex-end;
       justify-content: center;
-      margin-bottom: 2px;
+      margin-bottom: -2px;
     }
     .cert-signature-img {
-      max-height: 48px;
-      max-width: 170px;
+      max-height: 52px;
+      max-width: 195px;
       object-fit: contain;
     }
     .sign-line {
@@ -7466,10 +7614,13 @@
     }
   </style>
 </head>
-<body>
+<body data-numeral-mode="${activeNumeralMode}">
   <div class="no-print-bar">
-    <div>เกียรติบัตรออนไลน์ (${printable.length} คน • รวม ${printable.length * 2} หน้า PDF: หน้าที่ 1 เลขไทยล้วน / หน้าที่ 2 เลขอารบิกล้วน — A4 Landscape)</div>
-    <button onclick="window.print()">สั่งพิมพ์ / บันทึกเป็น PDF</button>
+    <div id="certNumeralInfoText">เกียรติบัตรออนไลน์ (${printable.length} คน • รวม ${initialTotalPages} หน้า PDF — A4 แนวนอน)</div>
+    <div class="no-print-controls">
+      ${switcherButtonsHtml}
+      <button type="button" class="print-action-btn" onclick="window.print()">สั่งพิมพ์ / บันทึกเป็น PDF</button>
+    </div>
   </div>
   ${pagesHtml}
 </body>
@@ -10525,6 +10676,37 @@
       });
     });
 
+    // Admin controls which certificate numeral format(s) public users can download
+    document.querySelectorAll('[data-admin-cert-numeral-mode]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const mode = btn.getAttribute('data-admin-cert-numeral-mode');
+        if (['thai', 'arabic', 'both'].indexOf(mode) === -1) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        state.config.certNumeralMode = mode;
+        state.certNumeralMode = mode;
+        saveState();
+        syncCertNumeralModeUI();
+        const labelMap = {
+          thai: 'เฉพาะแบบเลขไทย',
+          arabic: 'เฉพาะแบบเลขอารบิก',
+          both: 'ทั้งสองแบบ (ไทย + อารบิก)'
+        };
+        showToast('ตั้งค่ารูปแบบเกียรติบัตรที่เปิดให้ดาวน์โหลดเป็น: ' + labelMap[mode], 'success');
+      });
+    });
+
+    // Public/user selector on Certificates tab (only shown when admin enables 'both')
+    document.querySelectorAll('[data-cert-numeral-mode]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (getAdminCertNumeralMode() !== 'both') return;
+        const mode = btn.getAttribute('data-cert-numeral-mode');
+        if (['thai', 'arabic', 'both'].indexOf(mode) === -1) return;
+        state.certNumeralMode = mode;
+        syncCertNumeralModeUI();
+      });
+    });
+
     // Phase 2: Official Substitution Request Form (Print)
     const btnPrintSubstitutionFormSchool = document.getElementById(
       'btnPrintSubstitutionFormSchool'
@@ -10587,6 +10769,7 @@
         const reader = new FileReader();
         reader.onload = function (ev) {
           state.config.certSignatureUrl = ev.target.result;
+          state.config.certSignatureCleared = false;
           saveState();
           updateCertConfigUI();
           showToast('อัปโหลดลายมือชื่อดิจิทัลเรียบร้อยแล้ว', 'success');
@@ -10599,6 +10782,7 @@
     if (btnClearCertSig) {
       btnClearCertSig.addEventListener('click', function () {
         state.config.certSignatureUrl = '';
+        state.config.certSignatureCleared = true;
         const fileInput = document.getElementById('cfgCertSigFileInput');
         if (fileInput) fileInput.value = '';
         saveState();
