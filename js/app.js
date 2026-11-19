@@ -250,6 +250,8 @@
     compStatusFilter: 'ALL',
     compRoomFilter: 'ALL',
     venueMapExpanded: true,
+    dashboardMatrixOpen: false,
+    expandedMatrixGroups: {},
     resultSubview: 'by-comp',
     certNumeralMode: 'both', // 'thai' | 'arabic' | 'both'
     lastAddedRegId: null,
@@ -1929,6 +1931,20 @@
       if (prev === 'ALL' || levels.indexOf(prev) !== -1) el.value = prev;
     });
 
+    const dashMatrixAreaFilter = document.getElementById('dashMatrixAreaFilter');
+    if (dashMatrixAreaFilter) {
+      const prevDashArea = dashMatrixAreaFilter.value || 'ALL';
+      const majorGroups = getMajorAreaGroups();
+      let dmHtml = '<option value="ALL">-- ทั้ง ' + majorGroups.length + ' หมวดกิจกรรม --</option>';
+      majorGroups.forEach(function (g) {
+        dmHtml += '<option value="' + escapeHtml(g.key) + '">' + escapeHtml(g.label) + '</option>';
+      });
+      dashMatrixAreaFilter.innerHTML = dmHtml;
+      if (prevDashArea === 'ALL' || majorGroups.some((g) => g.key === prevDashArea)) {
+        dashMatrixAreaFilter.value = prevDashArea;
+      }
+    }
+
     const dataList = document.getElementById('learningAreaList');
     if (dataList) {
       dataList.innerHTML = areas
@@ -3411,11 +3427,13 @@
         groups
           .map(function (g) {
             return (
-              '<div class="text-[10px] leading-tight text-[#787774] text-center h-10 flex items-end justify-center" title="' +
+              '<button type="button" data-open-matrix-group="' +
+              escapeHtml(g.key) +
+              '" class="text-[10px] leading-tight text-[#787774] hover:text-slate-900 hover:underline text-center h-10 flex items-end justify-center cursor-pointer transition" title="กดเพื่อขยายดูรายการย่อยในหมวด ' +
               escapeHtml(g.label) +
               '">' +
               escapeHtml(g.label) +
-              '</div>'
+              '</button>'
             );
           })
           .join('') +
@@ -3519,7 +3537,27 @@
         });
       });
 
+    document
+      .querySelectorAll('#dashboardHeatmap [data-open-matrix-group]')
+      .forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const groupKey = btn.getAttribute('data-open-matrix-group');
+          if (!groupKey) return;
+          state.dashboardMatrixOpen = true;
+          state.expandedMatrixGroups[groupKey] = true;
+          const areaFilterEl = document.getElementById('dashMatrixAreaFilter');
+          if (areaFilterEl) areaFilterEl.value = 'ALL';
+          renderDashboardMatrixSection(groups);
+          const cardEl = document.querySelector('#dashboardMatrixContainer [data-matrix-group-card="' + groupKey.replace(/"/g, '\\"') + '"]');
+          const scrollTarget = cardEl || document.getElementById('dashboardMatrixSection');
+          if (scrollTarget && typeof scrollTarget.scrollIntoView === 'function') {
+            scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      });
+
     bindDashboardChartTooltip();
+    renderDashboardMatrixSection(groups);
 
     // 7. Render Recent Registrations Live Table
     const recentBody = document.getElementById('recentRegistrationsBody');
@@ -3621,6 +3659,535 @@
           });
         });
       }
+    }
+  }
+
+  function getFilteredDashboardMatrixData(groupsInput) {
+    const groups = groupsInput || getMajorAreaGroups();
+    const totalSchools = state.schools.length || 13;
+    const areaFilterEl = document.getElementById('dashMatrixAreaFilter');
+    const statusFilterEl = document.getElementById('dashMatrixStatusFilter');
+    const searchEl = document.getElementById('dashMatrixSearch');
+    const areaFilter = areaFilterEl ? areaFilterEl.value : 'ALL';
+    const statusFilter = statusFilterEl ? statusFilterEl.value : 'ALL';
+    const searchQ = (searchEl ? searchEl.value : '').trim().toLowerCase();
+
+    const regLookup = {};
+    state.registrations.forEach(function (r) {
+      regLookup[r.comp_id + '::' + r.school_name] = r;
+    });
+
+    const resultGroups = [];
+    groups.forEach(function (g) {
+      if (areaFilter !== 'ALL' && g.key !== areaFilter) return;
+      const compsInGroup = state.competitions.filter(function (c) {
+        return majorAreaKey(c.learning_area) === g.key;
+      });
+      const items = [];
+      let registeredCompsInGroup = 0;
+      let totalTeamsInGroup = 0;
+
+      compsInGroup.forEach(function (c) {
+        let schoolCount = 0;
+        const schoolCells = state.schools.map(function (s) {
+          const reg = regLookup[c.comp_id + '::' + s.school_name] || null;
+          if (reg) schoolCount += 1;
+          return { school: s, reg: reg };
+        });
+
+        if (schoolCount > 0) registeredCompsInGroup += 1;
+        totalTeamsInGroup += schoolCount;
+
+        if (statusFilter === 'PARTIAL' && schoolCount >= totalSchools) return;
+        if (statusFilter === 'HAS_REG' && schoolCount === 0) return;
+        if (statusFilter === 'EMPTY' && schoolCount > 0) return;
+
+        if (searchQ) {
+          const hay = (c.comp_id + ' ' + c.comp_name + ' ' + c.level + ' ' + c.learning_area).toLowerCase();
+          if (hay.indexOf(searchQ) === -1) return;
+        }
+
+        items.push({
+          comp: c,
+          schoolCount: schoolCount,
+          schoolCells: schoolCells
+        });
+      });
+
+      if (items.length > 0) {
+        resultGroups.push({
+          group: g,
+          items: items,
+          totalInCategory: compsInGroup.length,
+          registeredCompsInGroup: registeredCompsInGroup,
+          totalTeamsInGroup: totalTeamsInGroup
+        });
+      }
+    });
+
+    return {
+      groups: resultGroups,
+      totalSchools: totalSchools,
+      hasActiveFilter: areaFilter !== 'ALL' || statusFilter !== 'ALL' || searchQ !== ''
+    };
+  }
+
+  function renderDashboardMatrixSection(groupsInput) {
+    const sectionEl = document.getElementById('dashboardMatrixSection');
+    const toggleBtnTextEl = document.getElementById('btnToggleDashboardMatrixText');
+    const containerEl = document.getElementById('dashboardMatrixContainer');
+    if (toggleBtnTextEl) {
+      toggleBtnTextEl.textContent = state.dashboardMatrixOpen
+        ? 'ซ่อนตารางรายการย่อย'
+        : 'ขยายดูรายการย่อย ' + (state.schools.length || 13) + ' โรงเรียน (' + state.competitions.length + ' รายการ)';
+    }
+    if (!sectionEl) return;
+    sectionEl.classList.toggle('hidden', !state.dashboardMatrixOpen);
+    if (!state.dashboardMatrixOpen || !containerEl) return;
+
+    const data = getFilteredDashboardMatrixData(groupsInput);
+    if (data.groups.length === 0) {
+      containerEl.innerHTML =
+        '<div class="py-8 text-center text-sm text-slate-500 border border-dashed border-slate-200 rounded-xl bg-slate-50/60">ไม่พบรายการแข่งขันที่ตรงกับเงื่อนไขการกรอง</div>';
+      return;
+    }
+
+    const checkIconSvg =
+      '<svg class="w-3.5 h-3.5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+    const chevronSvg =
+      '<svg class="w-4 h-4 shrink-0 text-slate-500 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>';
+
+    containerEl.innerHTML = data.groups
+      .map(function (grp) {
+        const gKey = grp.group.key;
+        const isExpanded = Boolean(state.expandedMatrixGroups[gKey]);
+        const schoolHeadersHtml = state.schools
+          .map(function (s) {
+            return (
+              '<th class="py-2 px-1 text-center font-heading font-semibold text-[10px] text-slate-700 border-b border-slate-200 min-w-[54px] max-w-[66px]" title="' +
+              escapeHtml(s.school_name) +
+              '">' +
+              '<div class="truncate">' +
+              escapeHtml(shortSchoolName(s.school_name)) +
+              '</div></th>'
+            );
+          })
+          .join('');
+
+        let bodyHtml = '';
+        if (isExpanded) {
+          const perSchoolCounts = state.schools.map(function () {
+            return 0;
+          });
+          const rowsHtml = grp.items
+            .map(function (rowItem) {
+              const c = rowItem.comp;
+              const cellsHtml = rowItem.schoolCells
+                .map(function (cell, sIdx) {
+                  if (cell.reg) {
+                    perSchoolCounts[sIdx] += 1;
+                    const stuN = (cell.reg.students || []).length;
+                    const tchN = (cell.reg.teachers || []).length;
+                    return (
+                      '<td class="py-1.5 px-1 text-center border-b border-slate-100">' +
+                      '<button type="button" data-matrix-open-school="' +
+                      escapeHtml(cell.school.school_name) +
+                      '" title="' +
+                      escapeHtml(cell.school.school_name + ' • ' + c.comp_name + ' (นักเรียน ' + stuN + ' / ครู ' + tchN + ' คน)') +
+                      '" aria-label="ส่งแล้ว" class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer">' +
+                      checkIconSvg +
+                      '</button></td>'
+                    );
+                  }
+                  return (
+                    '<td class="py-1.5 px-1 text-center border-b border-slate-100 text-slate-300 text-xs select-none" title="' +
+                    escapeHtml(cell.school.school_name + ' • ยังไม่ส่ง ' + c.comp_name) +
+                    '">–</td>'
+                  );
+                })
+                .join('');
+
+              const countBadgeCls =
+                rowItem.schoolCount === 0
+                  ? 'bg-slate-100 text-slate-500'
+                  : rowItem.schoolCount >= data.totalSchools
+                    ? 'bg-emerald-100 text-emerald-800 font-bold'
+                    : 'bg-blue-50 text-blue-800 font-semibold';
+
+              return (
+                '<tr class="hover:bg-slate-50/80 transition">' +
+                '<td class="sticky left-0 z-10 bg-white py-2 px-3 border-b border-r border-slate-200 min-w-[235px] max-w-[300px]">' +
+                '<div class="flex items-start gap-1.5">' +
+                '<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px] shrink-0">' +
+                escapeHtml(c.comp_id) +
+                '</span>' +
+                '<div class="min-w-0">' +
+                '<div class="text-xs font-medium text-slate-900 leading-snug">' +
+                escapeHtml(c.comp_name) +
+                '</div>' +
+                '<div class="text-[10px] text-slate-500">' +
+                escapeHtml(c.level || '-') +
+                (c.team_type ? ' · ' + escapeHtml(c.team_type) : '') +
+                '</div>' +
+                '</div>' +
+                '</div>' +
+                '</td>' +
+                cellsHtml +
+                '<td class="py-1.5 px-2 text-center border-b border-l border-slate-200 whitespace-nowrap">' +
+                '<span class="inline-block px-1.5 py-0.5 rounded text-[11px] font-heading ' +
+                countBadgeCls +
+                '">' +
+                rowItem.schoolCount +
+                '/' +
+                data.totalSchools +
+                '</span></td>' +
+                '</tr>'
+              );
+            })
+            .join('');
+
+          const totalGroupCells = perSchoolCounts.reduce(function (a, b) {
+            return a + b;
+          }, 0);
+          const footerCellsHtml = perSchoolCounts
+            .map(function (cnt) {
+              return (
+                '<td class="py-1.5 px-1 text-center font-heading text-[11px] font-semibold ' +
+                (cnt === 0 ? 'text-slate-400' : 'text-emerald-800') +
+                '">' +
+                cnt +
+                '</td>'
+              );
+            })
+            .join('');
+
+          bodyHtml =
+            '<div class="overflow-x-auto border-t border-slate-200">' +
+            '<table class="w-full border-collapse text-left">' +
+            '<thead class="bg-slate-50">' +
+            '<tr>' +
+            '<th class="sticky left-0 z-10 bg-slate-50 py-2 px-3 border-b border-r border-slate-200 font-heading text-xs font-semibold text-slate-700 min-w-[235px]">รหัส / รายการแข่งขัน (ระดับ)</th>' +
+            schoolHeadersHtml +
+            '<th class="py-2 px-2 text-center font-heading text-[11px] font-semibold text-slate-700 border-b border-l border-slate-200 whitespace-nowrap">รวม (รร.)</th>' +
+            '</tr>' +
+            '</thead>' +
+            '<tbody>' +
+            rowsHtml +
+            '</tbody>' +
+            '<tfoot class="bg-slate-50/90 border-t border-slate-200">' +
+            '<tr>' +
+            '<td class="sticky left-0 z-10 bg-slate-50 py-2 px-3 border-r border-slate-200 font-heading text-xs font-bold text-slate-800">รวมรายการที่ส่ง (ตามตัวกรอง)</td>' +
+            footerCellsHtml +
+            '<td class="py-1.5 px-2 text-center border-l border-slate-200 font-heading text-xs font-bold text-slate-900">' +
+            totalGroupCells +
+            ' ทีม</td>' +
+            '</tr>' +
+            '</tfoot>' +
+            '</table>' +
+            '</div>';
+        }
+
+        return (
+          '<div class="rounded-xl border border-slate-200 overflow-hidden bg-white" data-matrix-group-card="' +
+          escapeHtml(gKey) +
+          '">' +
+          '<button type="button" data-toggle-matrix-group="' +
+          escapeHtml(gKey) +
+          '" class="w-full px-4 py-2.5 bg-slate-50/70 hover:bg-slate-100/80 flex flex-wrap items-center justify-between gap-2 text-left transition cursor-pointer">' +
+          '<div class="flex items-center gap-2.5">' +
+          '<span class="inline-flex transition-transform ' +
+          (isExpanded ? 'rotate-180' : '') +
+          '">' +
+          chevronSvg +
+          '</span>' +
+          '<span class="font-heading font-semibold text-sm text-slate-900">' +
+          escapeHtml(grp.group.label) +
+          '</span>' +
+          '<span class="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-[11px] font-heading text-slate-600">' +
+          grp.items.length +
+          ' รายการย่อย</span>' +
+          '</div>' +
+          '<div class="flex items-center gap-2 text-xs font-heading">' +
+          '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">มีโรงเรียนส่ง ' +
+          grp.registeredCompsInGroup +
+          '/' +
+          grp.totalInCategory +
+          ' รายการ</span>' +
+          '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">รวม ' +
+          grp.totalTeamsInGroup +
+          ' ทีม</span>' +
+          '</div>' +
+          '</button>' +
+          bodyHtml +
+          '</div>'
+        );
+      })
+      .join('');
+
+    containerEl.querySelectorAll('[data-toggle-matrix-group]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const key = btn.getAttribute('data-toggle-matrix-group');
+        state.expandedMatrixGroups[key] = !state.expandedMatrixGroups[key];
+        renderDashboardMatrixSection(groupsInput);
+      });
+    });
+
+    containerEl.querySelectorAll('[data-matrix-open-school]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const schoolName = btn.getAttribute('data-matrix-open-school');
+        const select = document.getElementById('schoolViewSelect');
+        if (select && schoolName) select.value = schoolName;
+        switchTab('school');
+      });
+    });
+  }
+
+  async function exportDashboardMatrixExcel() {
+    const data = getFilteredDashboardMatrixData();
+    if (data.groups.length === 0) {
+      showToast('ไม่มีข้อมูลตามตัวกรองสำหรับส่งออก Excel', 'warning');
+      return;
+    }
+
+    let ExcelJS;
+    try {
+      ExcelJS = await loadExcelJs();
+    } catch (err) {
+      showToast(err.message, 'error');
+      return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('ติดตาม13โรงเรียน');
+    const schoolCols = state.schools.map(function (s) {
+      return { width: 11, school: s };
+    });
+    ws.columns = [{ width: 6 }, { width: 22 }, { width: 12 }, { width: 42 }, { width: 11 }].concat(
+      schoolCols.map(function (c) {
+        return { width: c.width };
+      }),
+      [{ width: 11 }]
+    );
+
+    const totalCols = 5 + state.schools.length + 1;
+    ws.mergeCells(1, 1, 1, totalCols);
+    const titleCell = ws.getCell(1, 1);
+    titleCell.value = 'ตารางติดตามการส่งรายชื่อผู้เข้าแข่งขัน 13 โรงเรียน (งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569)';
+    titleCell.font = { bold: true, size: 13 };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    const thin = { style: 'thin' };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const headers = ['ที่', 'หมวดกิจกรรม', 'รหัส', 'ชื่อรายการแข่งขัน', 'ระดับ']
+      .concat(state.schools.map((s) => shortSchoolName(s.school_name)))
+      .concat(['รวม (รร.)']);
+
+    const hdrRow = ws.getRow(3);
+    headers.forEach(function (h, i) {
+      const c = hdrRow.getCell(i + 1);
+      c.value = h;
+      c.font = { bold: true, size: 10 };
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      c.border = border;
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F1EF' } };
+    });
+
+    let rIdx = 4;
+    let seq = 1;
+    data.groups.forEach(function (grp) {
+      grp.items.forEach(function (item) {
+        const row = ws.getRow(rIdx++);
+        const vals = [seq++, grp.group.label, item.comp.comp_id, item.comp.comp_name, item.comp.level || '-']
+          .concat(
+            item.schoolCells.map(function (cell) {
+              return cell.reg ? '✓' : '–';
+            })
+          )
+          .concat([item.schoolCount + '/' + data.totalSchools]);
+        vals.forEach(function (v, ci) {
+          const c = row.getCell(ci + 1);
+          c.value = v;
+          c.border = border;
+          const isSchoolCol = ci >= 5 && ci < 5 + state.schools.length;
+          c.alignment = {
+            vertical: 'middle',
+            wrapText: true,
+            horizontal: ci === 0 || ci === 2 || ci === 4 || isSchoolCol || ci === totalCols - 1 ? 'center' : 'left'
+          };
+          if (isSchoolCol && v === '✓') {
+            c.font = { bold: true, color: { argb: 'FF047857' } };
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFECFDF5' } };
+          }
+        });
+      });
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ติดตามการส่ง_13โรงเรียน_149รายการ_ศิลปหัตถกรรม74.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดตารางติดตาม 13 โรงเรียน (.xlsx) เรียบร้อยแล้ว', 'success');
+  }
+
+  function printDashboardMatrixReport() {
+    const data = getFilteredDashboardMatrixData();
+    if (data.groups.length === 0) {
+      showToast('ไม่มีข้อมูลตามตัวกรองสำหรับพิมพ์รายงาน', 'warning');
+      return;
+    }
+
+    const schoolHeaders = state.schools
+      .map(function (s) {
+        return '<th>' + escapeHtml(shortSchoolName(s.school_name)) + '</th>';
+      })
+      .join('');
+
+    let grandTotalTeams = 0;
+    let totalShownItems = 0;
+    const grandSchoolTotals = state.schools.map(function () {
+      return 0;
+    });
+
+    const sectionsHtml = data.groups
+      .map(function (grp) {
+        const rowsHtml = grp.items
+          .map(function (item, idx) {
+            totalShownItems += 1;
+            const cellsHtml = item.schoolCells
+              .map(function (cell, sIdx) {
+                if (cell.reg) {
+                  grandSchoolTotals[sIdx] += 1;
+                  grandTotalTeams += 1;
+                  return '<td class="cell-yes">✓</td>';
+                }
+                return '<td class="cell-no">–</td>';
+              })
+              .join('');
+
+            return (
+              '<tr>' +
+              '<td class="text-center">' +
+              (idx + 1) +
+              '</td>' +
+              '<td class="code-col">' +
+              escapeHtml(item.comp.comp_id) +
+              '</td>' +
+              '<td>' +
+              escapeHtml(item.comp.comp_name) +
+              ' <span class="lvl">(' +
+              escapeHtml(item.comp.level || '-') +
+              ')</span></td>' +
+              cellsHtml +
+              '<td class="text-center font-bold">' +
+              item.schoolCount +
+              '</td>' +
+              '</tr>'
+            );
+          })
+          .join('');
+
+        return (
+          '<tr class="group-hdr-row"><td colspan="' +
+          (state.schools.length + 4) +
+          '">หมวด ' +
+          escapeHtml(grp.group.label) +
+          ' (' +
+          grp.items.length +
+          ' รายการ · มีผู้สมัคร ' +
+          grp.registeredCompsInGroup +
+          ' รายการ · รวม ' +
+          grp.totalTeamsInGroup +
+          ' ทีม)</td></tr>' +
+          rowsHtml
+        );
+      })
+      .join('');
+
+    const grandTotalsCells = grandSchoolTotals
+      .map(function (cnt) {
+        return '<td class="text-center font-bold">' + cnt + '</td>';
+      })
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>รายงานสรุปการส่งรายชื่อ 13 โรงเรียน × รายการย่อย (ผู้บริหาร)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 landscape; margin: 10mm 9mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Sarabun', sans-serif; font-size: 11px; color: #0f172a; margin: 0; padding: 14px; background: #fff; }
+    .no-print { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 8px; margin-bottom: 12px; }
+    .no-print button { background: #10b981; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .doc-hdr { text-align: center; margin-bottom: 8px; }
+    .doc-hdr h1 { font-size: 15px; margin: 0 0 2px 0; }
+    .doc-hdr p { font-size: 11px; color: #475569; margin: 0; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid #cbd5e1; padding: 3px 4px; vertical-align: middle; }
+    thead th { background: #f1f5f9; font-weight: 700; font-size: 9.5px; text-align: center; word-break: break-word; }
+    .group-hdr-row td { background: #e2e8f0; font-weight: 700; font-size: 11px; color: #0f172a; padding: 4px 6px; }
+    .code-col { font-family: monospace; font-size: 9.5px; text-align: center; }
+    .lvl { font-size: 9.5px; color: #64748b; }
+    .cell-yes { text-align: center; font-weight: 700; color: #047857; background: #ecfdf5; }
+    .cell-no { text-align: center; color: #cbd5e1; }
+    .text-center { text-align: center; }
+    .font-bold { font-weight: 700; }
+    tfoot td { background: #f8fafc; font-weight: 700; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none !important; }
+      .cell-yes, thead th, .group-hdr-row td { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div>รายงานสรุปการส่งรายชื่อผู้เข้าแข่งขัน 13 โรงเรียน (${totalShownItems} รายการย่อย · รวม ${grandTotalTeams} ทีม)</div>
+    <button onclick="window.print()">สั่งพิมพ์รายงาน (A4 แนวนอน)</button>
+  </div>
+  <div class="doc-hdr">
+    <h1>รายงานสรุปการส่งรายชื่อผู้เข้าแข่งขัน 13 โรงเรียน แยกรายการย่อย</h1>
+    <p>งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 • กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (สพป.มหาสารคาม เขต 3)</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:26px;">ที่</th>
+        <th style="width:62px;">รหัส</th>
+        <th style="width:210px;">รายการแข่งขัน (ระดับ)</th>
+        ${schoolHeaders}
+        <th style="width:36px;">รวม</th>
+      </tr>
+    </thead>
+    <tbody>${sectionsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" class="text-center">รวมทีมที่ส่งเข้าแข่งขันทั้งหมด (ตามรายงานนี้)</td>
+        ${grandTotalsCells}
+        <td class="text-center">${grandTotalTeams}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อพิมพ์รายงาน', 'warning');
     }
   }
 
@@ -7291,12 +7858,20 @@
       });
 
       (r.teachers || []).forEach(function (t, idx) {
+        const teacherHasMedal = medal && ['เหรียญทอง', 'เหรียญเงิน', 'เหรียญทองแดง'].indexOf(medal) !== -1;
+        const teacherAwardText = certReady
+          ? teacherHasMedal
+            ? 'ครูผู้ฝึกสอนนักเรียน ได้รับรางวัลระดับ' +
+              medal +
+              (award && award !== 'เข้าร่วมการแข่งขัน' ? ' ' + award : '')
+            : 'ครูผู้ฝึกสอนนักเรียน เข้าร่วมการแข่งขัน'
+          : 'รอสรุปผลคะแนน';
         entries.push({
           cert_code: baseCert + '-T' + (idx + 1),
           role_type: 'TEACHER',
           role_label: 'ครูผู้ฝึกซ้อม',
           recipient_name: formatFullNameForPrint(t.prefix, t.name),
-          grade_or_pos: 'ครูผู้ฝึกซ้อมนักเรียน',
+          grade_or_pos: 'ครูผู้ฝึกสอนนักเรียน',
           school_name: r.school_name,
           comp_id: r.comp_id,
           comp_name: r.comp_name,
@@ -7304,7 +7879,7 @@
           level: r.level,
           score: r.score,
           medal: medal,
-          award_title: certReady ? 'ครูผู้ฝึกซ้อมนักเรียน รางวัล' + award : 'รอสรุปผลคะแนน',
+          award_title: teacherAwardText,
           cert_ready: certReady
         });
       });
@@ -7366,6 +7941,27 @@
     if (!tbody) return;
 
     const filtered = getFilteredCertificateEntries();
+    const readyList = filtered.filter((item) => item && item.cert_ready !== false);
+    const batchSel = document.getElementById('certBatchSelect');
+    if (batchSel) {
+      if (readyList.length > 20) {
+        const prevIdx = Number(batchSel.value || 0);
+        const totalBatches = Math.ceil(readyList.length / 20);
+        let optHtml = '';
+        for (let b = 0; b < totalBatches; b++) {
+          const sNum = b * 20 + 1;
+          const eNum = Math.min((b + 1) * 20, readyList.length);
+          optHtml += `<option value="${b}">ชุดที่ ${b + 1}: คนที่ ${sNum}–${eNum} (จาก ${readyList.length})</option>`;
+        }
+        batchSel.innerHTML = optHtml;
+        if (prevIdx >= 0 && prevIdx < totalBatches) batchSel.value = String(prevIdx);
+        batchSel.classList.remove('hidden');
+      } else {
+        batchSel.innerHTML = '';
+        batchSel.classList.add('hidden');
+      }
+    }
+
     if (filtered.length === 0) {
       tbody.innerHTML = `
         <tr>
@@ -7499,9 +8095,26 @@
         : '';
 
       const isJudge = c.role_type === 'JUDGE' || c.role_type === 'REFEREE';
+      const isTeacher = c.role_type === 'TEACHER';
       let awardRaw = '';
       if (isJudge) {
-        awardRaw = 'ได้ปฏิบัติหน้าที่คณะกรรมการตัดสินการแข่งขัน';
+        const jRole = String(c.grade_or_pos || '').trim();
+        const isPlainMember =
+          !jRole || jRole === 'กรรมการ' || jRole === 'กรรมการตัดสิน' || jRole === 'คณะกรรมการตัดสิน';
+        awardRaw = isPlainMember
+          ? 'ได้ปฏิบัติหน้าที่คณะกรรมการตัดสินการแข่งขัน'
+          : `ได้ปฏิบัติหน้าที่${jRole}ตัดสินการแข่งขัน`;
+      } else if (isTeacher) {
+        const rawT = String(c.award_title || '').trim();
+        if (rawT.indexOf('ครูผู้ฝึกสอน') === 0) {
+          awardRaw = rawT;
+        } else {
+          const medalRaw = c.medal ? String(c.medal) : 'เข้าร่วมการแข่งขัน';
+          const hasMedal = ['เหรียญทอง', 'เหรียญเงิน', 'เหรียญทองแดง'].indexOf(medalRaw) !== -1;
+          awardRaw = hasMedal
+            ? `ครูผู้ฝึกสอนนักเรียน ได้รับรางวัลระดับ${medalRaw}${rawT && rawT !== 'เข้าร่วมการแข่งขัน' ? ' ' + rawT : ''}`
+            : 'ครูผู้ฝึกสอนนักเรียน เข้าร่วมการแข่งขัน';
+        }
       } else {
         const medalRaw = c.medal ? String(c.medal) : 'เข้าร่วมการแข่งขัน';
         const titleRaw = String(c.award_title || 'รางวัลเข้าร่วม');
@@ -7509,11 +8122,7 @@
       }
 
       let schoolRaw = '';
-      if (isJudge) {
-        schoolRaw = c.grade_or_pos
-          ? String(c.grade_or_pos)
-          : (c.school_name ? `โรงเรียน${String(c.school_name).replace(/^โรงเรียน/, '')}` : 'คณะกรรมการตัดสิน');
-      } else {
+      if (!isJudge) {
         schoolRaw = c.school_name
           ? `โรงเรียน${String(c.school_name).replace(/^โรงเรียน/, '')}`
           : '';
@@ -7555,7 +8164,7 @@
             <!-- Recipient Section -->
             <div class="cert-recipient-block">
               <div class="cert-recipient-name">${escapeHtml(formatFullNameForPrint('', c.recipient_name))}</div>
-              <div class="cert-recipient-school">${escapeHtml(fmtNum(schoolRaw))}</div>
+              ${schoolRaw ? `<div class="cert-recipient-school">${escapeHtml(fmtNum(schoolRaw))}</div>` : ''}
             </div>
 
             <!-- Award & Activity Section -->
@@ -9103,27 +9712,49 @@
     ]);
   }
 
-  function openIdCardsPrintWindow(title, cards) {
-    if (!isIdCardsPrintingEnabled()) {
+  function openIdCardsPrintWindow(title, cards, opts) {
+    const isAdminPreview = Boolean(opts && opts.previewByAdmin);
+    if (!isIdCardsPrintingEnabled() && !(state.isAdmin && isAdminPreview)) {
       showToast('ขณะนี้ผู้ดูแลระบบปิดการพิมพ์บัตรประจำตัวไว้ชั่วคราว', 'warning');
       return;
     }
     const cfg = state.config || DEFAULT_CONFIG;
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
-    const cardBgUrl = baseDir + 'assets/card-bg-thai.jpg';
     const logoObecUrl = baseDir + 'assets/logo-obec.svg';
     const cardWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
     const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
     const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
     const showVenueSchedule = isFeatureOpenToPublic('venue');
-    const sigHtml = cfg.certSignatureUrl
-      ? `<div class="back-sign-img-wrap"><img src="${escapeHtml(cfg.certSignatureUrl)}" alt="ลายมือชื่อ" class="back-sign-img" /></div>`
+    const rawSigUrl = cfg.certSignatureUrl || '';
+    const sigUrl = rawSigUrl
+      ? (/^(data:|https?:|blob:|\/)/i.test(rawSigUrl) ? rawSigUrl : baseDir + rawSigUrl)
+      : '';
+    const sigOffsetX = Number.isFinite(Number(cfg.certSigOffsetX)) ? Number(cfg.certSigOffsetX) : DEFAULT_CONFIG.certSigOffsetX;
+    const sigOffsetY = Number.isFinite(Number(cfg.certSigOffsetY)) ? Number(cfg.certSigOffsetY) : DEFAULT_CONFIG.certSigOffsetY;
+    const sigScale = Number.isFinite(Number(cfg.certSigScale)) ? Number(cfg.certSigScale) : DEFAULT_CONFIG.certSigScale;
+    const sigScaleFactor = Math.max(0.5, Math.min(2.0, sigScale / 100));
+    const sigTransformCss =
+      'translate(' + (sigOffsetX * 0.45).toFixed(1) + 'px, ' + (sigOffsetY * 0.45).toFixed(1) + 'px) scale(' + sigScaleFactor.toFixed(2) + ')';
+    const sigHtml = sigUrl
+      ? `<div class="back-sign-img-wrap"><img src="${escapeHtml(sigUrl)}" alt="ลายมือชื่อ" class="back-sign-img" style="transform:${sigTransformCss};" /></div>`
       : `<div class="back-sign-line">..................................................</div>`;
+
+    const kanokBorderSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 18" width="40" height="9">' +
+      '<rect width="80" height="18" fill="#0B1E47"/>' +
+      '<path d="M0 15 Q10 2 20 15 Q30 2 40 15 Q50 2 60 15 Q70 2 80 15 L80 18 L0 18 Z" fill="#D4AF37"/>' +
+      '<path d="M0 0 L40 0 L40 14 Q20 3 0 14 Z" fill="#0B1E47"/>' +
+      '<path d="M40 0 L80 0 L80 14 Q60 3 40 14 Z" fill="#D4AF37"/>' +
+      '<path d="M12 13 C12 7, 19 5, 20 10 C21 13, 16 14, 16 11" stroke="#FCE276" stroke-width="1.35" fill="none" stroke-linecap="round"/>' +
+      '<path d="M52 13 C52 7, 59 5, 60 10 C61 13, 56 14, 56 11" stroke="#0B1E47" stroke-width="1.35" fill="none" stroke-linecap="round"/>' +
+      '<polygon points="40,4 44,9 40,14 36,9" fill="#FFFFFF" stroke="#0B1E47" stroke-width="0.9"/>' +
+      '<rect y="16" width="80" height="2" fill="#D4AF37"/>' +
+      '</svg>';
+    const kanokBorderUrl = 'url("data:image/svg+xml;utf8,' + encodeURIComponent(kanokBorderSvg) + '")';
 
     function renderCard(c) {
       if (!c) return '';
       const qrPayloadUrl = encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (c.ref_code || ''));
-      const levelFieldLabel = c.role_code === 'JUDGE' ? 'ระดับ / หน้าที่' : 'ระดับ / ประเภท';
       const rulesItemsHtml = (c.rules || [])
         .map(function (ruleText) {
           return `<li>${escapeHtml(ruleText)}</li>`;
@@ -9131,134 +9762,93 @@
         .join('');
 
       return `
-        <div class="foldable-card">
-          <!-- LEFT PANEL: FRONT CARD (ด้านหน้าบัตร - ลักษณะตามต้นแบบ แถบน้ำเงินทองซ้าย + รูปถ่ายวงกลม + ข้อมูลผู้ถือบัตร + บาร์โค้ด) -->
-          <div class="card-panel card-panel-front">
-            <!-- Royal Navy & 24K Gold Vertical Silk Spine -->
-            <div class="front-spine" style="background:${c.spine_gradient};">
-              <div class="spine-silk-pattern" aria-hidden="true">
-                <svg viewBox="0 0 80 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M40 8 L58 28 L40 48 L22 28 Z" stroke="#fce276" stroke-width="1.2" opacity="0.55"/>
-                  <path d="M40 16 L50 28 L40 40 L30 28 Z" fill="#d4af37" opacity="0.28"/>
-                  <path d="M40 58 L54 74 L40 90 L26 74 Z" stroke="#fce276" stroke-width="0.9" opacity="0.35"/>
-                </svg>
-              </div>
-              <div class="spine-vertical-wrap">
-                <div class="spine-title-th">${escapeHtml(c.spine_title_th)}</div>
-                <div class="spine-title-en">${escapeHtml(c.spine_title_en)} • SILAPA 74</div>
-              </div>
-              <div class="spine-year-tag">๒๕๖๙</div>
-            </div>
+        <div class="foldable-card-wrap">
+          <!-- BOX 1 (LEFT): FRONT CARD - INDEPENDENT BOX WITH NAVY/GOLD KANOK TRIM & ASYMMETRIC HIERARCHY -->
+          <div class="card-box card-box-front">
+            <div class="box-kanok-strip box-kanok-top"></div>
 
-            <!-- Front Right Content Area -->
-            <div class="front-main">
-              <!-- Top Official Header Strip -->
-              <div class="front-header">
-                <img src="${escapeHtml(logoObecUrl)}" alt="ตรา สพฐ." class="front-header-logo" />
-                <div class="front-header-text">
-                  <div class="front-header-title">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74</div>
-                  <div class="front-header-sub">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง • ปีการศึกษา 2569</div>
-                </div>
-              </div>
-
-              <!-- Centered Circular Gold-Ringed Photo Frame + Name Profile (Grouped close like reference card) -->
-              <div class="front-identity-group">
-                <div class="front-photo-wrap">
-                  <div class="front-photo-circle">
-                    <div class="photo-box-content">
-                      <svg class="photo-user-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/>
-                      </svg>
-                      <span class="photo-box-label">ติดรูปถ่าย</span>
-                      <span class="photo-box-hint">1 – 1.5 นิ้ว</span>
-                    </div>
+            <div class="front-body">
+              <div class="front-top-bar">
+                <div class="front-brand-left">
+                  <img src="${escapeHtml(logoObecUrl)}" alt="ตรา สพฐ." class="front-header-logo" />
+                  <div class="front-brand-copy">
+                    <div class="front-brand-main">ศิลปหัตถกรรมนักเรียน ครั้งที่ 74</div>
+                    <div class="front-brand-sub">กลุ่ม รร.วังยาวเขวาไร่ดอนกลาง • ๒๕๖๙</div>
                   </div>
                 </div>
+                <div class="front-role-pill" style="background:${c.pill_bg}; color:${c.pill_text};">
+                  ${escapeHtml(c.spine_title_th)}
+                </div>
+              </div>
 
-                <!-- Holder Name & Role Pill -->
-                <div class="front-profile">
+              <div class="front-asymmetric-mid">
+                <div class="front-hero-left">
+                  <div class="front-code-tag">${escapeHtml(c.ref_code)}</div>
                   <div class="front-person-name">${escapeHtml(formatFullNameForPrint('', c.person_name))}</div>
-                  <div class="front-role-pill" style="background:${c.pill_bg}; color:${c.pill_text};">
-                    ${escapeHtml(c.sub_role)}
+                  <div class="front-sub-role">${escapeHtml(c.sub_role)}</div>
+
+                  <div class="front-comp-block">
+                    <div class="front-comp-label">รายการแข่งขัน (${escapeHtml(c.learning_area)})</div>
+                    <div class="front-comp-name">${escapeHtml(c.comp_name_clean)}</div>
+                  </div>
+
+                  <div class="front-school-row">${escapeHtml(c.school_name)}</div>
+                  <div class="front-meta-chip-row">
+                    <span class="front-meta-chip">${escapeHtml(c.level_and_type)}</span>
+                    ${
+                      showVenueSchedule
+                        ? `<span class="front-meta-chip">${escapeHtml(c.comp_date)} · ${escapeHtml(c.venue_room)}</span>`
+                        : ''
+                    }
+                  </div>
+                </div>
+
+                <div class="front-photo-right">
+                  <div class="front-photo-frame">
+                    <svg class="photo-user-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/>
+                    </svg>
+                    <span class="photo-box-label">ติดรูปถ่าย</span>
+                    <span class="photo-box-hint">1 – 1.5 นิ้ว</span>
+                  </div>
+                  <div class="front-holder-sign">
+                    <div class="front-sign-dots">...........................</div>
+                    <div class="front-sign-cap">ลงชื่อผู้ถือบัตร</div>
                   </div>
                 </div>
               </div>
 
-              <!-- Structured Key-Value Metadata Box -->
-              <div class="front-info-box">
-                <div class="info-row">
-                  <span class="info-label">รหัสบัตร</span>
-                  <span class="info-sep">:</span>
-                  <span class="info-val info-code">${escapeHtml(c.ref_code)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">สถานศึกษา</span>
-                  <span class="info-sep">:</span>
-                  <span class="info-val info-school">${escapeHtml(c.school_name)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">กลุ่มสาระ</span>
-                  <span class="info-sep">:</span>
-                  <span class="info-val">${escapeHtml(c.learning_area)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">กิจกรรม</span>
-                  <span class="info-sep">:</span>
-                  <span class="info-val info-comp">${escapeHtml(c.comp_name_clean)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">${escapeHtml(levelFieldLabel)}</span>
-                  <span class="info-sep">:</span>
-                  <span class="info-val">${escapeHtml(c.level_and_type)}</span>
-                </div>
-                ${
-                  showVenueSchedule
-                    ? `<div class="info-row">
-                  <span class="info-label">วัน/เวลา</span>
-                  <span class="info-sep">:</span>
-                  <span class="info-val">${escapeHtml(c.comp_date)} (${escapeHtml(c.comp_time)})</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">สนาม/ห้อง</span>
-                  <span class="info-sep">:</span>
-                  <span class="info-val">${escapeHtml(c.venue_room)}</span>
-                </div>`
-                    : ''
-                }
-              </div>
-
-              <!-- Holder Signature & SVG Barcode Strip -->
-              <div class="front-footer-wrap">
-                <div class="front-sign-row">
-                  <span>(ลงชื่อ).................................................... ผู้ถือบัตร</span>
-                </div>
-                <div class="front-barcode-wrap">
-                  ${renderBarcodeSvg(c.ref_code)}
-                  <div class="barcode-caption">${escapeHtml(c.ref_code)}</div>
-                </div>
+              <div class="front-bottom-barcode">
+                ${renderBarcodeSvg(c.ref_code)}
+                <div class="barcode-caption">${escapeHtml(c.ref_code)}</div>
               </div>
             </div>
+
+            <div class="box-kanok-strip box-kanok-bottom"></div>
           </div>
 
-          <!-- CENTER FOLD GUIDE -->
-          <div class="fold-divider">
-            <div class="fold-guide-label"><span>[-- รอยพับครึ่ง --]</span></div>
+          <!-- CLEAN FOLD/CUT GAP BETWEEN THE TWO SEPARATE BOXES -->
+          <div class="card-gap-divider">
+            <div class="fold-guide-label"><span>รอยพับ / แยกแผ่น</span></div>
           </div>
 
-          <!-- RIGHT PANEL: BACK CARD (ด้านหลังบัตรอยู่ขวามือ - ตรา สพฐ. + ข้อปฏิบัติ + ผู้รับรอง + QR Code) -->
-          <div class="card-panel card-panel-back">
+          <!-- BOX 2 (RIGHT): BACK CARD - INDEPENDENT BOX WITH NAVY/GOLD KANOK TRIM -->
+          <div class="card-box card-box-back">
+            <div class="box-kanok-strip box-kanok-top"></div>
             <img src="${escapeHtml(cardWatermarkUrl)}" alt="" class="back-watermark-img" />
-            <div class="back-inner">
-              <!-- Back Top Brand Header -->
-              <div class="back-brand-header">
-                <img src="${escapeHtml(logoObecUrl)}" alt="ตราสำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน" class="back-logo-obec" />
-                <div class="back-brand-title">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
-                <div class="back-brand-sub">สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>
-                <div class="back-gold-divider"></div>
-                <div class="back-event-pill">${escapeHtml(c.badge_type)} • ครั้งที่ 74</div>
+
+            <div class="back-body">
+              <div class="back-top-asym">
+                <div class="back-org-left">
+                  <img src="${escapeHtml(logoObecUrl)}" alt="ตรา สพฐ." class="back-logo-obec" />
+                  <div>
+                    <div class="back-brand-title">กลุ่ม รร.วังยาวเขวาไร่ดอนกลาง</div>
+                    <div class="back-brand-sub">สพป.มหาสารคาม เขต 3</div>
+                  </div>
+                </div>
+                <div class="back-event-pill">${escapeHtml(c.badge_type)}</div>
               </div>
 
-              <!-- Back Rules & Schedule Box -->
               <div class="back-terms-box">
                 <div class="back-terms-title">${escapeHtml(c.rules_title)}</div>
                 <ol class="back-terms-list">
@@ -9269,28 +9859,29 @@
                 </div>
               </div>
 
-              <!-- Back Official Certifier Signature -->
-              <div class="back-certifier">
-                ${sigHtml}
-                <div class="back-cert-name">(${escapeHtml(signerName)})</div>
-                <div class="back-cert-pos">${escapeHtml(signerPos)}</div>
-              </div>
-
-              <!-- Back Bottom Centered QR Code -->
-              <div class="back-qr-footer">
-                <div class="back-qr-frame">
-                  <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${qrPayloadUrl}" class="back-qr-img" alt="QR Code ตรวจสอบข้อมูล" onerror="this.style.opacity='0'" />
+              <div class="back-footer-asym">
+                <div class="back-qr-left">
+                  <div class="back-qr-frame">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${qrPayloadUrl}" class="back-qr-img" alt="QR Code ตรวจสอบข้อมูล" onerror="this.style.opacity='0'" />
+                  </div>
+                  <div class="back-qr-label">สแกนตรวจสิทธิ์</div>
                 </div>
-                <div class="back-qr-label">สแกนตรวจสอบรายชื่อ เกณฑ์ และผลการแข่งขัน</div>
-                <div class="back-qr-url">campingroom.github.io/talent69</div>
+
+                <div class="back-certifier-right">
+                  ${sigHtml}
+                  <div class="back-cert-name">(${escapeHtml(signerName)})</div>
+                  <div class="back-cert-pos">${escapeHtml(signerPos)}</div>
+                </div>
               </div>
             </div>
+
+            <div class="box-kanok-strip box-kanok-bottom"></div>
           </div>
         </div>
       `;
     }
 
-    // Chunk cards into pairs (2 foldable cards per A4 page)
+    // Chunk cards into pairs (2 two-box cards per A4 page)
     const sheetsHtml = [];
     for (let i = 0; i < cards.length; i += 2) {
       const card1 = cards[i];
@@ -9300,7 +9891,7 @@
           ${renderCard(card1)}
           ${card2 ? `
             <div class="cut-line">
-              <span>[-- รอยตัดแยกแผ่น (A5 แนวนอน 2 ใบต่อ A4 — พับครึ่งตามแนวตั้งได้ด้านหน้าและด้านหลังพอดี) --]</span>
+              <span>[-- รอยตัดแยกชุดบัตร (ด้านหน้า และ ด้านหลัง แยกกล่องชัดเจน พับครึ่งประกบกันได้พอดี) --]</span>
             </div>
             ${renderCard(card2)}
           ` : `
@@ -9328,21 +9919,21 @@
       margin: 0;
       padding: 0;
       background: #e2e8f0;
-      color: #0a1938;
+      color: #0B1E47;
     }
     .no-print {
       padding: 12px 20px;
-      background: #0a1938;
+      background: #0B1E47;
       color: #fff;
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-family: 'Niramit', 'Prompt', sans-serif;
-      border-bottom: 2px solid #d4af37;
+      border-bottom: 2px solid #D4AF37;
     }
     .no-print button {
-      background: linear-gradient(135deg, #f6d365 0%, #d4af37 100%);
-      color: #0a1938;
+      background: linear-gradient(135deg, #FCE276 0%, #D4AF37 100%);
+      color: #0B1E47;
       border: none;
       padding: 8px 18px;
       border-radius: 8px;
@@ -9355,414 +9946,385 @@
       height: 284mm;
       margin: 10px auto;
       background: #ffffff;
-      padding: 1mm;
+      padding: 1.5mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       page-break-after: always;
-      box-shadow: 0 10px 25px rgba(10, 25, 56, 0.14);
+      box-shadow: 0 10px 25px rgba(11, 30, 71, 0.14);
     }
     .a4-sheet:last-child { page-break-after: auto; }
 
-    .foldable-card {
-      width: 194mm;
-      height: 136mm;
-      border: 1.5px solid #1e3a8a;
+    /* Two completely separate card boxes placed side-by-side */
+    .foldable-card-wrap {
+      width: 193mm;
+      height: 135mm;
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 0;
+    }
+    .card-box {
+      width: 93.5mm;
+      height: 135mm;
+      background: #ffffff;
+      border: 1.5px solid #0B1E47;
       border-radius: 7px;
-      background: #fffdf8 url('${escapeHtml(cardBgUrl)}') no-repeat center center / 100% 100%;
-      display: flex;
-      overflow: hidden;
-      position: relative;
-    }
-    .card-panel {
-      width: 50%;
-      height: 100%;
-      position: relative;
-      display: flex;
-      overflow: hidden;
-    }
-
-    /* ---------------- LEFT PANEL: FRONT CARD ---------------- */
-    .card-panel-front {
-      background: rgba(255, 253, 248, 0.22);
-    }
-    .front-spine {
-      width: 19.5mm;
-      height: 100%;
-      position: relative;
       display: flex;
       flex-direction: column;
-      align-items: center;
       justify-content: space-between;
-      padding: 5.5mm 1.5mm;
-      color: #ffffff;
-      border-right: 2px solid #d4af37;
-      box-shadow: inset -3px 0 0 rgba(252, 226, 118, 0.28);
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 2px 6px rgba(11, 30, 71, 0.08);
+    }
+    .box-kanok-strip {
+      width: 100%;
+      height: 9px;
       flex-shrink: 0;
-      z-index: 2;
+      background-color: #0B1E47;
+      background-image: ${kanokBorderUrl};
+      background-repeat: repeat-x;
+      background-size: 40px 9px;
+      z-index: 3;
     }
-    .spine-silk-pattern {
-      width: 13mm;
-      height: 20mm;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .spine-silk-pattern svg { width: 100%; height: 100%; }
-    .spine-vertical-wrap {
-      writing-mode: vertical-rl;
-      transform: rotate(180deg);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1.5px;
-      margin: auto 0;
-    }
-    .spine-title-th {
-      font-family: 'Niramit', 'Prompt', sans-serif;
-      font-size: 13.5px;
-      font-weight: 700;
-      color: #fce276;
-      letter-spacing: 0.6px;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-      white-space: nowrap;
-    }
-    .spine-title-en {
-      font-family: 'Prompt', sans-serif;
-      font-size: 6.5px;
-      font-weight: 600;
-      color: rgba(255, 255, 255, 0.85);
-      letter-spacing: 1px;
-      white-space: nowrap;
-    }
-    .spine-year-tag {
-      font-family: 'Niramit', sans-serif;
-      font-size: 9px;
-      font-weight: 700;
-      color: #fce276;
-      border: 1px solid rgba(252, 226, 118, 0.55);
-      border-radius: 4px;
-      padding: 1px 4px;
-      background: rgba(10, 25, 56, 0.45);
+    .box-kanok-bottom {
+      transform: scaleY(-1);
     }
 
-    .front-main {
+    /* ---------------- BOX 1: FRONT (ASYMMETRIC TYPOGRAPHIC HIERARCHY) ---------------- */
+    .front-body {
       flex: 1;
+      padding: 3.5mm 4mm 2.5mm 4mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 4.8mm 5.2mm 4.8mm 4.2mm;
-      min-width: 0;
+      min-height: 0;
       position: relative;
       z-index: 2;
+      background: linear-gradient(160deg, #ffffff 0%, #f8fafc 72%, #fefce8 100%);
     }
-    .front-header {
+    .front-top-bar {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 5px;
-      background: rgba(255, 253, 248, 0.90);
-      border: 1px solid rgba(212, 175, 55, 0.48);
-      border-radius: 6px;
-      padding: 2.5px 6px;
-      box-shadow: 0 1px 2px rgba(10, 25, 56, 0.04);
+      justify-content: space-between;
+      gap: 4px;
+      border-bottom: 1.5px solid #D4AF37;
+      padding-bottom: 2.5mm;
+    }
+    .front-brand-left {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
     }
     .front-header-logo {
-      width: 22px;
-      height: 22px;
+      width: 21px;
+      height: 21px;
       object-fit: contain;
       flex-shrink: 0;
     }
-    .front-header-text {
-      text-align: left;
-      line-height: 1.15;
-    }
-    .front-header-title {
-      font-size: 8.8px;
+    .front-brand-copy { line-height: 1.15; }
+    .front-brand-main {
+      font-size: 8.6px;
       font-weight: 700;
-      color: #0a1938;
+      color: #0B1E47;
     }
-    .front-header-sub {
-      font-size: 7px;
+    .front-brand-sub {
+      font-size: 6.8px;
       font-weight: 600;
-      color: #926815;
-    }
-
-    .front-identity-group {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1.5mm;
-    }
-    .front-photo-wrap {
-      display: flex;
-      justify-content: center;
-      margin: 0.5mm 0 0 0;
-    }
-    .front-photo-circle {
-      width: 32.5mm;
-      height: 32.5mm;
-      border-radius: 9999px;
-      background: rgba(255, 255, 255, 0.96);
-      border: 2.2px solid #d4af37;
-      box-shadow: 0 0 0 2.5px #ffffff, 0 0 0 4px rgba(15, 35, 80, 0.85), 0 3px 8px rgba(10, 25, 56, 0.14);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-    .photo-box-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      color: #64748b;
-      line-height: 1.18;
-    }
-    .photo-user-icon {
-      width: 34px;
-      height: 34px;
-      color: #cbd5e1;
-      margin-bottom: 1px;
-    }
-    .photo-box-label {
-      font-size: 8.5px;
-      font-weight: 700;
-      color: #0f2350;
-    }
-    .photo-box-hint {
-      font-size: 7px;
-      color: #64748b;
-    }
-
-    .front-profile {
-      text-align: center;
-      margin: 0.5mm 0 1mm 0;
-    }
-    .front-person-name {
-      font-size: 13px;
-      font-weight: 700;
-      color: #0a1938;
-      line-height: 1.2;
-      word-break: break-word;
+      color: #854d0e;
     }
     .front-role-pill {
-      display: inline-block;
-      margin-top: 2px;
-      padding: 1px 9px;
+      padding: 2px 8px;
       border-radius: 9999px;
-      border: 1px solid rgba(212, 175, 55, 0.65);
-      font-size: 8.3px;
+      border: 1px solid #D4AF37;
+      font-size: 8.2px;
       font-weight: 700;
-      line-height: 1.25;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
-    .front-info-box {
-      background: rgba(255, 255, 255, 0.93);
-      border: 1px solid rgba(212, 175, 55, 0.55);
-      border-left: 3px solid #0f2350;
-      border-radius: 6px;
-      padding: 3.5px 6px;
+    .front-asymmetric-mid {
+      flex: 1;
       display: flex;
-      flex-direction: column;
-      gap: 1.5px;
-      box-shadow: 0 1px 2px rgba(10, 25, 56, 0.04);
+      align-items: stretch;
+      gap: 3mm;
+      padding: 2.5mm 0 1.5mm 0;
+      min-height: 0;
     }
-    .info-row {
-      display: flex;
-      align-items: flex-start;
-      font-size: 8px;
-      line-height: 1.26;
-      color: #1e293b;
-    }
-    .info-label {
-      width: 15.5mm;
-      flex-shrink: 0;
-      font-weight: 700;
-      color: #0f2350;
-    }
-    .info-sep {
-      width: 2.2mm;
-      flex-shrink: 0;
-      font-weight: 700;
-      color: #926815;
-    }
-    .info-val {
+    .front-hero-left {
       flex: 1;
       min-width: 0;
-      font-weight: 500;
-      color: #0f172a;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .front-code-tag {
+      display: inline-block;
+      align-self: flex-start;
+      font-family: monospace;
+      font-size: 7.4px;
+      font-weight: 700;
+      color: #0B1E47;
+      background: #fef3c7;
+      border: 1px solid #D4AF37;
+      border-radius: 4px;
+      padding: 0.5px 5px;
+      margin-bottom: 2mm;
+    }
+    .front-person-name {
+      font-family: 'Prompt', 'Niramit', sans-serif;
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #0B1E47;
+      line-height: 1.18;
       word-break: break-word;
     }
-    .info-code {
-      font-family: monospace;
-      font-size: 7.8px;
-      font-weight: 700;
+    .front-sub-role {
+      font-size: 8.2px;
+      font-weight: 600;
       color: #926815;
+      margin-top: 1px;
+      margin-bottom: 2.5mm;
     }
-    .info-school, .info-comp {
+    .front-comp-block {
+      background: rgba(11, 30, 71, 0.04);
+      border-left: 3px solid #D4AF37;
+      border-radius: 0 5px 5px 0;
+      padding: 2mm 2.5mm;
+      margin-bottom: 2mm;
+    }
+    .front-comp-label {
+      font-size: 6.8px;
       font-weight: 700;
+      color: #475569;
+      margin-bottom: 1px;
+    }
+    .front-comp-name {
+      font-size: 9.8px;
+      font-weight: 700;
+      color: #0B1E47;
+      line-height: 1.24;
+      word-break: break-word;
+    }
+    .front-school-row {
+      font-size: 8.6px;
+      font-weight: 700;
+      color: #1e293b;
+      line-height: 1.22;
+      margin-bottom: 1.5mm;
+    }
+    .front-meta-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 4px;
+    }
+    .front-meta-chip {
+      font-size: 7px;
+      font-weight: 600;
+      color: #334155;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 0.5px 4.5px;
     }
 
-    .front-footer-wrap {
-      margin-top: 1mm;
-      background: rgba(255, 253, 248, 0.88);
-      border-top: 1px solid rgba(212, 175, 55, 0.45);
-      border-radius: 4px;
-      padding: 2px 4px 1px 4px;
+    .front-photo-right {
+      width: 27mm;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 1mm;
     }
-    .front-sign-row {
-      text-align: right;
-      font-size: 7.5px;
-      color: #334155;
-      margin-bottom: 1.5px;
-    }
-    .front-barcode-wrap {
+    .front-photo-frame {
+      width: 26mm;
+      height: 31mm;
+      border-radius: 6px;
+      background: #ffffff;
+      border: 1.8px solid #D4AF37;
+      box-shadow: 0 0 0 1.5px #0B1E47 inset;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
+      text-align: center;
+      color: #64748b;
+    }
+    .photo-user-icon {
+      width: 28px;
+      height: 28px;
+      color: #cbd5e1;
+      margin-bottom: 2px;
+    }
+    .photo-box-label {
+      font-size: 8px;
+      font-weight: 700;
+      color: #0B1E47;
+    }
+    .photo-box-hint {
+      font-size: 6.6px;
+      color: #64748b;
+    }
+    .front-holder-sign {
+      width: 100%;
+      text-align: center;
+      line-height: 1.1;
+      margin-top: 2mm;
+    }
+    .front-sign-dots {
+      font-size: 7.5px;
+      color: #64748b;
+      letter-spacing: 0.4px;
+    }
+    .front-sign-cap {
+      font-size: 6.6px;
+      color: #334155;
+      font-weight: 600;
+    }
+
+    .front-bottom-barcode {
+      border-top: 1px solid rgba(212, 175, 55, 0.55);
+      padding-top: 1.5mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     .barcode-svg {
-      width: 48mm;
+      width: 54mm;
       height: 5.5mm;
       display: block;
     }
     .barcode-caption {
       font-family: monospace;
-      font-size: 6.5px;
+      font-size: 6.6px;
       letter-spacing: 0.9px;
       color: #475569;
-      margin-top: 0.5px;
+      margin-top: 1px;
     }
 
-    /* ---------------- CENTER FOLD DIVIDER ---------------- */
-    .fold-divider {
-      width: 0;
+    /* ---------------- CLEAN SEPARATION GAP BETWEEN TWO BOXES ---------------- */
+    .card-gap-divider {
+      width: 6mm;
       height: 100%;
-      border-left: 1.5px dashed rgba(30, 58, 138, 0.45);
       position: relative;
-      z-index: 15;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .card-gap-divider::before {
+      content: '';
+      position: absolute;
+      top: 4mm;
+      bottom: 4mm;
+      left: 50%;
+      border-left: 1.2px dashed #94a3b8;
     }
     .fold-guide-label {
-      position: absolute;
-      top: 50%;
-      left: 0;
-      transform: translate(-50%, -50%) rotate(90deg);
-      font-size: 7px;
-      font-family: 'Niramit', sans-serif;
+      position: relative;
+      z-index: 2;
+      transform: rotate(90deg);
+      font-size: 6.6px;
       color: #475569;
-      letter-spacing: 0.5px;
-      background: rgba(255, 253, 248, 0.96);
-      padding: 1px 6px;
+      background: #ffffff;
+      padding: 1px 5px;
+      border: 1px solid #cbd5e1;
       border-radius: 3px;
-      border: 1px solid rgba(212, 175, 55, 0.48);
       white-space: nowrap;
-      pointer-events: none;
     }
 
-    /* ---------------- RIGHT PANEL: BACK CARD ---------------- */
-    .card-panel-back {
-      background: rgba(255, 253, 248, 0.28);
-      padding: 5mm 5.5mm;
-    }
+    /* ---------------- BOX 2: BACK (INDEPENDENT CARD BOX) ---------------- */
     .back-watermark-img {
       position: absolute;
       top: 52%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 62mm;
-      height: 62mm;
+      width: 56mm;
+      height: 56mm;
       object-fit: contain;
-      opacity: 0.085;
-      filter: saturate(1.25);
+      opacity: 0.06;
       pointer-events: none;
       z-index: 1;
     }
-    .back-inner {
-      width: 100%;
-      height: 100%;
-      border: 1px solid rgba(15, 35, 80, 0.24);
-      outline: 1px solid rgba(212, 175, 55, 0.45);
-      outline-offset: -3px;
-      border-radius: 6px;
-      background: rgba(255, 253, 248, 0.72);
-      padding: 4.5mm 5mm;
+    .back-body {
+      flex: 1;
+      padding: 3.5mm 4mm 2.8mm 4mm;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      align-items: center;
-      text-align: center;
+      min-height: 0;
       position: relative;
       z-index: 2;
     }
-    .back-brand-header {
-      width: 100%;
+    .back-top-asym {
       display: flex;
-      flex-direction: column;
       align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      border-bottom: 1.5px solid #D4AF37;
+      padding-bottom: 2mm;
+    }
+    .back-org-left {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      text-align: left;
+      min-width: 0;
     }
     .back-logo-obec {
-      width: 12mm;
-      height: 12mm;
+      width: 22px;
+      height: 22px;
       object-fit: contain;
-      margin-bottom: 1.5px;
+      flex-shrink: 0;
     }
     .back-brand-title {
-      font-size: 11px;
+      font-size: 8.6px;
       font-weight: 700;
-      color: #0a1938;
-      line-height: 1.2;
+      color: #0B1E47;
+      line-height: 1.15;
     }
     .back-brand-sub {
-      font-size: 7.8px;
+      font-size: 6.8px;
       font-weight: 600;
       color: #475569;
-      margin-top: 1px;
-    }
-    .back-gold-divider {
-      width: 68%;
-      height: 1.5px;
-      background: linear-gradient(90deg, transparent 0%, #d4af37 30%, #1e3a8a 50%, #d4af37 70%, transparent 100%);
-      margin: 3px auto;
     }
     .back-event-pill {
-      display: inline-block;
-      padding: 1.5px 10px;
+      padding: 2px 7px;
       border-radius: 9999px;
-      background: #0a1938;
-      color: #fce276;
-      border: 1px solid #d4af37;
-      font-size: 8px;
+      background: #0B1E47;
+      color: #FCE276;
+      border: 1px solid #D4AF37;
+      font-size: 6.9px;
       font-weight: 700;
-      letter-spacing: 0.2px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .back-terms-box {
       width: 100%;
-      background: rgba(255, 255, 255, 0.90);
-      border: 1px solid rgba(212, 175, 55, 0.45);
-      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid rgba(212, 175, 55, 0.55);
+      border-left: 3px solid #0B1E47;
+      border-radius: 5px;
       padding: 4.5px 7px;
       text-align: left;
     }
     .back-terms-title {
-      text-align: center;
-      font-size: 9px;
+      font-size: 8.6px;
       font-weight: 700;
-      color: #0f2350;
-      margin-bottom: 2.5px;
-      border-bottom: 1px solid rgba(212, 175, 55, 0.35);
+      color: #0B1E47;
+      margin-bottom: 2px;
+      border-bottom: 1px solid rgba(212, 175, 55, 0.38);
       padding-bottom: 2px;
     }
     .back-terms-list {
       margin: 0;
-      padding-left: 14px;
-      font-size: 7.8px;
+      padding-left: 13px;
+      font-size: 7.4px;
       color: #1e293b;
-      line-height: 1.38;
+      line-height: 1.36;
     }
     .back-terms-list li { margin-bottom: 1.5px; }
     .back-schedule-strip {
@@ -9772,26 +10334,62 @@
       background: #fefce8;
       border: 1px solid rgba(212, 175, 55, 0.55);
       color: #854d0e;
-      font-size: 7.2px;
+      font-size: 7px;
       font-weight: 700;
       text-align: center;
     }
 
-    .back-certifier {
+    .back-footer-asym {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 3mm;
+      border-top: 1px solid rgba(212, 175, 55, 0.45);
+      padding-top: 2mm;
+    }
+    .back-qr-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .back-qr-frame {
+      padding: 2px;
+      background: #ffffff;
+      border: 1.4px solid #D4AF37;
+      border-radius: 4px;
+      margin-bottom: 1px;
+    }
+    .back-qr-img {
+      width: 13.5mm;
+      height: 13.5mm;
+      display: block;
+    }
+    .back-qr-label {
+      font-size: 6.8px;
+      font-weight: 700;
+      color: #0B1E47;
+    }
+
+    .back-certifier-right {
+      flex: 1;
+      text-align: center;
       line-height: 1.25;
-      margin: 0.5mm 0;
+      padding-bottom: 1px;
     }
     .back-sign-img-wrap {
-      height: 20px;
+      height: 24px;
       display: flex;
       align-items: flex-end;
       justify-content: center;
+      overflow: visible;
       margin-bottom: 1px;
     }
     .back-sign-img {
-      max-height: 20px;
-      max-width: 90px;
+      max-height: 24px;
+      max-width: 96px;
       object-fit: contain;
+      transform-origin: bottom center;
     }
     .back-sign-line {
       font-size: 8px;
@@ -9800,43 +10398,13 @@
       margin-bottom: 1px;
     }
     .back-cert-name {
-      font-size: 8.8px;
+      font-size: 8.6px;
       font-weight: 700;
-      color: #0a1938;
+      color: #0B1E47;
     }
     .back-cert-pos {
-      font-size: 7.3px;
+      font-size: 6.9px;
       color: #475569;
-    }
-
-    .back-qr-footer {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      line-height: 1.2;
-    }
-    .back-qr-frame {
-      padding: 2px;
-      background: #ffffff;
-      border: 1.5px solid #d4af37;
-      border-radius: 5px;
-      box-shadow: 0 1px 3px rgba(10, 25, 56, 0.08);
-      margin-bottom: 2px;
-    }
-    .back-qr-img {
-      width: 14mm;
-      height: 14mm;
-      display: block;
-    }
-    .back-qr-label {
-      font-size: 7.3px;
-      font-weight: 700;
-      color: #0f2350;
-    }
-    .back-qr-url {
-      font-family: monospace;
-      font-size: 6.8px;
-      color: #926815;
     }
 
     .cut-line {
@@ -9846,14 +10414,14 @@
       justify-content: center;
       border-top: 1px dashed #64748b;
       border-bottom: 1px dashed #64748b;
-      font-size: 8.5px;
+      font-size: 8px;
       color: #475569;
       font-family: 'Niramit', sans-serif;
       margin: 1mm 0;
     }
     .card-empty-placeholder {
-      width: 194mm;
-      height: 136mm;
+      width: 193mm;
+      height: 135mm;
       border: 1px dashed #cbd5e1;
       border-radius: 7px;
     }
@@ -9862,19 +10430,16 @@
       body { background: #ffffff; }
       .no-print { display: none !important; }
       .a4-sheet { margin: 0; padding: 0; box-shadow: none; height: 284mm; }
-      .foldable-card, .front-spine, .back-event-pill, .front-role-pill, .back-watermark-img {
+      .card-box, .box-kanok-strip, .front-role-pill, .front-code-tag, .front-comp-block, .back-event-pill, .back-watermark-img {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
-      }
-      .foldable-card {
-        background: #fffdf8 url('${escapeHtml(cardBgUrl)}') no-repeat center center / 100% 100% !important;
       }
     }
   </style>
 </head>
 <body>
   <div class="no-print">
-    <div>${escapeHtml(title)} (รวม ${cards.length} บัตร — ด้านหน้าซ้าย / ด้านหลังขวา พับครึ่งได้พอดี 2 ใบต่อแผ่น A4)</div>
+    <div>${escapeHtml(title)} (รวม ${cards.length} บัตร — แยกกล่องหน้าซ้าย / กล่องหลังขวา กรอบลายกนกทอง-น้ำเงิน)</div>
     <button onclick="window.print()">สั่งพิมพ์บัตรประจำตัว</button>
   </div>
   ${sheetsHtml.join('')}
@@ -10912,14 +11477,15 @@
     const btnPrintFilteredCerts = document.getElementById('btnPrintFilteredCerts');
     if (btnPrintFilteredCerts) {
       btnPrintFilteredCerts.addEventListener('click', function () {
-        const list = getFilteredCertificateEntries()
-          .filter((item) => item && item.cert_ready !== false)
-          .slice(0, 20);
-        if (list.length === 0) {
+        const readyList = getFilteredCertificateEntries().filter((item) => item && item.cert_ready !== false);
+        if (readyList.length === 0) {
           showToast('ยังไม่มีรายการที่บันทึกคะแนนและประกาศผลแล้วในกลุ่มที่กรอง', 'warning');
           return;
         }
-        printCertificatesWindow(list);
+        const batchSel = document.getElementById('certBatchSelect');
+        const batchIdx = batchSel && !batchSel.classList.contains('hidden') ? Number(batchSel.value || 0) : 0;
+        const slice = readyList.slice(batchIdx * 20, (batchIdx + 1) * 20);
+        printCertificatesWindow(slice);
       });
     }
 
@@ -11321,23 +11887,160 @@
     const btnPreviewCertSample = document.getElementById('btnPreviewCertSample');
     if (btnPreviewCertSample) {
       btnPreviewCertSample.addEventListener('click', function () {
-        const sampleEntry = {
-          cert_code: (state.config.certPrefix || 'WYK74-2569-') + 'SAMPLE-001',
-          role_type: 'STUDENT',
-          role_label: 'นักเรียนผู้เข้าแข่งขัน',
-          recipient_name: 'เด็กชายตัวอย่าง มีปัญญา',
-          grade_or_pos: 'นักเรียนชั้นประถมศึกษาปีที่ 6',
-          school_name: 'โรงเรียนบ้านวังยาววิทยายน',
-          comp_id: 'SOC-001',
-          comp_name: 'การประกวดเพลงกล่อมเด็ก',
-          learning_area: 'กลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม',
-          level: 'ป.1-ป.6',
-          score: '94.50',
-          medal: 'เหรียญทอง',
-          award_title: 'รางวัลชนะเลิศ'
-        };
-        printCertificatesWindow([sampleEntry]);
+        const prefix = state.config.certPrefix || 'WYK74-2569-';
+        const sampleEntries = [
+          {
+            cert_code: prefix + 'SAMPLE-S1',
+            role_type: 'STUDENT',
+            role_label: 'นักเรียนผู้เข้าแข่งขัน',
+            recipient_name: 'เด็กชายตัวอย่าง มีปัญญา',
+            grade_or_pos: 'นักเรียนชั้นประถมศึกษาปีที่ 6',
+            school_name: 'โรงเรียนบ้านวังยาววิทยายน',
+            comp_id: 'AC11-MA01',
+            comp_name: 'การแข่งขันคิดเลขเร็ว',
+            level: 'ป.1–ป.3',
+            score: '94.50',
+            medal: 'เหรียญทอง',
+            award_title: 'ชนะเลิศ'
+          },
+          {
+            cert_code: prefix + 'SAMPLE-T1',
+            role_type: 'TEACHER',
+            role_label: 'ครูผู้ฝึกซ้อม',
+            recipient_name: 'นางสาวใจดี มีเมตตา',
+            grade_or_pos: 'ครูผู้ฝึกสอนนักเรียน',
+            school_name: 'โรงเรียนบ้านวังยาววิทยายน',
+            comp_id: 'AC11-MA02',
+            comp_name: 'การแข่งขันอัจฉริยภาพทางคณิตศาสตร์',
+            level: 'ม.1–ม.3',
+            score: '91.00',
+            medal: 'เหรียญทอง',
+            award_title: 'ครูผู้ฝึกสอนนักเรียน ได้รับรางวัลระดับเหรียญทอง รองชนะเลิศอันดับ 1'
+          },
+          {
+            cert_code: prefix + 'SAMPLE-J1',
+            role_type: 'JUDGE',
+            role_label: 'คณะกรรมการตัดสิน',
+            recipient_name: 'นายเกียรติศักดิ์ คิดแม่น',
+            grade_or_pos: 'ประธานกรรมการ',
+            school_name: 'โรงเรียนบ้านหนองสระพังโนนสะอาด',
+            comp_id: 'AC11-MA01',
+            comp_name: 'การแข่งขันคิดเลขเร็ว',
+            level: 'ป.1–ป.3',
+            medal: 'คณะกรรมการตัดสิน',
+            award_title: 'ได้ปฏิบัติหน้าที่คณะกรรมการตัดสินการแข่งขัน'
+          }
+        ];
+        printCertificatesWindow(sampleEntries);
       });
+    }
+
+    const btnPreviewIdCardSamples = document.getElementById('btnPreviewIdCardSamples');
+    if (btnPreviewIdCardSamples) {
+      btnPreviewIdCardSamples.addEventListener('click', function () {
+        if (!state.isAdmin) {
+          showToast('กรุณาเข้าสู่ระบบผู้ดูแลระบบก่อนดูตัวอย่างบัตร', 'warning');
+          return;
+        }
+        const sampleCards = [
+          buildIdCardItem('COMPETITOR', {
+            person_name: 'เด็กชายธนกฤต มีปัญญา',
+            sub_role: 'นักเรียนชั้นประถมศึกษาปีที่ 6',
+            school_name: 'โรงเรียนบ้านวังยาววิทยายน',
+            learning_area: 'คณิตศาสตร์',
+            comp_name_clean: 'การแข่งขันอัจฉริยภาพทางคณิตศาสตร์',
+            level_and_type: 'ป.4–ป.6 • ประเภทเดี่ยว',
+            comp_date: '24–25 พ.ย. 2569',
+            comp_time: '09.00–12.00 น.',
+            venue_room: 'อาคารเรียนหลัก ห้อง 102',
+            ref_code: 'WYK74-SAMPLE-S1'
+          }),
+          buildIdCardItem('COACH', {
+            person_name: 'นางสาวใจดี มีเมตตา',
+            sub_role: 'ครูผู้ฝึกสอนนักเรียน',
+            school_name: 'โรงเรียนบ้านวังยาววิทยายน',
+            learning_area: 'คณิตศาสตร์',
+            comp_name_clean: 'การแข่งขันอัจฉริยภาพทางคณิตศาสตร์',
+            level_and_type: 'ป.4–ป.6 • ประเภทเดี่ยว',
+            comp_date: '24–25 พ.ย. 2569',
+            comp_time: '09.00–12.00 น.',
+            venue_room: 'อาคารเรียนหลัก ห้อง 102',
+            ref_code: 'WYK74-SAMPLE-T1'
+          }),
+          buildIdCardItem('JUDGE', {
+            person_name: 'นายเกียรติศักดิ์ คิดแม่น',
+            sub_role: 'ประธานกรรมการตัดสิน',
+            school_name: 'โรงเรียนบ้านหนองสระพังโนนสะอาด',
+            learning_area: 'คณิตศาสตร์',
+            comp_name_clean: 'การแข่งขันคิดเลขเร็ว',
+            level_and_type: 'ป.1–ป.3 • ประธานกรรมการ',
+            comp_date: '24–25 พ.ย. 2569',
+            comp_time: '09.00–12.00 น. (ประชุม 23 พ.ย. 13.30 น.)',
+            venue_room: 'อาคารเรียน 2 ห้อง 201',
+            ref_code: 'WYK74-SAMPLE-J1'
+          })
+        ];
+        openIdCardsPrintWindow('ตัวอย่างบัตรประจำตัวทั้ง 3 ประเภท', sampleCards, { previewByAdmin: true });
+      });
+    }
+
+    const btnToggleDashboardMatrix = document.getElementById('btnToggleDashboardMatrix');
+    if (btnToggleDashboardMatrix) {
+      btnToggleDashboardMatrix.addEventListener('click', function () {
+        state.dashboardMatrixOpen = !state.dashboardMatrixOpen;
+        renderDashboardMatrixSection();
+        if (state.dashboardMatrixOpen) {
+          const sec = document.getElementById('dashboardMatrixSection');
+          if (sec && typeof sec.scrollIntoView === 'function') {
+            sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+      });
+    }
+
+    const btnDashMatrixExpandAll = document.getElementById('btnDashMatrixExpandAll');
+    if (btnDashMatrixExpandAll) {
+      btnDashMatrixExpandAll.addEventListener('click', function () {
+        const data = getFilteredDashboardMatrixData();
+        data.groups.forEach(function (grp) {
+          state.expandedMatrixGroups[grp.group.key] = true;
+        });
+        renderDashboardMatrixSection();
+      });
+    }
+
+    const btnDashMatrixCollapseAll = document.getElementById('btnDashMatrixCollapseAll');
+    if (btnDashMatrixCollapseAll) {
+      btnDashMatrixCollapseAll.addEventListener('click', function () {
+        state.expandedMatrixGroups = {};
+        renderDashboardMatrixSection();
+      });
+    }
+
+    const onDashMatrixFilterChange = function () {
+      const data = getFilteredDashboardMatrixData();
+      if (data.hasActiveFilter) {
+        data.groups.forEach(function (grp) {
+          state.expandedMatrixGroups[grp.group.key] = true;
+        });
+      }
+      renderDashboardMatrixSection();
+    };
+    const dashMatrixAreaFilter = document.getElementById('dashMatrixAreaFilter');
+    if (dashMatrixAreaFilter) dashMatrixAreaFilter.addEventListener('change', onDashMatrixFilterChange);
+    const dashMatrixStatusFilter = document.getElementById('dashMatrixStatusFilter');
+    if (dashMatrixStatusFilter) dashMatrixStatusFilter.addEventListener('change', onDashMatrixFilterChange);
+    const dashMatrixSearch = document.getElementById('dashMatrixSearch');
+    if (dashMatrixSearch) dashMatrixSearch.addEventListener('input', onDashMatrixFilterChange);
+
+    const btnDashMatrixExportExcel = document.getElementById('btnDashMatrixExportExcel');
+    if (btnDashMatrixExportExcel) {
+      btnDashMatrixExportExcel.addEventListener('click', exportDashboardMatrixExcel);
+    }
+
+    const btnDashMatrixPrint = document.getElementById('btnDashMatrixPrint');
+    if (btnDashMatrixPrint) {
+      btnDashMatrixPrint.addEventListener('click', printDashboardMatrixReport);
     }
   }
 
