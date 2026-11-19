@@ -75,8 +75,21 @@ function verifyPhoneMatch_(savedPhone, verifyInput) {
   return cleanSaved === cleanInput || cleanSaved.slice(-4) === cleanInput.slice(-4);
 }
 
+function verifyFullPhoneMatch_(savedPhone, verifyInput) {
+  const cleanSaved = String(savedPhone || '').replace(/\D/g, '');
+  const cleanInput = String(verifyInput || '').replace(/\D/g, '');
+  if (!cleanSaved || cleanSaved.length < 9 || !cleanInput) return false;
+  return cleanSaved === cleanInput;
+}
+
+function maskPhone_(phone) {
+  const d = String(phone || '').replace(/\D/g, '');
+  if (d.length < 7) return d ? '***' : '-';
+  return d.slice(0, 3) + '-xxx-' + d.slice(-4);
+}
+
 /**
- * ดึงข้อมูลทั้งหมด (Schools, Competitions, Registrations, Judges, Config) ส่งกลับให้หน้าเว็บ
+ * ดึงข้อมูลทั้งหมด (Schools, Competitions, Registrations, Judges, DeletionLogs, Config) ส่งกลับให้หน้าเว็บ
  */
 function doGet(e) {
   try {
@@ -85,6 +98,7 @@ function doGet(e) {
     const competitions = readCompetitions_(ss);
     const registrations = readRegistrations_(ss);
     const judges = readJudges_(ss);
+    const deletionLogs = readDeletionLogs_(ss);
 
     return jsonResponse_({
       ok: true,
@@ -95,7 +109,8 @@ function doGet(e) {
       schools: schools,
       competitions: competitions,
       registrations: registrations,
-      judges: judges
+      judges: judges,
+      deletionLogs: deletionLogs
     });
   } catch (err) {
     return jsonResponse_({
@@ -126,6 +141,10 @@ function doPost(e) {
       return handleRegister_(ss, body, isAdmin);
     }
 
+    if (action === 'delete_registration') {
+      return handleDeleteRegistration_(ss, body, isAdmin);
+    }
+
     // คำสั่งต่อไปนี้อนุญาตเฉพาะแอดมินเท่านั้น
     if (!isAdmin) {
       return jsonResponse_({
@@ -135,9 +154,7 @@ function doPost(e) {
       });
     }
 
-    if (action === 'delete_registration') {
-      return handleDeleteRegistration_(ss, body.reg_id);
-    } else if (action === 'clear_sample_data') {
+    if (action === 'clear_sample_data') {
       return handleClearSampleData_(ss);
     } else if (action === 'fix_timestamps') {
       return handleFixTimestamps_(ss);
@@ -435,13 +452,133 @@ function handleDeleteJudge_(ss, judgeId) {
   return jsonResponse_({ ok: false, error: 'ไม่พบรหัสกรรมการที่ต้องการลบ' });
 }
 
-function handleDeleteRegistration_(ss, regId) {
+function appendDeletionLog_(ss, rowData, meta) {
+  if (!ss || !rowData) return null;
+  let sheet = ss.getSheetByName('Deletion_Logs');
+  if (!sheet) {
+    sheet = ss.insertSheet('Deletion_Logs');
+    sheet.appendRow([
+      'รหัสบันทึก (log_id)',
+      'วันเวลาที่ลบ (deleted_at)',
+      'ผู้ลบ (deleted_by)',
+      'รหัสใบสมัครเดิม (reg_id)',
+      'โรงเรียน (school_name)',
+      'รหัสรายการ (comp_id)',
+      'ชื่อรายการแข่งขัน (comp_name)',
+      'ระดับชั้น (level)',
+      'รายชื่อนักเรียนเดิม (students_text)',
+      'รายชื่อครูเดิม (teachers_text)',
+      'เบอร์อ้างอิง (phone_masked)',
+      'เหตุผล (reason)'
+    ]);
+  }
+  const nowStr = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss');
+  const logId = 'DEL-74-' + Utilities.formatDate(new Date(), 'Asia/Bangkok', 'MMddHHmmss');
+  const phoneMasked = maskPhone_(rowData[12]);
+  const deletedBy = (meta && meta.deletedBy) || 'แอดมิน';
+  const reason = String((meta && meta.reason) || '-').trim() || '-';
+  const entry = {
+    log_id: logId,
+    deleted_at: nowStr,
+    deleted_by: deletedBy,
+    reg_id: String(rowData[0] || ''),
+    school_name: String(rowData[2] || ''),
+    comp_id: String(rowData[3] || ''),
+    comp_name: String(rowData[5] || ''),
+    level: String(rowData[6] || ''),
+    students_text: String(rowData[9] || ''),
+    teachers_text: String(rowData[11] || ''),
+    phone_masked: phoneMasked,
+    reason: reason
+  };
+  sheet.appendRow([
+    entry.log_id,
+    "'" + entry.deleted_at,
+    entry.deleted_by,
+    entry.reg_id,
+    entry.school_name,
+    entry.comp_id,
+    entry.comp_name,
+    entry.level,
+    entry.students_text,
+    entry.teachers_text,
+    entry.phone_masked,
+    entry.reason
+  ]);
+  return entry;
+}
+
+function readDeletionLogs_(ss) {
+  const sheet = ss.getSheetByName('Deletion_Logs');
+  if (!sheet) return [];
+  const rows = sheet.getDataRange().getValues();
+  const list = [];
+  for (let i = rows.length - 1; i >= 1; i--) {
+    if (!rows[i][0]) continue;
+    list.push({
+      log_id: String(rows[i][0] || ''),
+      deleted_at: String(rows[i][1] || '').replace(/^'/, ''),
+      deleted_by: String(rows[i][2] || ''),
+      reg_id: String(rows[i][3] || ''),
+      school_name: String(rows[i][4] || ''),
+      comp_id: String(rows[i][5] || ''),
+      comp_name: String(rows[i][6] || ''),
+      level: String(rows[i][7] || ''),
+      students_text: String(rows[i][8] || ''),
+      teachers_text: String(rows[i][9] || ''),
+      phone_masked: String(rows[i][10] || '-'),
+      reason: String(rows[i][11] || '-')
+    });
+  }
+  return list;
+}
+
+function handleDeleteRegistration_(ss, body, isAdmin) {
+  const regId = typeof body === 'string' ? body : (body && body.reg_id);
   const regSheet = ss.getSheetByName('Registrations');
+  if (!regSheet) {
+    return jsonResponse_({ ok: false, error: 'ไม่พบแผ่นงาน Registrations' });
+  }
   const data = regSheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0] || '') === String(regId || '')) {
+      const rowData = data[i];
+      const existingPhone = String(rowData[12] || '');
+      const existingStatus = String(rowData[13] || '');
+      const existingScore = rowData[14];
+      const isSampleRow = existingStatus.indexOf('ตัวอย่าง') !== -1;
+
+      if (!isAdmin) {
+        if (!isRegistrationOpen_()) {
+          return jsonResponse_({
+            ok: false,
+            error: 'ขณะนี้ระบบปิดรับสมัครแล้ว ไม่สามารถลบข้อมูลเองได้ กรุณาติดต่อแอดมินกลุ่มโรงเรียน'
+          });
+        }
+        if (existingScore !== '' && existingScore !== null && existingScore !== undefined) {
+          return jsonResponse_({
+            ok: false,
+            error: 'รายการนี้มีการบันทึกคะแนนแล้ว ไม่สามารถลบเองได้'
+          });
+        }
+        if (!isSampleRow) {
+          const verifyToken = (body && (body.verify_token || body.coordinator_phone)) || '';
+          if (!verifyFullPhoneMatch_(existingPhone, verifyToken)) {
+            return jsonResponse_({
+              ok: false,
+              code: 'DELETE_VERIFY_FAILED',
+              error: 'เบอร์โทรศัพท์ผู้ประสานงานไม่ตรงกับที่ใช้ลงทะเบียนไว้ (กรุณากรอกเบอร์เต็มทุกหลัก)'
+            });
+          }
+        }
+      }
+
+      const logEntry = appendDeletionLog_(ss, rowData, {
+        deletedBy: isAdmin ? 'แอดมิน' : 'ผู้สมัคร (ยืนยันเบอร์โทร)',
+        reason: (body && body.reason) || (isAdmin ? 'ลบโดยแอดมิน' : '-')
+      });
       regSheet.deleteRow(i + 1);
-      return jsonResponse_({ ok: true, deleted_reg_id: regId });
+      return jsonResponse_({ ok: true, deleted_reg_id: regId, log: logEntry });
     }
   }
   return jsonResponse_({ ok: false, error: 'ไม่พบรหัสใบสมัครที่ต้องการลบ' });
