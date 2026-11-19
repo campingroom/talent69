@@ -2194,12 +2194,14 @@
     const dupSummary = document.getElementById('duplicateExistingSummary');
     const editRegIdInput = document.getElementById('formEditRegId');
     const submitBtn = document.getElementById('btnSubmitRegistration');
+    const delInEditBtn = document.getElementById('btnDeleteInEditForm');
 
     renderLiveSchoolPreview(schoolName);
 
     if (!comp) {
       if (metaBox) metaBox.classList.add('hidden');
       if (dupBox) dupBox.classList.add('hidden');
+      if (delInEditBtn) delInEditBtn.classList.add('hidden');
       if (stuRuleLabel) stuRuleLabel.textContent = '(เลือกรายการแข่งขันก่อน)';
       if (tchRuleLabel) tchRuleLabel.textContent = '(ระบุได้ 1 หรือหลายคน)';
       if (stuContainer) {
@@ -2277,6 +2279,10 @@
       if (submitBtn) {
         submitBtn.textContent = 'บันทึกการแก้ไขรายชื่อเดิม';
       }
+      if (delInEditBtn) {
+        const canShowDel = state.isAdmin || state.registrationOpen;
+        delInEditBtn.classList.toggle('hidden', !canShowDel);
+      }
       existingToLoad.students.forEach(function (st, idx) {
         stuContainer.appendChild(
           createStudentRowElement(idx, comp.level, st, idx >= comp.min_students)
@@ -2286,6 +2292,9 @@
       editRegIdInput.value = '';
       if (submitBtn) {
         submitBtn.textContent = 'ยืนยันการลงทะเบียน';
+      }
+      if (delInEditBtn) {
+        delInEditBtn.classList.add('hidden');
       }
       const initialCount = Number(comp.min_students || 1);
       for (let i = 0; i < initialCount; i++) {
@@ -2763,6 +2772,15 @@
     state.deletionLogs.unshift(logEntry);
     saveState();
     populateRegCompetitionOptions();
+    const activeFormRegEl = document.getElementById('formEditRegId');
+    if (activeFormRegEl && activeFormRegEl.value === target.reg_id) {
+      const compSel = document.getElementById('regCompSelect');
+      if (compSel) compSel.value = '';
+      activeFormRegEl.value = '';
+      const tokenEl = document.getElementById('formEditVerifyToken');
+      if (tokenEl) tokenEl.value = '';
+      onRegistrationSelectionChange();
+    }
     renderAll();
     showToast('ลบรายการลงทะเบียนเรียบร้อยแล้ว (บันทึกแจ้งเตือนแอดมินแล้ว)', 'warning');
   }
@@ -3539,12 +3557,13 @@
               ? '<span class="inline-block px-2 py-0.5 rounded bg-[#FBF3DB] text-[#CB912F] text-[10px] font-heading ml-1">ตัวอย่าง</span>'
               : '';
 
-            const deleteBtnHtml =
-              '<button type="button" data-dash-del="' +
-              escapeHtml(r.reg_id) +
-              '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
-              ICONS.trash +
-              '<span>ลบ</span></button>';
+            const deleteBtnHtml = state.isAdmin
+              ? '<button type="button" data-dash-del="' +
+                escapeHtml(r.reg_id) +
+                '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
+                ICONS.trash +
+                '<span>ลบ</span></button>'
+              : '';
 
             return (
               '<tr class="hover:bg-[#F7F7F5] transition ' +
@@ -3750,12 +3769,13 @@
             : '<span class="text-xs text-[#787774]">รอประกาศผล</span>'
           : statusBadgeHtml;
 
-        const deleteBtnHtml =
-          '<button type="button" data-sch-del="' +
-          escapeHtml(r.reg_id) +
-          '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
-          ICONS.trash +
-          '<span>ลบ</span></button>';
+        const deleteBtnHtml = state.isAdmin
+          ? '<button type="button" data-sch-del="' +
+            escapeHtml(r.reg_id) +
+            '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
+            ICONS.trash +
+            '<span>ลบ</span></button>'
+          : '';
 
         const roomSubHtml =
           ENABLE_PHASE_2 && canUserAccessFeature('venue')
@@ -4519,17 +4539,12 @@
                   tchText +
                   '</td>' +
                   scoreTdHtml +
-                  '<td class="py-2 px-2 text-right whitespace-nowrap space-x-1">' +
+                  '<td class="py-2 px-2 text-right">' +
                   '<button type="button" data-comp-edit-reg="' +
                   escapeHtml(r.reg_id) +
                   '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] font-heading">' +
                   ICONS.edit +
                   '<span>แก้ไข</span></button>' +
-                  '<button type="button" data-comp-del-reg="' +
-                  escapeHtml(r.reg_id) +
-                  '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] font-heading">' +
-                  ICONS.trash +
-                  '<span>ลบ</span></button>' +
                   '</td>' +
                   '</tr>'
                 );
@@ -4661,12 +4676,6 @@
     container.querySelectorAll('[data-comp-edit-reg]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         requestEditRegistration(btn.getAttribute('data-comp-edit-reg'));
-      });
-    });
-
-    container.querySelectorAll('[data-comp-del-reg]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        deleteRegistrationById(btn.getAttribute('data-comp-del-reg'));
       });
     });
 
@@ -10373,6 +10382,15 @@
         document.getElementById('formEditRegId').value = '';
         document.getElementById('formEditVerifyToken').value = '';
         onRegistrationSelectionChange();
+      });
+    }
+
+    const btnDeleteInEditForm = document.getElementById('btnDeleteInEditForm');
+    if (btnDeleteInEditForm) {
+      btnDeleteInEditForm.addEventListener('click', function () {
+        const regId = (document.getElementById('formEditRegId').value || '').trim();
+        if (!regId) return;
+        deleteRegistrationById(regId);
       });
     }
 
