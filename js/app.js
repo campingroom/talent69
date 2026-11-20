@@ -10,6 +10,10 @@
   const DELETION_LOGS_KEY = 'talent69_wangyao_deletion_logs_v1';
   const DELETION_SNAPSHOTS_KEY = 'talent69_wangyao_deletion_snapshots_v1';
   const MAX_DELETION_SNAPSHOTS = 30;
+  const JUDGES_HISTORY_KEY = 'talent69_wangyao_judges_history_v1';
+  const MAX_JUDGE_HISTORY = 20;
+  const SCHEDULE_HISTORY_KEY = 'talent69_wangyao_schedule_history_v1';
+  const MAX_SCHEDULE_HISTORY = 15;
   const ADMIN_SEEN_DELETIONS_KEY = 'talent69_wangyao_seen_deletions_v1';
   const DEFAULT_ADMIN_PIN_HASH = 'cf66a6b6499f8f04366edb73ea50dac507b0fc013ba6b5fd7e3a8856226bbcd0';
   const ENABLE_PHASE_2 = true;
@@ -18,6 +22,21 @@
   const COMPETITION_START_DATE = '2026-11-24T08:30:00+07:00';
   const DEFAULT_GAS_WEB_APP_URL =
     'https://script.google.com/macros/s/AKfycbxMnn_WoMLx83wa--6WcYMgBEmR1sqoxyKST1RxLaxFEHaEWjjuBQB1j47vd4U83eCqoQ/exec';
+
+  const DEFAULT_SCHEDULE_PLAN = {
+    days: [
+      { id: 'D1', label: '24 พ.ย. 2569' },
+      { id: 'D2', label: '25 พ.ย. 2569' }
+    ],
+    timeProfile: 'auto_rules', // 'auto_rules' | 'half_day' | 'short_slots' | 'full_day'
+    strategy: 'same-area-day',
+    blurVenue: true,
+    masterLocked: false,
+    building: 'โรงเรียนบ้านวังยาววิทยายน',
+    rooms: [], // optional: leave empty for small events / assign rooms later
+    allocations: {},
+    lastGeneratedAt: ''
+  };
 
   const DEFAULT_CONFIG = {
     regCloseDate: '2026-11-19T23:59',
@@ -40,7 +59,9 @@
     certBgImageUrl: '',
     venueMapImageUrl: '',
     operationTimeline: null,
+    schedulePlan: cloneDeep ? null : null,
     featureVisibility: {
+      schedule: 'hidden',
       venue: 'hidden',
       judges: 'auto',
       results: 'auto',
@@ -52,6 +73,12 @@
   };
 
   const FEATURE_MILESTONES = {
+    schedule: {
+      key: 'schedule',
+      name: 'สถานที่และกำหนดการแข่งขัน',
+      openDateStr: '',
+      dateLabel: 'เมื่อแอดมินตั้งค่าตารางและเปิดเผย'
+    },
     venue: {
       key: 'venue',
       name: 'แผนผังสนามและห้องสอบแข่งขัน',
@@ -94,10 +121,14 @@
     if (featureKey === 'id_cards') {
       return 'open';
     }
-    if (featureKey === 'venue' || featureKey === 'substitution_form') {
+    if (featureKey === 'venue' || featureKey === 'substitution_form' || featureKey === 'schedule') {
       return 'hidden';
     }
     return 'auto';
+  }
+
+  function isScheduleModeDisabled() {
+    return getFeatureVisibilitySetting('schedule') === 'disabled';
   }
 
   function isIdCardsPrintingEnabled() {
@@ -111,21 +142,28 @@
   function isFeatureOpenToPublic(featureKey) {
     const setting = getFeatureVisibilitySetting(featureKey);
     if (setting === 'open') return true;
-    if (setting === 'hidden') return false;
+    if (setting === 'hidden' || setting === 'disabled') return false;
     const meta = FEATURE_MILESTONES[featureKey];
     if (!meta || !meta.openDateStr) return false;
     return Date.now() >= new Date(meta.openDateStr).getTime();
   }
 
+  function isEffectiveAdmin() {
+    return Boolean(state.isAdmin && !state.previewAsPublic);
+  }
+
   function canUserAccessFeature(featureKey) {
-    if (state.isAdmin) return true;
+    if (featureKey === 'schedule' && isScheduleModeDisabled()) {
+      return false;
+    }
+    if (isEffectiveAdmin()) return true;
     return isFeatureOpenToPublic(featureKey);
   }
 
   function shouldShowScoresInTables() {
     if (!ENABLE_PHASE_2) return false;
     if (isFeatureOpenToPublic('results')) return true;
-    return Boolean(state.isAdmin && state.adminShowScoresInLists);
+    return Boolean(isEffectiveAdmin() && state.adminShowScoresInLists);
   }
 
   function getDistrictRepCriteriaLabel(criteria) {
@@ -333,11 +371,20 @@
     autoJudgePreviewPlan: null,
     scoreModalJudgeCount: 3,
     scoreModalCompJudges: [],
+    judgeSubview: 'by-comp',
+    selectedJudgePersonKey: '',
+    judgeHistory: [],
+    pendingJudgeRegenAction: null,
+    scheduleSubview: 'timeline',
+    scheduleHistory: [],
+    pendingScheduleRegenNote: null,
+    adminSettingsCategory: 'ALL',
     resultSubview: 'by-comp',
     certNumeralMode: 'both', // 'thai' | 'arabic' | 'both'
     lastAddedRegId: null,
     gasWebAppUrl: '',
     isAdmin: false,
+    previewAsPublic: false,
     adminQuickDeleteEnabled: false,
     adminShowScoresInLists: false,
     adminPin: '',
@@ -1063,6 +1110,26 @@
           ? parsed.judges
           : cloneDeep(DEFAULT_DATA.sampleJudges || []);
         state.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
+        if (!state.config.schedulePlan || typeof state.config.schedulePlan !== 'object') {
+          state.config.schedulePlan = cloneDeep(DEFAULT_SCHEDULE_PLAN);
+        } else {
+          const sp = Object.assign({}, cloneDeep(DEFAULT_SCHEDULE_PLAN), state.config.schedulePlan);
+          if (!Array.isArray(sp.days) || !sp.days.length) {
+            sp.days =
+              sp.dayMode === '1day'
+                ? [{ id: 'D1', label: sp.day1Label || '24 พ.ย. 2569' }]
+                : [
+                    { id: 'D1', label: sp.day1Label || '24 พ.ย. 2569' },
+                    { id: 'D2', label: sp.day2Label || '25 พ.ย. 2569' }
+                  ];
+          }
+          if (!sp.timeProfile) {
+            sp.timeProfile = sp.slotMode === '2slots' ? 'half_day' : 'auto_rules';
+          }
+          if (!sp.allocations || typeof sp.allocations !== 'object') sp.allocations = {};
+          if (!Array.isArray(sp.rooms)) sp.rooms = [];
+          state.config.schedulePlan = sp;
+        }
         if (parsed.config && parsed.config.districtRepCriteria && !parsed.config.districtRepCriteriaPrimary) {
           state.config.districtRepCriteriaPrimary = parsed.config.districtRepCriteria;
         }
@@ -1094,6 +1161,7 @@
     state.registrations = cloneDeep(DEFAULT_DATA.sampleRegistrations);
     state.judges = cloneDeep(DEFAULT_DATA.sampleJudges || []);
     state.config = Object.assign({}, DEFAULT_CONFIG);
+    state.config.schedulePlan = cloneDeep(DEFAULT_SCHEDULE_PLAN);
     saveState();
   }
 
@@ -1230,7 +1298,8 @@
 
     updateCertConfigUI();
 
-    // 2. Admin-only Controls Visibility
+    // 2. Admin-only Controls Visibility (respects Public Preview Simulation)
+    const effAdmin = isEffectiveAdmin();
     const headerSheetLink = document.getElementById('headerSheetLink');
     const navTabSettings = document.getElementById('navTabSettings');
     const btnClearSamplesQuick = document.getElementById('btnClearSamplesQuick');
@@ -1238,9 +1307,34 @@
     const btnAdminToggle = document.getElementById('btnAdminToggle');
     const adminBtnText = document.getElementById('adminBtnText');
     const adminAddJudgeCard = document.getElementById('adminAddJudgeCard');
+    const btnTogglePublicPreview = document.getElementById('btnTogglePublicPreview');
+    const publicPreviewBtnText = document.getElementById('publicPreviewBtnText');
+    const adminPublicPreviewBanner = document.getElementById('adminPublicPreviewBanner');
+
+    if (btnTogglePublicPreview) {
+      if (state.isAdmin) {
+        btnTogglePublicPreview.classList.remove('hidden');
+        btnTogglePublicPreview.classList.add('inline-flex');
+        if (state.previewAsPublic) {
+          btnTogglePublicPreview.className =
+            'inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-400 hover:bg-amber-300 text-slate-950 border border-amber-500 text-xs font-heading font-semibold transition cursor-pointer';
+          if (publicPreviewBtnText) publicPreviewBtnText.textContent = 'กลับโหมดแอดมิน';
+        } else {
+          btnTogglePublicPreview.className =
+            'inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-heading font-medium transition cursor-pointer';
+          if (publicPreviewBtnText) publicPreviewBtnText.textContent = 'ดูแบบคนทั่วไป';
+        }
+      } else {
+        btnTogglePublicPreview.classList.add('hidden');
+        btnTogglePublicPreview.classList.remove('inline-flex');
+      }
+    }
+    if (adminPublicPreviewBanner) {
+      adminPublicPreviewBanner.classList.toggle('hidden', !(state.isAdmin && state.previewAsPublic));
+    }
 
     if (headerSheetLink) {
-      if (state.isAdmin) {
+      if (effAdmin) {
         headerSheetLink.classList.remove('hidden');
         headerSheetLink.classList.add('inline-flex');
       } else {
@@ -1250,7 +1344,7 @@
     }
 
     if (navTabSettings) {
-      if (state.isAdmin) {
+      if (effAdmin) {
         navTabSettings.classList.remove('hidden');
         navTabSettings.classList.add('flex');
       } else {
@@ -1269,13 +1363,13 @@
       : 'สร้างข้อมูลตัวอย่างทดสอบ';
     const sampleBtnIcon = hasSamples ? ICONS.trash : ICONS.plus;
     const sampleBtnBaseCls =
-      'items-center gap-1.5 px-3.5 py-2 rounded-lg font-heading text-xs font-medium transition ';
+      'items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg font-heading text-xs font-medium transition ';
     const sampleBtnColorCls = hasSamples
       ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
       : 'bg-[#EDF3EC] hover:bg-[#E2EDE0] text-[#448361] border border-[#D7E6D5]';
 
     if (btnClearSamplesQuick) {
-      if (state.isAdmin) {
+      if (effAdmin) {
         btnClearSamplesQuick.className = 'inline-flex ' + sampleBtnBaseCls + sampleBtnColorCls;
         btnClearSamplesQuick.innerHTML = sampleBtnIcon + '<span>' + escapeHtml(sampleBtnLabel) + '</span>';
       } else {
@@ -1284,12 +1378,12 @@
     }
 
     if (btnClearSamplesAdmin) {
-      btnClearSamplesAdmin.className = 'inline-flex ' + sampleBtnBaseCls + sampleBtnColorCls;
+      btnClearSamplesAdmin.className = 'w-full inline-flex ' + sampleBtnBaseCls + sampleBtnColorCls;
       btnClearSamplesAdmin.innerHTML = sampleBtnIcon + '<span>' + escapeHtml(sampleBtnLabel) + '</span>';
     }
 
     if (adminAddJudgeCard) {
-      if (state.isAdmin) {
+      if (effAdmin) {
         adminAddJudgeCard.classList.remove('hidden');
       } else {
         adminAddJudgeCard.classList.add('hidden');
@@ -1313,19 +1407,19 @@
 
     const btnOpenBulkSched = document.getElementById('btnOpenBulkScheduleModal');
     if (btnOpenBulkSched) {
-      btnOpenBulkSched.classList.toggle('hidden', !state.isAdmin);
-      btnOpenBulkSched.classList.toggle('inline-flex', Boolean(state.isAdmin));
+      btnOpenBulkSched.classList.toggle('hidden', !effAdmin);
+      btnOpenBulkSched.classList.toggle('inline-flex', Boolean(effAdmin));
     }
 
     const btnUploadVenueMapLabel = document.getElementById('btnUploadVenueMapLabel');
     if (btnUploadVenueMapLabel) {
-      btnUploadVenueMapLabel.classList.toggle('hidden', !state.isAdmin);
-      btnUploadVenueMapLabel.classList.toggle('inline-flex', Boolean(state.isAdmin));
+      btnUploadVenueMapLabel.classList.toggle('hidden', !effAdmin);
+      btnUploadVenueMapLabel.classList.toggle('inline-flex', Boolean(effAdmin));
     }
 
     const btnClearVenueMapImage = document.getElementById('btnClearVenueMapImage');
     if (btnClearVenueMapImage) {
-      const hasCustomMap = Boolean(state.isAdmin && state.config && state.config.venueMapImageUrl);
+      const hasCustomMap = Boolean(effAdmin && state.config && state.config.venueMapImageUrl);
       btnClearVenueMapImage.classList.toggle('hidden', !hasCustomMap);
     }
 
@@ -1492,6 +1586,7 @@
     };
 
     let visibleBtnCount = 0;
+    const effAdmin = isEffectiveAdmin();
 
     keys.forEach(function (key) {
       const isPublic = isFeatureOpenToPublic(key);
@@ -1510,7 +1605,7 @@
           btn.classList.remove('hidden');
           visibleBtnCount++;
           if (badge) {
-            if (state.isAdmin && !isPublic) {
+            if (effAdmin && !isPublic) {
               badge.classList.remove('hidden');
               badge.textContent = 'แอดมิน';
             } else {
@@ -1525,7 +1620,7 @@
 
       // 2. Banner inside tab (when viewing as admin)
       if (banner) {
-        if (state.isAdmin) {
+        if (effAdmin) {
           banner.classList.remove('hidden');
           if (isPublic) {
             banner.innerHTML =
@@ -1579,7 +1674,7 @@
 
       // 4. Locked Notice inside Tab (when viewed by non-admin before unlock)
       if (lockedEl) {
-        if (!state.isAdmin && !isPublic) {
+        if (!effAdmin && !isPublic) {
           lockedEl.classList.remove('hidden');
           renderLockedNotice(key, lockedEl);
         } else {
@@ -1618,14 +1713,131 @@
       });
     });
 
-    // 6. Sidebar Shortcut for ID Cards & Group Header Visibility
+    // 6. Sidebar Shortcut for ID Cards, Schedule Menu Visibility & Group Header Visibility
+    const schedSetting = getFeatureVisibilitySetting('schedule');
+    const isSchedDisabled = schedSetting === 'disabled';
+    const isSchedPublic = isFeatureOpenToPublic('schedule');
+    const canSeeScheduleNav = !isSchedDisabled && (effAdmin || isSchedPublic);
+    const navTabSchedule = document.getElementById('navTabSchedule');
+    const navBadgeSchedule = document.getElementById('navBadgeSchedule');
+    if (navTabSchedule) {
+      if (canSeeScheduleNav) {
+        navTabSchedule.classList.remove('hidden');
+        visibleBtnCount++;
+        if (navBadgeSchedule) {
+          if (effAdmin && !isSchedPublic) {
+            navBadgeSchedule.classList.remove('hidden');
+            navBadgeSchedule.textContent = 'แอดมิน';
+          } else {
+            navBadgeSchedule.classList.add('hidden');
+          }
+        }
+      } else {
+        navTabSchedule.classList.add('hidden');
+        if (navBadgeSchedule) navBadgeSchedule.classList.add('hidden');
+      }
+    }
+
+    const tabScheduleEl = document.getElementById('tab-schedule');
+    const bannerSchedule = document.getElementById('featureBannerSchedule');
+    const lockedSchedule = document.getElementById('lockedNoticeSchedule');
+    if (bannerSchedule) {
+      if (effAdmin) {
+        bannerSchedule.classList.remove('hidden');
+        if (isSchedDisabled) {
+          bannerSchedule.innerHTML =
+            '<div class="p-3 rounded-xl bg-slate-100 border border-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-slate-800 mb-4 shadow-2xs">' +
+              '<span><strong>โหมดสถานที่และกำหนดการถูกปิดไว้ (งานขนาดเล็ก)</strong> — เมนูนี้ถูกซ่อนจากแถบด้านข้างและระบบจัดกรรมการจะจัดแบบไม่ผูกเวลา</span>' +
+              '<button type="button" data-sched-quick-vis="hidden" class="px-3 py-1 rounded-md bg-slate-900 text-white font-heading text-[11px] font-medium cursor-pointer shrink-0">เปิดใช้งานเฉพาะแอดมิน</button>' +
+            '</div>';
+        } else if (isSchedPublic) {
+          bannerSchedule.innerHTML =
+            '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-emerald-900 mb-4 shadow-2xs">' +
+              '<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span><span class="font-heading font-semibold">สถานะเมนูสถานที่และกำหนดการ: เปิดให้คนทั่วไปเข้าดูแล้ว</span></div>' +
+              '<button type="button" data-sched-quick-vis="hidden" class="px-3 py-1 rounded-md bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-heading text-[11px] font-medium cursor-pointer shrink-0">ซ่อนไว้เฉพาะแอดมิน</button>' +
+            '</div>';
+        } else {
+          bannerSchedule.innerHTML =
+            '<div class="p-3 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900 mb-4 shadow-2xs">' +
+              '<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span><span class="font-heading font-semibold">สถานะ: มองเห็นเฉพาะแอดมิน (ซ่อนเวลา-สถานที่จากครูและสาธารณะ)</span></div>' +
+              '<button type="button" data-sched-quick-vis="open" class="px-3.5 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-heading text-[11px] font-semibold cursor-pointer shrink-0">เปิดให้คนทั่วไปดูทันที</button>' +
+            '</div>';
+        }
+        const qBtn = bannerSchedule.querySelector('[data-sched-quick-vis]');
+        if (qBtn) {
+          qBtn.addEventListener('click', function () {
+            setFeatureVisibility('schedule', qBtn.getAttribute('data-sched-quick-vis'));
+          });
+        }
+      } else {
+        bannerSchedule.classList.add('hidden');
+        bannerSchedule.innerHTML = '';
+      }
+    }
+    if (tabScheduleEl) {
+      const canAccessSched = canUserAccessFeature('schedule');
+      Array.from(tabScheduleEl.children).forEach(function (child) {
+        if (child.id === 'featureBannerSchedule' || child.id === 'lockedNoticeSchedule') return;
+        child.classList.toggle('hidden-by-lock', !effAdmin && !canAccessSched);
+      });
+      if (lockedSchedule) {
+        if (!effAdmin && !canAccessSched) {
+          lockedSchedule.classList.remove('hidden');
+          renderLockedNotice('schedule', lockedSchedule);
+        } else {
+          lockedSchedule.classList.add('hidden');
+          lockedSchedule.innerHTML = '';
+        }
+      }
+    }
+
+    const badgeVisSchedule = document.getElementById('badgeVisibilitySchedule');
+    if (badgeVisSchedule) {
+      if (isSchedDisabled) {
+        badgeVisSchedule.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700';
+        badgeVisSchedule.textContent = 'ปิดโหมด (งานเล็ก)';
+      } else if (isSchedPublic) {
+        badgeVisSchedule.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-100 text-emerald-800';
+        badgeVisSchedule.textContent = 'เปิดสาธารณะ';
+      } else {
+        badgeVisSchedule.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-amber-100 text-amber-800';
+        badgeVisSchedule.textContent = 'เฉพาะแอดมิน (ซ่อนเวลา)';
+      }
+    }
+    document.querySelectorAll('[data-feature-toggle="schedule"]').forEach(function (b) {
+      const action = b.getAttribute('data-action');
+      const norm = schedSetting === 'open' || schedSetting === 'disabled' ? schedSetting : 'hidden';
+      b.className = action === norm
+        ? 'btn-vis-toggle-schedule px-2.5 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white border border-slate-900 transition cursor-pointer'
+        : 'btn-vis-toggle-schedule px-2.5 py-1.5 rounded-lg font-heading text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition cursor-pointer';
+    });
+    document.querySelectorAll('[data-schedule-mode]').forEach(function (b) {
+      const modeVal = b.getAttribute('data-schedule-mode');
+      const norm = schedSetting === 'open' || schedSetting === 'disabled' ? schedSetting : 'hidden';
+      b.className = modeVal === norm
+        ? 'btn-sched-mode-opt px-2.5 py-1.5 rounded-lg border border-slate-900 bg-slate-900 text-white text-xs font-heading font-semibold transition cursor-pointer'
+        : 'btn-sched-mode-opt px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-heading transition cursor-pointer';
+    });
+    const schedBlurVal = Boolean(state.config && state.config.schedulePlan && state.config.schedulePlan.blurVenue !== false);
+    const settingsBlurCb = document.getElementById('settingsBlurVenueCheckbox');
+    if (settingsBlurCb) settingsBlurCb.checked = schedBlurVal;
+    const schedBlurCb = document.getElementById('schedBlurVenueCheckbox');
+    if (schedBlurCb) schedBlurCb.checked = schedBlurVal;
+    const schedBlurBadge = document.getElementById('schedBlurVenueBadge');
+    if (schedBlurBadge) {
+      schedBlurBadge.className = schedBlurVal
+        ? 'px-2.5 py-1 rounded-md bg-amber-100 text-amber-800 font-heading text-[11px] font-semibold shrink-0'
+        : 'px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 font-heading text-[11px] font-semibold shrink-0';
+      schedBlurBadge.textContent = schedBlurVal ? 'กำลังเบลอสถานที่' : 'แสดงสถานที่ชัดเจน';
+    }
+
     const idCardsEnabled = isIdCardsPrintingEnabled();
     const subFormEnabled = isSubstitutionFormEnabled();
 
     const navShortcutIdCardsEl = document.getElementById('navShortcutIdCards');
     const navBadgeIdCardsEl = document.getElementById('navBadgeIdCards');
     if (navShortcutIdCardsEl) {
-      if (idCardsEnabled || state.isAdmin) {
+      if (idCardsEnabled || effAdmin) {
         navShortcutIdCardsEl.classList.remove('hidden');
         visibleBtnCount++;
         if (navBadgeIdCardsEl) {
@@ -1659,7 +1871,7 @@
 
     const dashRow = document.getElementById('phase2DashboardHighlightRow');
     if (dashRow) {
-      const showDash = isFeatureOpenToPublic('results') || state.isAdmin;
+      const showDash = isFeatureOpenToPublic('results') || effAdmin;
       if (showDash) {
         dashRow.classList.remove('hidden');
       } else {
@@ -1675,7 +1887,7 @@
     }
     const btnManageSchoolCardPhotosEl = document.getElementById('btnManageSchoolCardPhotos');
     if (btnManageSchoolCardPhotosEl) {
-      btnManageSchoolCardPhotosEl.classList.toggle('hidden', !idCardsEnabled && !state.isAdmin);
+      btnManageSchoolCardPhotosEl.classList.toggle('hidden', !idCardsEnabled && !effAdmin);
     }
     const btnSubSchoolEl = document.getElementById('btnPrintSubstitutionFormSchool');
     if (btnSubSchoolEl) {
@@ -1717,7 +1929,7 @@
     // 9. Venue / Room Schedule Public vs Admin Controls & Print Button Gating
     const venueSetting = getFeatureVisibilitySetting('venue');
     const isVenuePublic = isFeatureOpenToPublic('venue');
-    const canSeeVenueUI = state.isAdmin || isVenuePublic;
+    const canSeeVenueUI = effAdmin || isVenuePublic;
 
     const btnToggleVenueMap = document.getElementById('btnToggleVenueMap');
     if (btnToggleVenueMap) {
@@ -1728,7 +1940,7 @@
     const btnToggleVenuePublic = document.getElementById('btnToggleVenuePublic');
     const btnToggleVenuePublicText = document.getElementById('btnToggleVenuePublicText');
     if (btnToggleVenuePublic) {
-      if (!state.isAdmin) {
+      if (!effAdmin) {
         btnToggleVenuePublic.classList.add('hidden');
         btnToggleVenuePublic.classList.remove('inline-flex');
       } else if (isVenuePublic) {
@@ -1748,7 +1960,7 @@
 
     const venueAdminHiddenBanner = document.getElementById('venueAdminHiddenBanner');
     if (venueAdminHiddenBanner) {
-      venueAdminHiddenBanner.classList.toggle('hidden', !(state.isAdmin && !isVenuePublic));
+      venueAdminHiddenBanner.classList.toggle('hidden', !(effAdmin && !isVenuePublic));
     }
 
     const btnPrintVenueDir = document.getElementById('btnPrintVenueDirectory');
@@ -2247,6 +2459,8 @@
     let label = '';
     if (featureKey === 'id_cards' || featureKey === 'substitution_form') {
       label = action === 'open' ? 'เปิดแสดงปุ่มบนหน้าเว็บแล้ว' : 'ปิดซ่อนปุ่มบนหน้าเว็บไว้แล้ว';
+    } else if (action === 'disabled') {
+      label = 'ปิดใช้งานโหมดตารางเวลาแล้ว (ซ่อนเมนูสถานที่และกำหนดการ)';
     } else {
       label = action === 'open' ? 'เปิดให้คนทั่วไปดูทันทีแล้ว' : action === 'hidden' ? 'ซ่อนเฉพาะแอดมินแล้ว' : 'ตั้งค่าตามกำหนดการแข่งขันแล้ว';
     }
@@ -2332,6 +2546,7 @@
     register: 'ลงทะเบียนเข้าแข่งขัน',
     school: 'ข้อมูลรายโรงเรียน',
     competition: 'ดูรายการแข่งขัน (149)',
+    schedule: 'สถานที่และกำหนดการ',
     judges: 'กรรมการตัดสิน',
     results: 'ผลการแข่งขัน / เหรียญ',
     certificates: 'เกียรติบัตรออนไลน์',
@@ -2483,7 +2698,7 @@
       }
     }
 
-    ['judgeSchoolFilter', 'certSchoolFilter'].forEach(function (id) {
+    ['judgeSchoolFilter', 'certSchoolFilter', 'schedViewSchoolFilter'].forEach(function (id) {
       const el = document.getElementById(id);
       if (!el) return;
       const prev = el.value || 'ALL';
@@ -2530,7 +2745,7 @@
     const areas = getLearningAreas();
     const levels = getLevels();
 
-    ['regAreaFilter', 'compViewAreaFilter', 'judgeAreaFilter', 'resAreaFilter', 'bulkSchedAreaFilter'].forEach(function (id) {
+    ['regAreaFilter', 'compViewAreaFilter', 'judgeAreaFilter', 'resAreaFilter', 'bulkSchedAreaFilter', 'schedViewAreaFilter'].forEach(function (id) {
       const el = document.getElementById(id);
       if (!el) return;
       const prev = el.value || 'ALL';
@@ -2542,7 +2757,7 @@
       if (prev === 'ALL' || areas.indexOf(prev) !== -1) el.value = prev;
     });
 
-    ['regLevelFilter', 'compViewLevelFilter'].forEach(function (id) {
+    ['regLevelFilter', 'compViewLevelFilter', 'schedViewLevelFilter'].forEach(function (id) {
       const el = document.getElementById(id);
       if (!el) return;
       const prev = el.value || 'ALL';
@@ -4054,7 +4269,7 @@
           sampleBannerSubtitle.textContent =
             'ครูแต่ละโรงเรียนสามารถกดลงทะเบียนส่งรายชื่อได้ทันที (แอดมินสามารถกดล้างข้อมูลตัวอย่างออกได้ในโหมดแอดมิน)';
         }
-      } else if (state.isAdmin) {
+      } else if (isEffectiveAdmin()) {
         sampleBanner.classList.remove('hidden');
         if (sampleBannerTitle) {
           sampleBannerTitle.textContent = 'ระบบพร้อมรับสมัครจริง (ไม่มีข้อมูลตัวอย่างค้างในระบบ)';
@@ -4572,7 +4787,7 @@
               : '';
 
             const deleteBtnHtml =
-              state.isAdmin && state.adminQuickDeleteEnabled
+              isEffectiveAdmin() && state.adminQuickDeleteEnabled
                 ? '<button type="button" data-dash-del="' +
                   escapeHtml(r.reg_id) +
                   '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
@@ -5243,7 +5458,7 @@
     const btnAdminScorePreview = document.getElementById('btnToggleAdminScorePreview');
     const btnAdminScorePreviewText = document.getElementById('btnToggleAdminScorePreviewText');
     if (btnAdminScorePreview) {
-      const canShowToggle = Boolean(state.isAdmin && ENABLE_PHASE_2 && !isFeatureOpenToPublic('results'));
+      const canShowToggle = Boolean(isEffectiveAdmin() && ENABLE_PHASE_2 && !isFeatureOpenToPublic('results'));
       btnAdminScorePreview.classList.toggle('hidden', !canShowToggle);
       btnAdminScorePreview.classList.toggle('inline-flex', canShowToggle);
       if (btnAdminScorePreviewText) {
@@ -5317,7 +5532,7 @@
           : statusBadgeHtml;
 
         const deleteBtnHtml =
-          state.isAdmin && state.adminQuickDeleteEnabled
+          isEffectiveAdmin() && state.adminQuickDeleteEnabled
             ? '<button type="button" data-sch-del="' +
               escapeHtml(r.reg_id) +
               '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
@@ -5331,7 +5546,7 @@
             : '';
 
         const photoBtnHtml =
-          isIdCardsPrintingEnabled() || state.isAdmin
+          isIdCardsPrintingEnabled() || isEffectiveAdmin()
             ? '<button type="button" data-sch-photos="' +
               escapeHtml(r.reg_id) +
               '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-heading" title="แนบรูปติดบัตรทีมนี้"><span>รูป</span></button>'
@@ -6042,17 +6257,27 @@
             ? c.max_students + ' คน'
             : c.min_students + '–' + c.max_students + ' คน';
 
-        const scheduleInfo =
-          (c.comp_date || '24–25 พฤศจิกายน 2569') +
-          ' • ' +
-          (c.comp_time || '09.00 - 12.00 น.') +
-          ' • ' +
-          (c.venue_building ? c.venue_building + ' • ' : '') +
-          (c.venue_room || 'อาคารเรียนรวม ห้อง 101');
+        const schPlan = state.config && state.config.schedulePlan;
+        const schAlloc = schPlan && schPlan.allocations && schPlan.allocations[c.comp_id];
+        const blurVenueFlag = !schPlan || schPlan.blurVenue !== false;
+        const effAdminComp = isEffectiveAdmin();
+        const canSeeSchedDateTime = !isScheduleModeDisabled() && (effAdminComp || isFeatureOpenToPublic('schedule'));
+        const canSeeVenueRoom = canUserAccessFeature('venue') && (!blurVenueFlag || effAdminComp);
+        const dateTimePart = canSeeSchedDateTime
+          ? (schAlloc ? schAlloc.dateText + ' • ' + schAlloc.timeText : (c.comp_date || '24–25 พฤศจิกายน 2569') + ' • ' + (c.comp_time || '09.00 - 12.00 น.'))
+          : '';
+        const roomPart = canSeeVenueRoom
+          ? (schAlloc
+              ? (schAlloc.building ? schAlloc.building + ' • ' : '') + schAlloc.room
+              : (c.venue_building ? c.venue_building + ' • ' : '') + (c.venue_room || 'อาคารเรียนรวม ห้อง 101'))
+          : blurVenueFlag && canSeeSchedDateTime
+          ? 'รอประกาศสถานที่ / ห้องสอบ'
+          : '';
+        const scheduleInfo = [dateTimePart, roomPart].filter(Boolean).join(' • ');
 
         const showScores = shouldShowScoresInTables();
         const canPrintScoreSheet = Boolean(
-          state.isAdmin || isFeatureOpenToPublic('results') || isFeatureOpenToPublic('judges')
+          effAdminComp || isFeatureOpenToPublic('results') || isFeatureOpenToPublic('judges')
         );
 
         let schoolsTableHtml = '';
@@ -6148,7 +6373,7 @@
           : '';
 
         const adminBtnsHtml =
-          ENABLE_PHASE_2 && state.isAdmin
+          ENABLE_PHASE_2 && isEffectiveAdmin()
             ? '<button type="button" data-open-schedule="' +
               escapeHtml(c.comp_id) +
               '" title="กำหนดวัน-เวลา อาคาร และห้องสอบของรายการนี้ (เฉพาะแอดมิน)" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-heading text-xs font-medium transition cursor-pointer">' +
@@ -6173,12 +6398,12 @@
 
         const isVenuePublic = isFeatureOpenToPublic('venue');
         const venueHiddenTagHtml =
-          state.isAdmin && !isVenuePublic
+          isEffectiveAdmin() && !isVenuePublic
             ? ' <span class="ml-1.5 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-heading font-semibold">ซ่อนห้องจากสาธารณะ</span>'
             : '';
 
         const scheduleInfoLineHtml =
-          ENABLE_PHASE_2 && canUserAccessFeature('venue')
+          ENABLE_PHASE_2 && scheduleInfo
             ? '<div class="inline-flex flex-wrap items-center gap-1.5 text-xs text-[#787774]">' +
               ICONS.calendar +
               '<span>' +
@@ -6289,7 +6514,7 @@
     // Maintain exact same ordering as Score Entry Modal so admin can read line-by-line
     const regs = state.registrations.filter((r) => r.comp_id === compId);
     const allowScoreSheet = Boolean(
-      state.isAdmin || isFeatureOpenToPublic('results') || isFeatureOpenToPublic('judges')
+      isEffectiveAdmin() || isFeatureOpenToPublic('results') || isFeatureOpenToPublic('judges')
     );
 
     let startMode = initialMode || 'checkin';
@@ -6348,9 +6573,6 @@
                 '<td class="font-bold">' +
                 escapeHtml(r.school_name) +
                 '</td>' +
-                '<td class="text-center">' +
-                escapeHtml(subdistrict || '-') +
-                '</td>' +
                 '<td>' +
                 (stuHtml || '-') +
                 '</td>' +
@@ -6364,7 +6586,7 @@
               );
             })
             .join('')
-        : '<tr><td colspan="6" class="text-center">ยังไม่มีโรงเรียนลงทะเบียนในรายการนี้</td></tr>';
+        : '<tr><td colspan="5" class="text-center">ยังไม่มีโรงเรียนลงทะเบียนในรายการนี้</td></tr>';
 
     // 2. Rows for Check-in Sheet (ลงชื่อรายงานตัวหน้าห้องสอบ — ไม่มีคะแนน)
     const checkinRowsHtml = regs
@@ -6470,7 +6692,6 @@
                 escapeHtml(jName) +
                 ' )<br/>' +
                 escapeHtml(jRole) +
-                (j.school_name ? ' • ' + escapeHtml(j.school_name) : '') +
                 '</td>'
               );
             }
@@ -6747,8 +6968,7 @@
       '<thead>' +
       '<tr>' +
       '<th style="width:45px;">ลำดับ</th>' +
-      '<th style="width:210px;">โรงเรียน</th>' +
-      '<th style="width:105px;">ตำบล</th>' +
+      '<th style="width:240px;">โรงเรียน</th>' +
       '<th>ผู้เข้าแข่งขัน (นักเรียน)</th>' +
       '<th style="width:220px;">ครูผู้ฝึกซ้อม</th>' +
       '<th style="width:120px;">หมายเหตุจัดสถานที่</th>' +
@@ -6815,7 +7035,6 @@
       '<table class="judges-table">' +
       judgeCellsHtml +
       '</table>' +
-      '<div class="footer-note">นัดหมายประชุมคณะกรรมการตัดสิน: วันจันทร์ที่ 23 พฤศจิกายน 2569 เวลา 13.30 น. ณ โรงเรียนบ้านวังยาววิทยายน • กำหนดการแข่งขัน 24–25 พ.ย. 2569</div>' +
       '</div>' +
       '</div>' +
       scoreSectionHtml +
@@ -7531,10 +7750,104 @@
     return pickTop(tier3);
   }
 
+  function normalizeArabicDigits(str) {
+    return String(str || '').replace(/[๐-๙]/g, function (ch) {
+      return String('๐๑๒๓๔๕๖๗๘๙'.indexOf(ch));
+    });
+  }
+
+  function parseTimeRangeMinutes(timeText) {
+    const clean = normalizeArabicDigits(timeText).split('(')[0];
+    const matches = clean.match(/(\d{1,2})[.:](\d{2})/g);
+    if (!matches || matches.length < 2) return null;
+    const parseOne = function (tok) {
+      const m = tok.match(/(\d{1,2})[.:](\d{2})/);
+      if (!m) return NaN;
+      const h = parseInt(m[1], 10);
+      const min = parseInt(m[2], 10);
+      if (Number.isNaN(h) || Number.isNaN(min) || h > 23 || min > 59) return NaN;
+      return h * 60 + min;
+    };
+    const startMin = parseOne(matches[0]);
+    const endMin = parseOne(matches[1]);
+    if (Number.isNaN(startMin) || Number.isNaN(endMin) || startMin >= endMin) return null;
+    return [startMin, endMin];
+  }
+
+  function splitLunchBreakSegments(startMin, endMin) {
+    if (endMin - startMin >= 300 && startMin < 720 && endMin > 780) {
+      return [[startMin, 720], [780, endMin]];
+    }
+    return [[startMin, endMin]];
+  }
+
+  function intervalsOverlap(segA, segB) {
+    return segA[0] < segB[1] && segB[0] < segA[1];
+  }
+
+  function intervalsListOverlap(segsA, segsB) {
+    if (!Array.isArray(segsA) || !Array.isArray(segsB) || segsA.length === 0 || segsB.length === 0) {
+      return false;
+    }
+    return segsA.some(function (a) {
+      return segsB.some(function (b) {
+        return intervalsOverlap(a, b);
+      });
+    });
+  }
+
+  function slotKeyToFallbackRange(slotKey) {
+    const sk = String(slotKey || '');
+    if (sk.endsWith('FULL') || sk.endsWith('ALLDAY')) return [540, 960];
+    if (sk.endsWith('AM1')) return [540, 630];
+    if (sk.endsWith('AM2')) return [630, 720];
+    if (sk.endsWith('PM1')) return [780, 870];
+    if (sk.endsWith('PM2')) return [870, 960];
+    if (sk.endsWith('AM')) return [540, 720];
+    if (sk.endsWith('PM')) return [780, 960];
+    return [870, 960];
+  }
+
+  function getActiveIntervalsFromAlloc(alloc, comp) {
+    const slotKey = (alloc && alloc.slotKey) || (comp && AUTO_JUDGE_SLOT_MAP[comp.comp_id]) || '';
+    let dayId = alloc && alloc.dayId;
+    if (!dayId) {
+      if (slotKey.startsWith('D')) {
+        dayId = slotKey.split('-')[0];
+      } else {
+        const lv = String((comp && comp.level) || '');
+        dayId = lv.includes('ป.1–ป.3') || lv.includes('ปฐมวัย') ? 'D1' : 'D2';
+      }
+    }
+    const timeText = (alloc && alloc.timeText) || (comp && comp.comp_time) || AUTO_JUDGE_SLOT_LABEL[slotKey] || '';
+    const parsedRange =
+      alloc && Number.isFinite(alloc.startMin) && Number.isFinite(alloc.endMin)
+        ? [alloc.startMin, alloc.endMin]
+        : parseTimeRangeMinutes(timeText) || slotKeyToFallbackRange(slotKey || dayId + '-PM2');
+    const segments = splitLunchBreakSegments(parsedRange[0], parsedRange[1]);
+    return {
+      dayId: dayId,
+      startMin: parsedRange[0],
+      endMin: parsedRange[1],
+      segments: segments,
+      slotKey: slotKey || dayId + '-' + parsedRange[0] + '-' + parsedRange[1],
+      locked: Boolean(alloc && alloc.locked)
+    };
+  }
+
+  function getCompScheduleIntervalMeta(compId) {
+    const comp = (state.competitions || []).find((c) => c.comp_id === compId) || {};
+    const plan = state.config && state.config.schedulePlan;
+    const alloc = plan && plan.allocations && plan.allocations[compId];
+    return getActiveIntervalsFromAlloc(alloc, comp);
+  }
+
   function getCompetitionScheduleSlot(comp) {
-    if (AUTO_JUDGE_SLOT_MAP[comp.comp_id]) return AUTO_JUDGE_SLOT_MAP[comp.comp_id];
-    const lv = String(comp.level || '');
-    return lv.includes('ป.1–ป.3') || lv.includes('ปฐมวัย') ? 'D1-PM2' : 'D2-PM2';
+    if (isScheduleModeDisabled()) return 'NO-SLOT';
+    const plan = state.config && state.config.schedulePlan;
+    const alloc = plan && plan.allocations && plan.allocations[comp.comp_id];
+    const meta = getActiveIntervalsFromAlloc(alloc, comp);
+    return meta.dayId + ':' + meta.startMin + '-' + meta.endMin;
   }
 
   function isCompetitionByeStatus(comp, schoolCount) {
@@ -7734,7 +8047,21 @@
     const mode = options && options.mode === 'A' ? 'A' : 'B';
     const allowExtra = Boolean(options && options.allowExtraSpecialists);
     const includeBye = Boolean(options && options.includeBye);
+    const noScheduleLock = isScheduleModeDisabled();
     const teachers = buildAutoJudgeTeacherPool();
+    const schPlan = state.config && state.config.schedulePlan;
+    const schAllocMap = (schPlan && schPlan.allocations) || {};
+
+    const teacherBySchoolName = {};
+    teachers.forEach(function (t) {
+      teacherBySchoolName[(t.school_name || '') + '::' + (t.full_name || '').trim()] = t;
+    });
+
+    const existingJudgesByComp = {};
+    (state.judges || []).forEach(function (j) {
+      if (!existingJudgesByComp[j.comp_id]) existingJudgesByComp[j.comp_id] = [];
+      existingJudgesByComp[j.comp_id].push(j);
+    });
 
     const compSchoolsMap = {};
     (state.registrations || []).forEach(function (r) {
@@ -7749,57 +8076,124 @@
     (state.competitions || []).forEach(function (c) {
       const schs = (compSchoolsMap[c.comp_id] || []).slice().sort();
       const st = isCompetitionByeStatus(c, schs.length);
+      const alloc = schAllocMap[c.comp_id];
+      const intervalMeta = getActiveIntervalsFromAlloc(alloc, c);
       if (st === 'ACTIVE') {
         activeComps.push({
           comp: c,
           schools: schs,
           slot: getCompetitionScheduleSlot(c),
+          intervalMeta: intervalMeta,
+          locked: Boolean(alloc && alloc.locked),
           isLive: isCompetitionLiveFormat(c)
         });
       } else if (st === 'BYE') {
         byeComps.push({
           comp: c,
           schools: schs,
+          locked: Boolean(alloc && alloc.locked),
           isLive: isCompetitionLiveFormat(c)
         });
       }
     });
 
-    const teacherSlots = {};
+    const teacherIntervals = {};
     const teacherDayCount = {};
     const teacherTotalCount = {};
-    const teacherLiveCoachSlots = {};
-    const compSlotById = {};
-    activeComps.forEach((a) => {
-      if (a.isLive) compSlotById[a.comp.comp_id] = a.slot;
+    const teacherLiveCoachIntervals = {};
+    const compIntervalById = {};
+    activeComps.forEach(function (a) {
+      if (a.isLive) compIntervalById[a.comp.comp_id] = a.intervalMeta;
     });
     teachers.forEach(function (t) {
-      teacherSlots[t.teacher_id] = new Set();
+      teacherIntervals[t.teacher_id] = [];
       teacherTotalCount[t.teacher_id] = 0;
-      teacherLiveCoachSlots[t.teacher_id] = new Set();
+      teacherLiveCoachIntervals[t.teacher_id] = [];
       t.coachedCompIds.forEach(function (cid) {
-        if (compSlotById[cid]) teacherLiveCoachSlots[t.teacher_id].add(compSlotById[cid]);
+        if (compIntervalById[cid]) teacherLiveCoachIntervals[t.teacher_id].push(compIntervalById[cid]);
       });
-    });
-
-    activeComps.sort(function (a, b) {
-      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-      if (b.schools.length !== a.schools.length) return b.schools.length - a.schools.length;
-      return String(a.comp.comp_id).localeCompare(String(b.comp.comp_id));
     });
 
     const previewRows = [];
     let readyCount = 0;
     let gt3Count = 0;
 
+    // Seed locked competitions first so existing judges keep exact assignments & block clashes
+    const unlockedActiveComps = [];
     activeComps.forEach(function (item) {
       const c = item.comp;
+      const lockedExisting = item.locked ? (existingJudgesByComp[c.comp_id] || []) : [];
+      if (item.locked && lockedExisting.length > 0) {
+        const competingSet = new Set(item.schools);
+        const dayKey = item.intervalMeta.dayId || 'D1';
+        const preservedJudges = sortJudgesOfficialOrder(lockedExisting).map(function (j) {
+          const jName = (j.judge_name || j.full_name || '').trim();
+          const tMatch = teacherBySchoolName[(j.school_name || '') + '::' + jName];
+          if (tMatch) {
+            teacherIntervals[tMatch.teacher_id].push(item.intervalMeta);
+            teacherDayCount[tMatch.teacher_id + ':' + dayKey] = (teacherDayCount[tMatch.teacher_id + ':' + dayKey] || 0) + 1;
+            teacherTotalCount[tMatch.teacher_id] = (teacherTotalCount[tMatch.teacher_id] || 0) + 1;
+          }
+          return {
+            comp_id: c.comp_id,
+            comp_name: c.comp_name,
+            learning_area: c.learning_area,
+            level: c.level,
+            prefix: j.prefix || '',
+            judge_name: jName,
+            school_name: j.school_name || '',
+            role: j.role || 'กรรมการ',
+            major: tMatch ? tMatch.major : 'ชุดเดิม (ล็อกไว้)',
+            sameSchoolFlag: competingSet.has(j.school_name)
+          };
+        });
+        const schedMetaForSlot = getJudgeCompScheduleMeta(c.comp_id);
+        readyCount++;
+        if (preservedJudges.length > 3) gt3Count++;
+        previewRows.push({
+          type: 'ACTIVE',
+          locked: true,
+          comp: c,
+          slotLabel: (noScheduleLock ? 'ไม่ผูกเวลา' : schedMetaForSlot.slotLabel) + ' [ล็อกคงเดิม]',
+          formatLabel: item.isLive ? 'แสดงสด' : 'ส่งชิ้นงาน',
+          schoolCount: item.schools.length,
+          judges: preservedJudges,
+          warnings: ['ล็อกรายการไว้ (คงกรรมการเดิม)']
+        });
+      } else {
+        unlockedActiveComps.push(item);
+      }
+    });
+
+    unlockedActiveComps.sort(function (a, b) {
+      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+      if (b.schools.length !== a.schools.length) return b.schools.length - a.schools.length;
+      return String(a.comp.comp_id).localeCompare(String(b.comp.comp_id));
+    });
+
+    const hasTeacherIntervalOverlap = function (tId, meta) {
+      return (teacherIntervals[tId] || []).some(function (iv) {
+        return iv.dayId === meta.dayId && intervalsListOverlap(iv.segments, meta.segments);
+      });
+    };
+    const hasTeacherLiveCoachOverlap = function (tId, meta) {
+      return (teacherLiveCoachIntervals[tId] || []).some(function (iv) {
+        return iv.dayId === meta.dayId && intervalsListOverlap(iv.segments, meta.segments);
+      });
+    };
+
+    unlockedActiveComps.forEach(function (item) {
+      const c = item.comp;
       const competingSet = new Set(item.schools);
-      const dayKey = item.slot.startsWith('D1') ? 'D1' : 'D2';
+      const dayKey = item.intervalMeta.dayId || 'D1';
 
       const isAvail = function (t) {
-        if (teacherSlots[t.teacher_id].has(item.slot)) return false;
-        if ((teacherDayCount[t.teacher_id + ':' + dayKey] || 0) >= 3) return false;
+        if (!noScheduleLock) {
+          if (hasTeacherIntervalOverlap(t.teacher_id, item.intervalMeta)) return false;
+          if ((teacherDayCount[t.teacher_id + ':' + dayKey] || 0) >= 3) return false;
+        } else if ((teacherTotalCount[t.teacher_id] || 0) >= 4) {
+          return false;
+        }
         if (mode === 'A' && competingSet.has(t.school_name)) return false;
         return true;
       };
@@ -7809,7 +8203,7 @@
           getMajorMatchRank(t.major, c.learning_area),
           competingSet.has(t.school_name) ? 1 : 0,
           t.coachedCompIds.has(c.comp_id) ? 1 : 0,
-          teacherLiveCoachSlots[t.teacher_id].has(item.slot) ? 1 : 0,
+          hasTeacherLiveCoachOverlap(t.teacher_id, item.intervalMeta) ? 1 : 0,
           teacherDayCount[t.teacher_id + ':' + dayKey] || 0,
           teacherTotalCount[t.teacher_id] || 0
         ];
@@ -7887,8 +8281,13 @@
       });
 
       const judgesOut = selected.map(function (t, i) {
-        const role = i === 0 ? 'ประธานกรรมการ' : i === 1 ? 'กรรมการและเลขานุการ' : 'กรรมการ';
-        teacherSlots[t.teacher_id].add(item.slot);
+        const role =
+          i === 0
+            ? 'ประธานกรรมการ'
+            : i === selected.length - 1 && selected.length >= 2
+            ? 'กรรมการและเลขานุการ'
+            : 'กรรมการ';
+        teacherIntervals[t.teacher_id].push(item.intervalMeta);
         teacherDayCount[t.teacher_id + ':' + dayKey] = (teacherDayCount[t.teacher_id + ':' + dayKey] || 0) + 1;
         teacherTotalCount[t.teacher_id] = (teacherTotalCount[t.teacher_id] || 0) + 1;
         return {
@@ -7913,10 +8312,14 @@
       if (warns.length === 0) readyCount++;
       if (judgesOut.length > 3) gt3Count++;
 
+      const schedMetaForSlot = getJudgeCompScheduleMeta(c.comp_id);
       previewRows.push({
         type: 'ACTIVE',
+        locked: false,
         comp: c,
-        slotLabel: AUTO_JUDGE_SLOT_LABEL[item.slot] || item.slot,
+        slotLabel: noScheduleLock
+          ? 'ไม่ผูกเวลา (โหมดงานเล็ก)'
+          : schedMetaForSlot.slotLabel || AUTO_JUDGE_SLOT_LABEL[item.slot] || item.slot,
         formatLabel: item.isLive ? 'แสดงสด' : 'ส่งชิ้นงาน',
         schoolCount: item.schools.length,
         judges: judgesOut,
@@ -7928,6 +8331,34 @@
       const byeCount = {};
       byeComps.forEach(function (item) {
         const c = item.comp;
+        const lockedExisting = item.locked ? (existingJudgesByComp[c.comp_id] || []) : [];
+        if (item.locked && lockedExisting.length > 0) {
+          const preservedJudges = sortJudgesOfficialOrder(lockedExisting).map(function (j) {
+            return {
+              comp_id: c.comp_id,
+              comp_name: c.comp_name,
+              learning_area: c.learning_area,
+              level: c.level,
+              prefix: j.prefix || '',
+              judge_name: j.judge_name || j.full_name || '',
+              school_name: j.school_name || '',
+              role: j.role || 'กรรมการ',
+              major: 'ชุดเดิม (ล็อกไว้)',
+              sameSchoolFlag: false
+            };
+          });
+          previewRows.push({
+            type: 'BYE',
+            locked: true,
+            comp: c,
+            slotLabel: 'ใส่ชื่อในคำสั่ง [ล็อกคงเดิม]',
+            formatLabel: item.isLive ? 'บาย (แสดงสด)' : 'บาย (ส่งชิ้นงาน)',
+            schoolCount: item.schools.length,
+            judges: preservedJudges,
+            warnings: ['ล็อกรายการไว้ (คงกรรมการเดิม)']
+          });
+          return;
+        }
         const competingSet = new Set(item.schools);
         const cands = teachers.slice().sort(function (a, b) {
           const ra = getMajorMatchRank(a.major, c.learning_area);
@@ -7947,7 +8378,12 @@
           byeCount[cands[i].teacher_id] = (byeCount[cands[i].teacher_id] || 0) + 1;
         }
         const judgesOut = chosen.map(function (t, i) {
-          const role = i === 0 ? 'ประธานกรรมการ' : i === 1 ? 'กรรมการและเลขานุการ' : 'กรรมการ';
+          const role =
+            i === 0
+              ? 'ประธานกรรมการ'
+              : i === chosen.length - 1 && chosen.length >= 2
+              ? 'กรรมการและเลขานุการ'
+              : 'กรรมการ';
           return {
             comp_id: c.comp_id,
             comp_name: c.comp_name,
@@ -7963,6 +8399,7 @@
         });
         previewRows.push({
           type: 'BYE',
+          locked: false,
           comp: c,
           slotLabel: 'ใส่ชื่อในคำสั่ง (ไม่นับภาระงาน)',
           formatLabel: item.isLive ? 'บาย (แสดงสด)' : 'บาย (ส่งชิ้นงาน)',
@@ -8055,7 +8492,144 @@
     box.classList.remove('hidden');
   }
 
-  async function applyAutoJudgePlan(syncToSheets) {
+  function loadJudgeHistory() {
+    if (Array.isArray(state.judgeHistory) && state.judgeHistory.length > 0) return state.judgeHistory;
+    try {
+      const raw = localStorage.getItem(JUDGES_HISTORY_KEY);
+      state.judgeHistory = raw ? JSON.parse(raw) : [];
+    } catch (_e) {
+      state.judgeHistory = [];
+    }
+    return state.judgeHistory;
+  }
+
+  function recordJudgeHistorySnapshot(actionLabel, note, snapshotJudges) {
+    const list = loadJudgeHistory();
+    const now = new Date();
+    const tsStr = now.toLocaleString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    list.unshift({
+      id: 'JH-' + Date.now(),
+      timestamp: tsStr,
+      actionLabel: actionLabel,
+      note: note || '-',
+      count: Array.isArray(snapshotJudges) ? snapshotJudges.length : 0,
+      snapshot: cloneDeep(snapshotJudges || [])
+    });
+    if (list.length > MAX_JUDGE_HISTORY) {
+      list.length = MAX_JUDGE_HISTORY;
+    }
+    state.judgeHistory = list;
+    try {
+      localStorage.setItem(JUDGES_HISTORY_KEY, JSON.stringify(list));
+    } catch (_e) {}
+    renderJudgeHistoryList();
+  }
+
+  function restoreJudgeHistorySnapshot(historyId) {
+    if (!state.isAdmin) return;
+    const list = loadJudgeHistory();
+    const item = list.find((x) => x.id === historyId);
+    if (!item) return;
+    const ok = window.confirm(
+      'ต้องการกู้คืนรายชื่อกรรมการชุด ณ "' +
+        item.timestamp +
+        '" (' +
+        item.count +
+        ' ตำแหน่ง) กลับมาใช้ในเครื่องใช่หรือไม่? (ชุดปัจจุบันจะถูกบันทึกเก็บในประวัติก่อนกู้คืน)'
+    );
+    if (!ok) return;
+    recordJudgeHistorySnapshot('สำรองก่อนกู้คืนย้อนหลัง', 'กู้คืนไปยังหมุดหมาย: ' + item.timestamp, state.judges || []);
+    state.judges = cloneDeep(item.snapshot || []);
+    saveState();
+    renderAll();
+    showToast('กู้คืนรายชื่อกรรมการ ณ ' + item.timestamp + ' เรียบร้อยแล้ว', 'success');
+  }
+
+  function renderJudgeHistoryList() {
+    const listEl = document.getElementById('judgeHistoryList');
+    const badgeEl = document.getElementById('judgeHistoryCountBadge');
+    const list = loadJudgeHistory();
+    if (badgeEl) badgeEl.textContent = list.length + ' หมุดหมาย';
+    if (!listEl) return;
+
+    if (list.length === 0) {
+      listEl.innerHTML =
+        '<div class="text-xs text-slate-400 py-2">ยังไม่มีประวัติการเปลี่ยนแปลง (ระบบจะบันทึกอัตโนมัติเมื่อจัดสรรหรือเปลี่ยนตัวกรรมการ)</div>';
+      return;
+    }
+
+    listEl.innerHTML = list
+      .map(function (h) {
+        return (
+          '<div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50/70 text-xs">' +
+          '<div class="min-w-0">' +
+          '<div class="font-heading font-semibold text-slate-800">' +
+          escapeHtml(h.timestamp) +
+          ' • ' +
+          escapeHtml(h.actionLabel) +
+          ' <span class="text-slate-500 font-normal">(' +
+          h.count +
+          ' ตำแหน่ง)</span></div>' +
+          '<div class="text-[11px] text-slate-600 truncate">หมายเหตุ: ' +
+          escapeHtml(h.note || '-') +
+          '</div>' +
+          '</div>' +
+          '<button type="button" data-restore-judge-hist="' +
+          escapeHtml(h.id) +
+          '" class="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-heading text-[11px] font-medium cursor-pointer shrink-0">กู้คืนชุดนี้</button>' +
+          '</div>'
+        );
+      })
+      .join('');
+
+    listEl.querySelectorAll('[data-restore-judge-hist]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        restoreJudgeHistorySnapshot(btn.getAttribute('data-restore-judge-hist'));
+      });
+    });
+  }
+
+  function openJudgeRegenConfirmModal(title, desc, onConfirmed) {
+    const modal = document.getElementById('judgeRegenConfirmModal');
+    const titleEl = document.getElementById('judgeRegenModalTitle');
+    const descEl = document.getElementById('judgeRegenModalDesc');
+    const noteEl = document.getElementById('judgeRegenNoteInput');
+    const codeEl = document.getElementById('judgeRegenCodeInput');
+    const submitBtn = document.getElementById('btnSubmitJudgeRegenModal');
+    if (!modal || !noteEl || !codeEl || !submitBtn) {
+      onConfirmed('');
+      return;
+    }
+    if (titleEl) titleEl.textContent = title || 'ยืนยันการจัดสรรกรรมการใหม่';
+    if (descEl) descEl.textContent = desc || '';
+    noteEl.value = '';
+    codeEl.value = '';
+    submitBtn.disabled = true;
+    state.pendingJudgeRegenAction = onConfirmed;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(function () {
+      noteEl.focus();
+    }, 50);
+  }
+
+  function closeJudgeRegenConfirmModal() {
+    const modal = document.getElementById('judgeRegenConfirmModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    state.pendingJudgeRegenAction = null;
+  }
+
+  async function applyAutoJudgePlan(syncToSheets, overrideNote) {
     if (!state.isAdmin) return;
     const plan = state.autoJudgePreviewPlan;
     if (!plan || !plan.rows || plan.rows.length === 0) {
@@ -8063,10 +8637,11 @@
       return;
     }
 
-    const plannedCompIds = new Set(plan.rows.map((r) => r.comp.comp_id));
+    const plannedCompIds = new Set(plan.rows.filter((r) => !r.locked).map((r) => r.comp.comp_id));
     const newJudges = [];
     let seq = 1;
     plan.rows.forEach(function (row) {
+      if (row.locked) return;
       row.judges.forEach(function (j) {
         newJudges.push({
           judge_id: 'JDG-74-' + String(seq).padStart(3, '0') + '-' + Date.now().toString().slice(-4),
@@ -8092,6 +8667,13 @@
       );
       if (!ok) return;
     }
+
+    // Save snapshot of previous judges list before replacing
+    recordJudgeHistorySnapshot(
+      'จัดสรรใหม่ (โหมด ' + (plan.mode || 'B') + (syncToSheets ? ' + ซิงก์ Sheets' : ' • ในเครื่อง') + ')',
+      overrideNote || 'จัดสรรกรรมการอัตโนมัติ ' + newJudges.length + ' ตำแหน่ง',
+      state.judges || []
+    );
 
     const toDelete = (state.judges || []).filter((j) => plannedCompIds.has(j.comp_id));
     state.judges = (state.judges || []).filter((j) => !plannedCompIds.has(j.comp_id)).concat(newJudges);
@@ -8121,32 +8703,80 @@
   }
 
   // ==========================================
-  // PHASE 2: TAB 5 — JUDGES DIRECTORY (ทำเนียบกรรมการตัดสิน)
+  // PHASE 2: TAB 5 — JUDGES DIRECTORY (3 มุมมอง + ส่งออกคำสั่ง PDF / Excel)
   // ==========================================
-  function renderJudgesTab() {
-    const adminAutoCard = document.getElementById('adminAutoJudgeCard');
-    if (adminAutoCard) {
-      adminAutoCard.classList.toggle('hidden', !state.isAdmin);
-      if (state.isAdmin) updateAutoJudgeTeacherPoolBadge();
-    }
-    const adminAddCard = document.getElementById('adminAddJudgeCard');
-    if (adminAddCard) {
-      adminAddCard.classList.toggle('hidden', !state.isAdmin);
-    }
+  const JUDGE_OFFICIAL_ROLE_ORDER = {
+    'ประธานกรรมการ': 1,
+    'รองประธานกรรมการ': 1.5,
+    'รองประธาน': 1.5,
+    'กรรมการ': 2,
+    'กรรมการตัดสิน': 2,
+    'กรรมการและเลขานุการ': 3,
+    'กรรมการ/เลขานุการ': 3
+  };
 
-    const totalBadge = document.getElementById('judgeTotalCountBadge');
-    if (totalBadge) totalBadge.textContent = (state.judges || []).length;
+  function sortJudgesOfficialOrder(list) {
+    return (list || []).slice().sort(function (a, b) {
+      const ra = JUDGE_OFFICIAL_ROLE_ORDER[String(a.role || 'กรรมการ').trim()] || 2;
+      const rb = JUDGE_OFFICIAL_ROLE_ORDER[String(b.role || 'กรรมการ').trim()] || 2;
+      if (ra !== rb) return ra - rb;
+      const na = String(a.judge_name || a.full_name || '');
+      const nb = String(b.judge_name || b.full_name || '');
+      return na.localeCompare(nb, 'th');
+    });
+  }
 
+  function getJudgeCompScheduleMeta(compId) {
+    const comp = (state.competitions || []).find((c) => c.comp_id === compId) || {};
+    const regs = (state.registrations || []).filter((r) => r.comp_id === compId);
+    const uniqueSchools = new Set(regs.map((r) => r.school_name)).size;
+    const byeStatus = isCompetitionByeStatus(comp, uniqueSchools);
+    if (isScheduleModeDisabled()) {
+      return {
+        comp: comp,
+        uniqueSchools: uniqueSchools,
+        byeStatus: byeStatus,
+        slotKey: '',
+        slotLabel: 'ไม่ใช้ตารางเวลา (โหมดงานเล็ก)'
+      };
+    }
+    const plan = state.config && state.config.schedulePlan;
+    const alloc = plan && plan.allocations && plan.allocations[compId];
+    const blurVenue = !plan || plan.blurVenue !== false;
+    const canViewTime = isEffectiveAdmin() || isFeatureOpenToPublic('schedule');
+    const slotKey = (alloc && alloc.slotKey) || AUTO_JUDGE_SLOT_MAP[compId] || '';
+    let slotLabel = 'รอประกาศกำหนดการ';
+    if (canViewTime) {
+      if (alloc) {
+        const venueSuffix = !blurVenue && alloc.room ? ' • ' + alloc.room : '';
+        slotLabel = alloc.dateText + (alloc.timeText ? ' (' + alloc.timeText + ')' : '') + venueSuffix;
+      } else {
+        slotLabel = comp.comp_date
+          ? comp.comp_date + (comp.comp_time ? ' (' + comp.comp_time + ')' : '')
+          : AUTO_JUDGE_SLOT_LABEL[slotKey] || 'ตามตารางกลุ่มโรงเรียน';
+      }
+    }
+    return {
+      comp: comp,
+      uniqueSchools: uniqueSchools,
+      byeStatus: byeStatus,
+      slotKey: slotKey,
+      slotLabel: slotLabel
+    };
+  }
+
+  function getFilteredJudgesList(sourceList) {
     const areaVal = (document.getElementById('judgeAreaFilter') || {}).value || 'ALL';
     const schoolVal = (document.getElementById('judgeSchoolFilter') || {}).value || 'ALL';
     const searchVal = ((document.getElementById('judgeSearchInput') || {}).value || '').trim().toLowerCase();
 
-    const filtered = (state.judges || []).filter(function (j) {
+    return (sourceList || []).filter(function (j) {
       const jName = j.judge_name || j.full_name || '';
       if (areaVal !== 'ALL' && j.learning_area !== areaVal) return false;
       if (schoolVal !== 'ALL' && j.school_name !== schoolVal) return false;
       if (searchVal) {
         const hay = (
+          (j.prefix || '') +
           jName +
           ' ' +
           (j.comp_id || '') +
@@ -8161,6 +8791,1052 @@
       }
       return true;
     });
+  }
+
+  function getRoleBadgeClass(role) {
+    if (role === 'ประธานกรรมการ') return 'bg-amber-50 text-amber-800 border border-amber-200';
+    if (role === 'กรรมการและเลขานุการ') return 'bg-blue-50 text-blue-700 border border-blue-200';
+    return 'bg-slate-100 text-slate-700 border border-slate-200';
+  }
+
+  function bindJudgeActionButtons(containerEl) {
+    if (!containerEl) return;
+
+    containerEl.querySelectorAll('[data-judge-photo]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const jId = btn.getAttribute('data-judge-photo');
+        const judge = (state.judges || []).find((x) => x.judge_id === jId);
+        if (judge) {
+          const card = buildCardForJudge(judge);
+          openCardPhotoModal(
+            'แนบรูปบัตรคณะกรรมการ • ' + card.person_name,
+            [card],
+            { sub: card.comp_name_clean + ' • ' + card.school_name }
+          );
+        }
+      });
+    });
+
+    containerEl.querySelectorAll('[data-print-judge-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const jId = btn.getAttribute('data-print-judge-id');
+        const judge = (state.judges || []).find((x) => x.judge_id === jId);
+        if (judge) printJudgeIdCard(judge);
+      });
+    });
+
+    containerEl.querySelectorAll('[data-print-judge-cert]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const jId = btn.getAttribute('data-print-judge-cert');
+        const judge = (state.judges || []).find((x) => x.judge_id === jId);
+        if (judge) {
+          const jName = judge.judge_name || judge.full_name || '';
+          const jRole = judge.role || 'กรรมการ';
+          printCertificatesWindow([
+            {
+              cert_code: judge.cert_code || ('WYK74-' + judge.judge_id),
+              role_type: 'JUDGE',
+              role_label: 'คณะกรรมการตัดสิน',
+              recipient_name: formatFullNameForPrint(judge.prefix, jName),
+              grade_or_pos: jRole,
+              school_name: judge.school_name || '',
+              comp_id: judge.comp_id || '',
+              comp_name: judge.comp_name || '',
+              learning_area: judge.learning_area || '',
+              level: judge.level || '',
+              medal: 'คณะกรรมการตัดสิน',
+              award_title: 'ได้ปฏิบัติหน้าที่' + jRole + 'ตัดสินการแข่งขัน'
+            }
+          ]);
+        }
+      });
+    });
+
+    containerEl.querySelectorAll('[data-del-judge]').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        if (!state.isAdmin) return;
+        const jId = btn.getAttribute('data-del-judge');
+        const judge = (state.judges || []).find((x) => x.judge_id === jId);
+        if (!judge) return;
+        const jName = judge.judge_name || judge.full_name || '';
+        const ok = window.confirm('ยืนยันการลบรายชื่อกรรมการ "' + (judge.prefix || '') + jName + '" ใช่หรือไม่?');
+        if (!ok) return;
+        state.judges = state.judges.filter((x) => x.judge_id !== jId);
+        saveState();
+        await postToGoogleSheets({
+          action: 'delete_judge',
+          judge_id: jId,
+          admin_pin: state.adminPin
+        });
+        renderAll();
+        showToast('ลบรายชื่อกรรมการเรียบร้อยแล้ว', 'warning');
+      });
+    });
+
+    containerEl.querySelectorAll('[data-jump-judge-person]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.selectedJudgePersonKey = btn.getAttribute('data-jump-judge-person') || '';
+        state.judgeSubview = 'by-person';
+        renderJudgesTab();
+      });
+    });
+
+    containerEl.querySelectorAll('[data-print-comp-checkin]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const cid = btn.getAttribute('data-print-comp-checkin');
+        if (cid) printCompetitionCheckinSheet(cid, 'checkin');
+      });
+    });
+
+    containerEl.querySelectorAll('[data-replace-judge]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openJudgeReplaceModal(btn.getAttribute('data-replace-judge'));
+      });
+    });
+  }
+
+  function stripAreaNumberPrefix(area) {
+    return String(area || '')
+      .replace(/^\d+(?:\.\d+)?\.?\s*/, '')
+      .trim();
+  }
+
+  function groupJudgesByCategoryAndComp(sourceJudges) {
+    const areaMap = {};
+    (sourceJudges || []).forEach(function (j) {
+      const areaKey = String(j.learning_area || 'ไม่ระบุหมวด').trim();
+      const cid = String(j.comp_id || 'UNKNOWN').trim();
+      if (!areaMap[areaKey]) {
+        areaMap[areaKey] = {
+          learning_area: areaKey,
+          areaTitle: stripAreaNumberPrefix(areaKey) || areaKey,
+          areaOrder: parseFloat(getAreaPrefixNum(areaKey) || '999'),
+          compsMap: {}
+        };
+      }
+      if (!areaMap[areaKey].compsMap[cid]) {
+        areaMap[areaKey].compsMap[cid] = {
+          comp_id: cid,
+          comp_name: j.comp_name || '',
+          learning_area: areaKey,
+          level: j.level || '',
+          judges: []
+        };
+      }
+      areaMap[areaKey].compsMap[cid].judges.push(j);
+    });
+
+    return Object.values(areaMap)
+      .sort((a, b) => a.areaOrder - b.areaOrder || a.learning_area.localeCompare(b.learning_area, 'th'))
+      .map(function (areaObj) {
+        const comps = Object.values(areaObj.compsMap)
+          .sort((a, b) => String(a.comp_id).localeCompare(String(b.comp_id)))
+          .map(function (c) {
+            c.judges = sortJudgesOfficialOrder(c.judges);
+            return c;
+          });
+        return {
+          learning_area: areaObj.learning_area,
+          areaTitle: areaObj.areaTitle,
+          comps: comps
+        };
+      });
+  }
+
+  function openJudgeReplaceModal(judgeId, suggestedCandidate) {
+    if (!state.isAdmin) return;
+    const judge = (state.judges || []).find((x) => x.judge_id === judgeId);
+    if (!judge) return;
+    const modal = document.getElementById('judgeReplaceModal');
+    if (!modal) return;
+
+    document.getElementById('judgeReplaceTargetId').value = judge.judge_id;
+    const oldFull = formatFullNameForPrint(judge.prefix, judge.judge_name || judge.full_name || '');
+    document.getElementById('judgeReplaceOldInfo').textContent =
+      'รายการ: ' + judge.comp_name + ' (' + judge.level + ') • เดิม: ' + oldFull + ' (' + (judge.school_name || '-') + ')';
+
+    const schoolSel = document.getElementById('judgeReplaceSchool');
+    if (schoolSel) {
+      schoolSel.innerHTML = (state.schools || [])
+        .map((s) => '<option value="' + escapeHtml(s.school_name) + '">' + escapeHtml(s.school_name) + '</option>')
+        .join('');
+      schoolSel.value = (suggestedCandidate && suggestedCandidate.school_name) || judge.school_name || '';
+    }
+
+    let matchedPoolIdx = '';
+    const poolSel = document.getElementById('judgeReplacePoolSelect');
+    if (poolSel) {
+      const pool = buildAutoJudgeTeacherPool().sort((a, b) => a.full_name.localeCompare(b.full_name, 'th'));
+      poolSel.innerHTML =
+        '<option value="">-- เลือกครูจากคลัง (หรือกรอกเองด้านล่าง) --</option>' +
+        pool
+          .map(function (t, idx) {
+            if (
+              suggestedCandidate &&
+              t.full_name === suggestedCandidate.full_name &&
+              t.school_name === suggestedCandidate.school_name
+            ) {
+              matchedPoolIdx = String(idx);
+            }
+            return (
+              '<option value="' +
+              idx +
+              '" data-prefix="' +
+              escapeHtml(t.prefix) +
+              '" data-name="' +
+              escapeHtml(t.full_name) +
+              '" data-school="' +
+              escapeHtml(t.school_name) +
+              '">' +
+              escapeHtml(formatFullNameForPrint(t.prefix, t.full_name)) +
+              ' (' +
+              escapeHtml(t.school_name) +
+              ' • เอก: ' +
+              escapeHtml(t.major) +
+              ')</option>'
+            );
+          })
+          .join('');
+      if (matchedPoolIdx !== '') {
+        poolSel.value = matchedPoolIdx;
+      }
+    }
+
+    document.getElementById('judgeReplacePrefix').value =
+      (suggestedCandidate && suggestedCandidate.prefix) || judge.prefix || 'นาย';
+    document.getElementById('judgeReplaceName').value =
+      (suggestedCandidate && suggestedCandidate.full_name) || judge.judge_name || judge.full_name || '';
+    document.getElementById('judgeReplaceRole').value = judge.role || 'กรรมการ';
+    document.getElementById('judgeReplaceNote').value =
+      (suggestedCandidate && suggestedCandidate.note) || '';
+    checkJudgeReplaceConflicts();
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function closeJudgeReplaceModal() {
+    const modal = document.getElementById('judgeReplaceModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  }
+
+  function checkJudgeReplaceConflicts() {
+    const box = document.getElementById('judgeReplaceConflictBox');
+    const targetId = (document.getElementById('judgeReplaceTargetId') || {}).value || '';
+    const newName = ((document.getElementById('judgeReplaceName') || {}).value || '').trim();
+    const newSchool = ((document.getElementById('judgeReplaceSchool') || {}).value || '').trim();
+    if (!box || !targetId) return;
+
+    const targetJudge = (state.judges || []).find((x) => x.judge_id === targetId);
+    if (!targetJudge || !newName) {
+      box.classList.add('hidden');
+      return;
+    }
+
+    const meta = getJudgeCompScheduleMeta(targetJudge.comp_id);
+    const warnings = [];
+
+    // 1. Check competing school conflict
+    const compSchools = new Set(
+      (state.registrations || [])
+        .filter((r) => r.comp_id === targetJudge.comp_id)
+        .map((r) => r.school_name)
+    );
+    if (compSchools.has(newSchool)) {
+      warnings.push('โรงเรียนของกรรมการคนใหม่ (' + newSchool + ') ส่งนักเรียนเข้าแข่งรายการนี้ — ต้องงดให้คะแนนโรงเรียนตัวเองในโหมด B');
+    }
+
+    // 2. Check true interval time conflict on active items
+    const targetIv = getCompScheduleIntervalMeta(targetJudge.comp_id);
+    if (meta.byeStatus !== 'BYE' && !isScheduleModeDisabled() && targetIv) {
+      const clashes = (state.judges || []).filter(function (j) {
+        if (j.judge_id === targetId) return false;
+        const jName = (j.judge_name || j.full_name || '').trim();
+        if (jName !== newName || (j.school_name || '') !== newSchool) return false;
+        const om = getJudgeCompScheduleMeta(j.comp_id);
+        if (om.byeStatus === 'BYE') return false;
+        const oIv = getCompScheduleIntervalMeta(j.comp_id);
+        return oIv && oIv.dayId === targetIv.dayId && intervalsListOverlap(targetIv.segments, oIv.segments);
+      });
+      if (clashes.length > 0) {
+        warnings.push(
+          'เวลาชน! ครูท่านนี้ถูกจัดให้ตัดสินรายการ "' +
+            clashes.map((c) => c.comp_name).join(', ') +
+            '" ในช่วงเวลาเดียวกัน (' +
+            meta.slotLabel +
+            ')'
+        );
+      }
+    }
+
+    box.classList.remove('hidden');
+    if (warnings.length === 0) {
+      box.className = 'rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 space-y-1';
+      box.innerHTML = '<strong>พร้อมเปลี่ยนตัว:</strong> ไม่พบเวลาชนในตาราง และโรงเรียนไม่ซ้ำกับทีมแข่ง';
+    } else {
+      box.className = 'rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 space-y-1';
+      box.innerHTML =
+        '<strong>คำเตือนก่อนเปลี่ยนตัว:</strong><br/>• ' + warnings.map((w) => escapeHtml(w)).join('<br/>• ');
+    }
+  }
+
+  function renderJudgesByCompView(filtered, container) {
+    if (!container) return;
+    if (filtered.length === 0) {
+      container.innerHTML =
+        '<div class="lg:col-span-2 py-10 text-center text-slate-400 text-sm border border-dashed border-slate-200 rounded-xl">ยังไม่มีรายชื่อคณะกรรมการตัดสินตามเงื่อนไขที่เลือก</div>';
+      return;
+    }
+
+    const areaGroups = groupJudgesByCategoryAndComp(filtered);
+    container.innerHTML = areaGroups
+      .map(function (ag, aIdx) {
+        const cardsHtml = ag.comps
+          .map(function (grp, cIdx) {
+            const meta = getJudgeCompScheduleMeta(grp.comp_id);
+            const isBye = meta.byeStatus === 'BYE';
+            const statusBadge = isBye
+              ? '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-heading font-medium">บาย (ใส่ชื่อในคำสั่ง)</span>'
+              : '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-heading font-medium">' +
+                grp.judges.length +
+                ' ท่าน</span>';
+
+            const rowsHtml = grp.judges
+              .map(function (j, jIdx) {
+                const jName = j.judge_name || j.full_name || '';
+                const fullName = formatFullNameForPrint(j.prefix, jName);
+                const personKey = (j.school_name || '') + '::' + jName.trim();
+                const roleCls = getRoleBadgeClass(j.role);
+                const effAdminJudge = isEffectiveAdmin();
+                const replaceBtn = effAdminJudge
+                  ? `<button type="button" data-replace-judge="${escapeHtml(j.judge_id)}" class="px-1.5 py-0.5 rounded text-[11px] font-heading text-blue-700 hover:bg-blue-50 cursor-pointer">เปลี่ยนตัว</button>`
+                  : '';
+                const delBtn = effAdminJudge
+                  ? `<button type="button" data-del-judge="${escapeHtml(j.judge_id)}" class="px-1.5 py-0.5 rounded text-[11px] font-heading text-rose-600 hover:bg-rose-50 cursor-pointer">ลบ</button>`
+                  : '';
+                return (
+                  '<div class="flex flex-wrap items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200/80 transition">' +
+                  '<div class="min-w-0 flex-1">' +
+                  '<button type="button" data-jump-judge-person="' +
+                  escapeHtml(personKey) +
+                  '" class="text-left font-heading font-semibold text-xs sm:text-sm text-slate-900 hover:underline cursor-pointer">' +
+                  (aIdx + 1) +
+                  '.' +
+                  (cIdx + 1) +
+                  '.' +
+                  (jIdx + 1) +
+                  ' ' +
+                  escapeHtml(fullName) +
+                  '</button>' +
+                  '<div class="text-[11px] text-slate-500 truncate">' +
+                  escapeHtml(j.school_name || '-') +
+                  '</div>' +
+                  '</div>' +
+                  '<div class="flex items-center gap-1 shrink-0">' +
+                  '<span class="px-2 py-0.5 rounded text-[11px] font-heading font-medium ' +
+                  roleCls +
+                  '">' +
+                  escapeHtml(j.role || 'กรรมการ') +
+                  '</span>' +
+                  '<button type="button" data-print-judge-cert="' +
+                  escapeHtml(j.judge_id) +
+                  '" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-white font-heading text-[11px] cursor-pointer">เกียรติบัตร</button>' +
+                  replaceBtn +
+                  delBtn +
+                  '</div>' +
+                  '</div>'
+                );
+              })
+              .join('');
+
+            return (
+              '<div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between space-y-3 shadow-2xs">' +
+              '<div class="space-y-1 border-b border-slate-100 pb-2.5">' +
+              '<div class="flex items-start justify-between gap-2">' +
+              '<h4 class="font-heading font-bold text-sm text-slate-900 leading-snug">' +
+              (aIdx + 1) +
+              '.' +
+              (cIdx + 1) +
+              ' ' +
+              escapeHtml(grp.comp_name) +
+              ' <span class="text-xs font-normal text-slate-600">(' +
+              escapeHtml(grp.level) +
+              ')</span></h4>' +
+              statusBadge +
+              '</div>' +
+              '<div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-500">' +
+              '<span>กำหนดการ: ' +
+              escapeHtml(meta.slotLabel) +
+              '</span>' +
+              '<div class="flex items-center gap-2">' +
+              (meta.uniqueSchools > 0
+                ? '<button type="button" data-print-comp-checkin="' +
+                  escapeHtml(grp.comp_id) +
+                  '" class="text-slate-700 hover:text-slate-900 underline font-heading cursor-pointer">ใบลงชื่อ/คะแนน</button>'
+                : '') +
+              '</div>' +
+              '</div>' +
+              '</div>' +
+              '<div class="space-y-1">' +
+              rowsHtml +
+              '</div>' +
+              '</div>'
+            );
+          })
+          .join('');
+
+        return (
+          '<div class="lg:col-span-2 space-y-2.5">' +
+          '<div class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-between">' +
+          '<h3 class="font-heading font-bold text-sm text-slate-900">' +
+          (aIdx + 1) +
+          '. ' +
+          escapeHtml(ag.areaTitle) +
+          '</h3>' +
+          '<span class="text-xs font-heading text-slate-600">' +
+          ag.comps.length +
+          ' รายการ</span>' +
+          '</div>' +
+          '<div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5">' +
+          cardsHtml +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+
+    bindJudgeActionButtons(container);
+  }
+
+  function buildJudgesPersonMap(allJudges) {
+    const personMap = {};
+    (allJudges || []).forEach(function (j) {
+      const jName = (j.judge_name || j.full_name || '').trim();
+      const sch = (j.school_name || '').trim();
+      if (!jName) return;
+      const key = sch + '::' + jName;
+      if (!personMap[key]) {
+        personMap[key] = {
+          key: key,
+          prefix: j.prefix || '',
+          name: jName,
+          fullName: formatFullNameForPrint(j.prefix, jName),
+          school_name: sch,
+          items: [],
+          activeCount: 0,
+          byeCount: 0,
+          slotSet: new Set(),
+          hasClash: false
+        };
+      }
+      const meta = getJudgeCompScheduleMeta(j.comp_id);
+      const isBye = meta.byeStatus === 'BYE';
+      if (isBye) {
+        personMap[key].byeCount++;
+      } else {
+        personMap[key].activeCount++;
+        if (meta.slotKey) {
+          if (personMap[key].slotSet.has(meta.slotKey)) {
+            personMap[key].hasClash = true;
+          }
+          personMap[key].slotSet.add(meta.slotKey);
+        }
+      }
+      personMap[key].items.push({
+        judge: j,
+        meta: meta,
+        isBye: isBye
+      });
+    });
+
+    Object.values(personMap).forEach(function (p) {
+      p.items.sort(function (a, b) {
+        if (a.isBye !== b.isBye) return a.isBye ? 1 : -1;
+        return String(a.meta.slotKey || a.judge.comp_id).localeCompare(String(b.meta.slotKey || b.judge.comp_id));
+      });
+    });
+    return personMap;
+  }
+
+  function renderJudgesByPersonView(allJudges, filtered, container) {
+    if (!container) return;
+    const personMap = buildJudgesPersonMap(allJudges);
+    const persons = Object.values(personMap).sort((a, b) => a.fullName.localeCompare(b.fullName, 'th'));
+    if (persons.length === 0) {
+      container.innerHTML =
+        '<div class="py-10 text-center text-slate-400 text-sm border border-dashed border-slate-200 rounded-xl">ยังไม่มีรายชื่อกรรมการในระบบ</div>';
+      return;
+    }
+
+    const searchVal = ((document.getElementById('judgeSearchInput') || {}).value || '').trim().toLowerCase();
+    const schoolVal = (document.getElementById('judgeSchoolFilter') || {}).value || 'ALL';
+    const matchingPersons = persons.filter(function (p) {
+      if (schoolVal !== 'ALL' && p.school_name !== schoolVal) return false;
+      if (searchVal) {
+        const hay = (p.fullName + ' ' + p.school_name + ' ' + p.items.map((x) => x.judge.comp_name + ' ' + x.judge.comp_id).join(' ')).toLowerCase();
+        if (!hay.includes(searchVal)) return false;
+      }
+      return true;
+    });
+
+    let activePerson =
+      matchingPersons.find((p) => p.key === state.selectedJudgePersonKey) ||
+      matchingPersons[0] ||
+      persons[0];
+    if (activePerson) state.selectedJudgePersonKey = activePerson.key;
+
+    const optionsHtml = matchingPersons
+      .map(function (p) {
+        return (
+          '<option value="' +
+          escapeHtml(p.key) +
+          '"' +
+          (activePerson && p.key === activePerson.key ? ' selected' : '') +
+          '>' +
+          escapeHtml(p.fullName) +
+          ' (' +
+          escapeHtml(p.school_name) +
+          ') — ตัดสินจริง ' +
+          p.activeCount +
+          ' / บาย ' +
+          p.byeCount +
+          '</option>'
+        );
+      })
+      .join('');
+
+    const itemsHtml = activePerson
+      ? activePerson.items
+          .map(function (entry, idx) {
+            const j = entry.judge;
+            const roleCls = getRoleBadgeClass(j.role);
+            const typeBadge = entry.isBye
+              ? '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-heading">บาย (ในคำสั่ง)</span>'
+              : '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-heading">ตัดสินจริง</span>';
+            return (
+              '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50/60">' +
+              '<div class="space-y-0.5">' +
+              '<div class="text-xs font-heading text-slate-500">' +
+              (idx + 1) +
+              '. [' +
+              escapeHtml(j.comp_id) +
+              '] ' +
+              escapeHtml(j.learning_area) +
+              '</div>' +
+              '<div class="font-heading font-bold text-sm text-slate-900">' +
+              escapeHtml(j.comp_name) +
+              ' (' +
+              escapeHtml(j.level) +
+              ')</div>' +
+              '<div class="text-xs text-slate-600">กำหนดการ: ' +
+              escapeHtml(entry.isBye ? 'ไม่นับภาระงานวันแข่ง (ใส่ชื่อในคำสั่ง)' : entry.meta.slotLabel) +
+              '</div>' +
+              '</div>' +
+              '<div class="flex flex-wrap items-center gap-1.5 shrink-0">' +
+              typeBadge +
+              '<span class="px-2.5 py-0.5 rounded text-xs font-heading font-medium ' +
+              roleCls +
+              '">' +
+              escapeHtml(j.role || 'กรรมการ') +
+              '</span>' +
+              '<button type="button" data-print-judge-cert="' +
+              escapeHtml(j.judge_id) +
+              '" class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium cursor-pointer">เกียรติบัตร</button>' +
+              '</div>' +
+              '</div>'
+            );
+          })
+          .join('')
+      : '';
+
+    container.innerHTML =
+      '<div class="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">' +
+      '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
+      '<label for="judgePersonPickerSelect" class="text-xs font-heading font-semibold text-slate-700">เลือกชื่อครูเพื่อดูรายการที่ต้องไปตัดสิน (หรือพิมพ์ค้นหาในช่องค้นหาด้านบน):</label>' +
+      '<span class="text-[11px] text-slate-500">พบรายชื่อ ' +
+      matchingPersons.length +
+      ' ท่าน</span>' +
+      '</div>' +
+      '<select id="judgePersonPickerSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-heading">' +
+      optionsHtml +
+      '</select>' +
+      '</div>' +
+      (activePerson
+        ? '<div class="rounded-xl border border-slate-200 bg-white p-5 space-y-4">' +
+          '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">' +
+          '<div>' +
+          '<h3 class="text-base font-bold font-heading text-slate-900">' +
+          escapeHtml(activePerson.fullName) +
+          '</h3>' +
+          '<p class="text-xs text-slate-600">' +
+          escapeHtml(activePerson.school_name) +
+          '</p>' +
+          '</div>' +
+          '<div class="flex flex-wrap gap-2 text-xs font-heading">' +
+          '<span class="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">ตัดสินจริง ' +
+          activePerson.activeCount +
+          ' รายการ</span>' +
+          '<span class="px-3 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 font-semibold">บาย (ในคำสั่ง) ' +
+          activePerson.byeCount +
+          ' รายการ</span>' +
+          '<span class="px-3 py-1 rounded-lg ' +
+          (activePerson.hasClash ? 'bg-rose-50 text-rose-800 border border-rose-200' : 'bg-slate-100 text-slate-700') +
+          ' font-semibold">' +
+          (activePerson.hasClash ? 'พบเวลาชน!' : 'เวลาไม่ชน') +
+          '</span>' +
+          '</div>' +
+          '</div>' +
+          '<div class="space-y-2">' +
+          itemsHtml +
+          '</div>' +
+          '</div>'
+        : '');
+
+    const picker = document.getElementById('judgePersonPickerSelect');
+    if (picker) {
+      picker.addEventListener('change', function () {
+        state.selectedJudgePersonKey = picker.value;
+        renderJudgesTab();
+      });
+    }
+    bindJudgeActionButtons(container);
+  }
+
+  function renderJudgesExecutiveView(allJudges, container) {
+    if (!container) return;
+    const personMap = buildJudgesPersonMap(allJudges);
+    const schoolVal = (document.getElementById('judgeSchoolFilter') || {}).value || 'ALL';
+    const searchVal = ((document.getElementById('judgeSearchInput') || {}).value || '').trim().toLowerCase();
+
+    const persons = Object.values(personMap)
+      .filter(function (p) {
+        if (schoolVal !== 'ALL' && p.school_name !== schoolVal) return false;
+        if (searchVal) {
+          const hay = (p.fullName + ' ' + p.school_name + ' ' + p.items.map((x) => x.judge.comp_name).join(' ')).toLowerCase();
+          if (!hay.includes(searchVal)) return false;
+        }
+        return true;
+      })
+      .sort(function (a, b) {
+        if (b.activeCount !== a.activeCount) return b.activeCount - a.activeCount;
+        if (b.items.length !== a.items.length) return b.items.length - a.items.length;
+        return a.fullName.localeCompare(b.fullName, 'th');
+      });
+
+    const uniqueComps = new Set((allJudges || []).map((j) => j.comp_id)).size;
+    const clashCount = persons.filter((p) => p.hasClash).length;
+    const avgActive = persons.length ? (persons.reduce((s, p) => s + p.activeCount, 0) / persons.length).toFixed(1) : '0.0';
+
+    const rowsHtml =
+      persons.length === 0
+        ? '<tr><td colspan="7" class="py-8 text-center text-slate-400">ยังไม่มีข้อมูลกรรมการในระบบ</td></tr>'
+        : persons
+            .map(function (p, idx) {
+              const activeDetails = p.items
+                .filter((x) => !x.isBye)
+                .map((x) => '[' + x.judge.comp_id + '] ' + x.judge.comp_name + ' (' + x.meta.slotLabel + ')')
+                .join(' · ');
+              const stCls = p.hasClash
+                ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                : 'bg-emerald-50 text-emerald-800 border border-emerald-200';
+              return (
+                '<tr class="hover:bg-slate-50 transition">' +
+                '<td class="py-2.5 px-3 text-xs text-slate-500 text-center">' +
+                (idx + 1) +
+                '</td>' +
+                '<td class="py-2.5 px-3"><button type="button" data-jump-judge-person="' +
+                escapeHtml(p.key) +
+                '" class="font-heading font-semibold text-slate-900 hover:underline text-left cursor-pointer">' +
+                escapeHtml(p.fullName) +
+                '</button></td>' +
+                '<td class="py-2.5 px-3 text-xs text-slate-700">' +
+                escapeHtml(p.school_name) +
+                '</td>' +
+                '<td class="py-2.5 px-2 text-center font-heading font-bold text-slate-900">' +
+                p.activeCount +
+                '</td>' +
+                '<td class="py-2.5 px-2 text-center font-heading text-blue-700">' +
+                p.byeCount +
+                '</td>' +
+                '<td class="py-2.5 px-3 text-xs text-slate-600">' +
+                escapeHtml(activeDetails || 'มีเฉพาะรายการบาย') +
+                '</td>' +
+                '<td class="py-2.5 px-2 text-center"><span class="px-2 py-0.5 rounded text-[11px] font-heading font-medium ' +
+                stCls +
+                '">' +
+                (p.hasClash ? 'เวลาชน' : 'ปกติ') +
+                '</span></td>' +
+                '</tr>'
+              );
+            })
+            .join('');
+
+    container.innerHTML =
+      '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">' +
+      '<div class="p-3 rounded-xl bg-slate-50 border border-slate-200"><div class="text-xs text-slate-500">รายการที่มีกรรมการแล้ว</div><div class="text-lg font-bold font-heading text-slate-900">' +
+      uniqueComps +
+      ' รายการ</div></div>' +
+      '<div class="p-3 rounded-xl bg-blue-50 border border-blue-200"><div class="text-xs text-blue-700">จำนวนกรรมการ (ไม่ซ้ำคน)</div><div class="text-lg font-bold font-heading text-blue-900">' +
+      persons.length +
+      ' ท่าน</div></div>' +
+      '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200"><div class="text-xs text-emerald-700">เฉลี่ยตัดสินจริง / คน</div><div class="text-lg font-bold font-heading text-emerald-900">' +
+      avgActive +
+      ' รายการ</div></div>' +
+      '<div class="p-3 rounded-xl ' +
+      (clashCount > 0 ? 'bg-rose-50 border border-rose-200' : 'bg-slate-50 border border-slate-200') +
+      '"><div class="text-xs text-slate-600">จำนวนผู้ที่มีเวลาชน</div><div class="text-lg font-bold font-heading text-slate-900">' +
+      clashCount +
+      ' ท่าน</div></div>' +
+      '</div>' +
+      '<div class="overflow-x-auto border border-slate-200 rounded-xl">' +
+      '<table class="w-full text-sm text-left">' +
+      '<thead class="text-xs font-heading text-slate-500 bg-slate-50 border-b border-slate-200">' +
+      '<tr>' +
+      '<th class="py-2.5 px-3 text-center">ลำดับ</th>' +
+      '<th class="py-2.5 px-3">ชื่อ - นามสกุล (คลิกดูคิว)</th>' +
+      '<th class="py-2.5 px-3">โรงเรียนต้นสังกัด</th>' +
+      '<th class="py-2.5 px-2 text-center">ตัดสินจริง</th>' +
+      '<th class="py-2.5 px-2 text-center">บาย</th>' +
+      '<th class="py-2.5 px-3">รายการที่ตัดสินจริง (รหัส · ชื่อ · ช่วงเวลา)</th>' +
+      '<th class="py-2.5 px-2 text-center">สถานะ</th>' +
+      '</tr>' +
+      '</thead>' +
+      '<tbody class="divide-y divide-slate-100">' +
+      rowsHtml +
+      '</tbody>' +
+      '</table>' +
+      '</div>';
+
+    bindJudgeActionButtons(container);
+  }
+
+  function groupJudgesForOfficialOrder(sourceJudges) {
+    const groupsMap = {};
+    (sourceJudges || []).forEach(function (j) {
+      const cid = j.comp_id || 'UNKNOWN';
+      if (!groupsMap[cid]) {
+        groupsMap[cid] = {
+          comp_id: cid,
+          comp_name: j.comp_name || '',
+          learning_area: j.learning_area || '',
+          level: j.level || '',
+          judges: []
+        };
+      }
+      groupsMap[cid].judges.push(j);
+    });
+    return Object.values(groupsMap)
+      .sort((a, b) => String(a.comp_id).localeCompare(String(b.comp_id)))
+      .map(function (g) {
+        g.judges = sortJudgesOfficialOrder(g.judges);
+        return g;
+      });
+  }
+
+  function openJudgesOfficialOrderPrintWindow(sourceJudges, subtitleText) {
+    const areaGroups = groupJudgesByCategoryAndComp(sourceJudges);
+    if (areaGroups.length === 0) {
+      showToast('ยังไม่มีรายชื่อกรรมการสำหรับสร้างเอกสารคำสั่ง', 'warning');
+      return;
+    }
+
+    const toThaiDigits = function (n) {
+      const th = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
+      return String(n).replace(/\d/g, (d) => th[Number(d)]);
+    };
+    const numSpan = function (arabicStr) {
+      return (
+        '<span class="num-arabic">' +
+        escapeHtml(arabicStr) +
+        '</span><span class="num-thai" style="display:none;">' +
+        escapeHtml(toThaiDigits(arabicStr)) +
+        '</span>'
+      );
+    };
+    const textWithThaiNum = function (rawText) {
+      const str = String(rawText || '');
+      return /\d/.test(str) ? numSpan(str) : escapeHtml(str);
+    };
+
+    const itemsHtml = areaGroups
+      .map(function (ag, aIdx) {
+        const aNum = aIdx + 1;
+        const compsHtml = ag.comps
+          .map(function (grp, cIdx) {
+            const cNum = aNum + '.' + (cIdx + 1);
+            const rowsHtml = grp.judges
+              .map(function (j, jIdx) {
+                const jNum = cNum + '.' + (jIdx + 1);
+                const fullName = formatFullNameForPrint(j.prefix, j.judge_name || j.full_name || '');
+                return (
+                  '<tr>' +
+                  '<td class="col-num">' +
+                  numSpan(jNum) +
+                  '</td>' +
+                  '<td class="col-name">' +
+                  escapeHtml(fullName) +
+                  '</td>' +
+                  '<td class="col-school">' +
+                  escapeHtml(j.school_name || '-') +
+                  '</td>' +
+                  '<td class="col-role">' +
+                  escapeHtml(j.role || 'กรรมการ') +
+                  '</td>' +
+                  '</tr>'
+                );
+              })
+              .join('');
+
+            return (
+              '<div class="order-item">' +
+              '<div class="item-title">' +
+              numSpan(cNum) +
+              ' ' +
+              textWithThaiNum(grp.comp_name) +
+              ' (' +
+              textWithThaiNum(grp.level) +
+              ')</div>' +
+              '<table class="order-table"><tbody>' +
+              rowsHtml +
+              '</tbody></table>' +
+              '</div>'
+            );
+          })
+          .join('');
+
+        return (
+          '<div class="area-block">' +
+          '<div class="area-title">' +
+          numSpan(aNum + '.') +
+          ' ' +
+          textWithThaiNum(ag.areaTitle) +
+          '</div>' +
+          compsHtml +
+          '</div>'
+        );
+      })
+      .join('');
+
+    const w = window.open('', '_blank', 'width=960,height=850');
+    if (!w) {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป โปรดอนุญาต Pop-up เพื่อพิมพ์ PDF', 'warning');
+      return;
+    }
+
+    const docHtml =
+      '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">' +
+      '<title>สรุปคำสั่งแต่งตั้งคณะกรรมการตัดสิน - ศิลปหัตถกรรม ครั้งที่ 74</title>' +
+      '<style>' +
+      "@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');" +
+      '@page { size: A4 portrait; margin: 18mm 18mm 18mm 22mm; }' +
+      "body { font-family: 'TH Sarabun New', 'Sarabun', sans-serif; font-size: 16pt; line-height: 1.45; color: #000; margin: 0; padding: 20px 28px; }" +
+      '.toolbar { position: sticky; top: 0; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 14px; margin-bottom: 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; font-size: 13pt; }' +
+      '.toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }' +
+      '.btn-print { background: #0f172a; color: #fff; border: none; border-radius: 8px; padding: 7px 16px; font-size: 13pt; font-weight: 700; cursor: pointer; }' +
+      '.doc-head { text-align: center; font-weight: 700; margin-bottom: 14px; line-height: 1.35; }' +
+      '.doc-sub { font-weight: 400; font-size: 14.5pt; color: #222; }' +
+      '.area-block { margin-bottom: 14px; }' +
+      '.area-title { font-weight: 700; font-size: 17pt; margin-bottom: 4px; }' +
+      '.order-item { margin-bottom: 8px; margin-left: 18px; page-break-inside: avoid; }' +
+      '.item-title { font-weight: 700; margin-bottom: 2px; }' +
+      'table.order-table { width: calc(100% - 22px); border-collapse: collapse; margin-left: 22px; }' +
+      'table.order-table td { padding: 1px 6px 1px 0; vertical-align: top; font-size: 15.5pt; }' +
+      'td.col-num { width: 1%; white-space: nowrap; padding-right: 12px; }' +
+      'td.col-name { width: 34%; }' +
+      'td.col-school { width: 38%; }' +
+      'td.col-role { width: 22%; }' +
+      'body.hide-school td.col-school { display: none; }' +
+      'body.hide-school td.col-name { width: 72%; }' +
+      'body.hide-school td.col-role { width: auto; }' +
+      'body.thai-num .num-arabic { display: none; }' +
+      'body.thai-num .num-thai { display: inline !important; }' +
+      '@media print { .toolbar { display: none; } body { padding: 0; } }' +
+      '</style></head><body>' +
+      '<div class="toolbar">' +
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">' +
+      '<label><input type="checkbox" checked onchange="document.body.classList.toggle(\'hide-school\', !this.checked)"> แสดงชื่อโรงเรียนสังกัด</label>' +
+      '<label><input type="checkbox" onchange="document.body.classList.toggle(\'thai-num\', this.checked)"> ใช้เลขไทย (๑, ๑.๑, ๑.๑.๑)</label>' +
+      '</div>' +
+      '<button class="btn-print" onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button>' +
+      '</div>' +
+      '<div class="doc-head">' +
+      '<div>' + textWithThaiNum('บัญชีรายชื่อคณะกรรมการตัดสินการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569') + '</div>' +
+      '<div>' + textWithThaiNum('กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3') + '</div>' +
+      (subtitleText ? '<div class="doc-sub">' + textWithThaiNum(subtitleText) + '</div>' : '') +
+      '</div>' +
+      itemsHtml +
+      '</body></html>';
+
+    w.document.open();
+    w.document.write(docHtml);
+    w.document.close();
+  }
+
+  async function exportJudgesOfficialOrderExcel(sourceJudges) {
+    const areaGroups = groupJudgesByCategoryAndComp(sourceJudges);
+    if (areaGroups.length === 0) {
+      showToast('ยังไม่มีรายชื่อกรรมการสำหรับส่งออก Excel', 'warning');
+      return;
+    }
+
+    let ExcelJS;
+    try {
+      ExcelJS = await loadExcelJs();
+    } catch (err) {
+      showToast('ไม่สามารถโหลดตัวสร้างไฟล์ Excel ได้: ' + (err.message || err), 'error');
+      return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const ws1 = wb.addWorksheet('1_คำสั่งแยกตามหมวด');
+    ws1.views = [{ state: 'frozen', ySplit: 3 }];
+    ws1.mergeCells('A1:D1');
+    ws1.getCell('A1').value = 'บัญชีรายชื่อคณะกรรมการตัดสินการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 (ปีการศึกษา 2569)';
+    ws1.getCell('A1').font = { name: 'TH Sarabun New', size: 16, bold: true };
+    ws1.mergeCells('A2:D2');
+    ws1.getCell('A2').value = 'กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สพป.มหาสารคาม เขต 3 (เรียงตามหมวด → รายการ → รายชื่อ)';
+    ws1.getCell('A2').font = { name: 'TH Sarabun New', size: 13 };
+
+    const hdrRow = ws1.getRow(3);
+    hdrRow.values = ['ข้อ', 'หมวด / รายการแข่งขัน / ชื่อ-นามสกุล', 'โรงเรียนต้นสังกัด', 'ตำแหน่งในคณะกรรมการ'];
+    hdrRow.eachCell(function (cell) {
+      cell.font = { name: 'TH Sarabun New', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    let rIdx = 4;
+    areaGroups.forEach(function (ag, aIdx) {
+      const aNum = aIdx + 1;
+      const areaRow = ws1.getRow(rIdx++);
+      areaRow.values = [aNum + '.', ag.areaTitle, '', ag.comps.length + ' รายการ'];
+      areaRow.eachCell(function (cell) {
+        cell.font = { name: 'TH Sarabun New', size: 15, bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      });
+
+      ag.comps.forEach(function (grp, cIdx) {
+        const cNum = aNum + '.' + (cIdx + 1);
+        const titleRow = ws1.getRow(rIdx++);
+        titleRow.values = [cNum, grp.comp_name + ' (' + grp.level + ')', '', grp.judges.length + ' ท่าน'];
+        titleRow.eachCell(function (cell) {
+          cell.font = { name: 'TH Sarabun New', size: 14, bold: true };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+        });
+
+        grp.judges.forEach(function (j, jIdx) {
+          const subRow = ws1.getRow(rIdx++);
+          const fullName = formatFullNameForPrint(j.prefix, j.judge_name || j.full_name || '');
+          subRow.values = [cNum + '.' + (jIdx + 1), fullName, j.school_name || '-', j.role || 'กรรมการ'];
+          subRow.eachCell(function (cell, col) {
+            cell.font = { name: 'TH Sarabun New', size: 14 };
+            if (col === 1) cell.alignment = { horizontal: 'right' };
+          });
+        });
+      });
+    });
+
+    ws1.columns = [{ width: 12 }, { width: 46 }, { width: 34 }, { width: 24 }];
+
+    const ws2 = wb.addWorksheet('2_ภาพรวมผู้บริหาร_รายบุคคล');
+    ws2.views = [{ state: 'frozen', ySplit: 2 }];
+    ws2.mergeCells('A1:G1');
+    ws2.getCell('A1').value = 'สรุปภาระงานคณะกรรมการตัดสินรายบุคคล (มุมมองผู้บริหาร)';
+    ws2.getCell('A1').font = { name: 'TH Sarabun New', size: 16, bold: true };
+
+    const hdr2 = ws2.getRow(2);
+    hdr2.values = ['ลำดับ', 'ชื่อ-นามสกุล', 'โรงเรียนต้นสังกัด', 'ตัดสินจริง (รายการ)', 'บาย (รายการ)', 'รวมทั้งหมด', 'รายการที่ได้รับมอบหมาย'];
+    hdr2.eachCell(function (cell) {
+      cell.font = { name: 'TH Sarabun New', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    });
+
+    const personList = Object.values(buildJudgesPersonMap(sourceJudges)).sort(function (a, b) {
+      if (b.activeCount !== a.activeCount) return b.activeCount - a.activeCount;
+      return a.fullName.localeCompare(b.fullName, 'th');
+    });
+
+    personList.forEach(function (p, idx) {
+      const r = ws2.getRow(idx + 3);
+      const listTxt = p.items
+        .map((x) => '[' + x.judge.comp_id + '] ' + x.judge.comp_name + ' (' + (x.judge.role || 'กรรมการ') + (x.isBye ? ' - บาย' : '') + ')')
+        .join(' | ');
+      r.values = [idx + 1, p.fullName, p.school_name, p.activeCount, p.byeCount, p.items.length, listTxt];
+      r.eachCell(function (cell) {
+        cell.font = { name: 'TH Sarabun New', size: 13 };
+      });
+    });
+    ws2.columns = [{ width: 8 }, { width: 28 }, { width: 28 }, { width: 18 }, { width: 14 }, { width: 14 }, { width: 64 }];
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'คำสั่งคณะกรรมการตัดสิน_ศิลปหัตถกรรม74.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดเอกสารสรุปคำสั่งกรรมการ (.xlsx) เรียบร้อยแล้ว', 'success');
+  }
+
+  function renderJudgesTab() {
+    const effAdminJudgeTab = isEffectiveAdmin();
+    const adminAutoCard = document.getElementById('adminAutoJudgeCard');
+    if (adminAutoCard) {
+      adminAutoCard.classList.toggle('hidden', !effAdminJudgeTab);
+      if (effAdminJudgeTab) {
+        updateAutoJudgeTeacherPoolBadge();
+        renderJudgeHistoryList();
+      }
+    }
+    const adminAddCard = document.getElementById('adminAddJudgeCard');
+    if (adminAddCard) {
+      adminAddCard.classList.toggle('hidden', !effAdminJudgeTab);
+    }
+
+    const allJudges = state.judges || [];
+    const totalBadge = document.getElementById('judgeTotalCountBadge');
+    if (totalBadge) totalBadge.textContent = allJudges.length;
+
+    const filtered = getFilteredJudgesList(allJudges);
+    const viewMode = state.judgeSubview || 'by-comp';
+
+    document.querySelectorAll('.judge-subview-btn').forEach(function (btn) {
+      const isAct = btn.getAttribute('data-judge-subview') === viewMode;
+      btn.className = isAct
+        ? 'judge-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-white text-slate-900 shadow-2xs transition cursor-pointer'
+        : 'judge-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer';
+    });
+
+    const elByComp = document.getElementById('judgesByCompView');
+    const elByPerson = document.getElementById('judgesByPersonView');
+    const elExec = document.getElementById('judgesExecutiveView');
+    const elTableWrap = document.getElementById('judgesFlatTableView');
+
+    if (elByComp) elByComp.classList.toggle('hidden', viewMode !== 'by-comp');
+    if (elByPerson) elByPerson.classList.toggle('hidden', viewMode !== 'by-person');
+    if (elExec) elExec.classList.toggle('hidden', viewMode !== 'executive');
+    if (elTableWrap) elTableWrap.classList.toggle('hidden', viewMode !== 'table');
+
+    if (viewMode === 'by-comp') {
+      renderJudgesByCompView(filtered, elByComp);
+      return;
+    }
+    if (viewMode === 'by-person') {
+      renderJudgesByPersonView(allJudges, filtered, elByPerson);
+      return;
+    }
+    if (viewMode === 'executive') {
+      renderJudgesExecutiveView(allJudges, elExec);
+      return;
+    }
 
     const tbody = document.getElementById('judgesTableBody');
     if (!tbody) return;
@@ -8176,23 +9852,19 @@
       return;
     }
 
-    tbody.innerHTML = filtered
+    tbody.innerHTML = sortJudgesOfficialOrder(filtered)
       .map(function (j, idx) {
         const jName = j.judge_name || j.full_name || '';
-        const fullName = (j.prefix || '') + jName;
-        const roleBadgeClass =
-          j.role === 'ประธานกรรมการ'
-            ? 'bg-amber-50 text-amber-800 border border-amber-200'
-            : j.role === 'กรรมการและเลขานุการ'
-            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-            : 'bg-slate-100 text-slate-700 border border-slate-200';
+        const fullName = formatFullNameForPrint(j.prefix, jName);
+        const roleBadgeClass = getRoleBadgeClass(j.role);
 
-        const deleteBtn = state.isAdmin
+        const effAdminJudgeTable = isEffectiveAdmin();
+        const deleteBtn = effAdminJudgeTable
           ? `<button type="button" data-del-judge="${escapeHtml(j.judge_id)}" class="px-2 py-1 rounded text-xs font-heading text-rose-600 hover:bg-rose-50">ลบ</button>`
           : '';
 
         const judgePhotoBtnHtml =
-          state.isAdmin
+          effAdminJudgeTable
             ? `<button type="button" data-judge-photo="${escapeHtml(j.judge_id)}" class="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 font-heading text-xs font-medium">รูป</button>`
             : '';
 
@@ -8229,74 +9901,7 @@
       })
       .join('');
 
-    tbody.querySelectorAll('[data-judge-photo]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const jId = btn.getAttribute('data-judge-photo');
-        const judge = (state.judges || []).find((x) => x.judge_id === jId);
-        if (judge) {
-          const card = buildCardForJudge(judge);
-          openCardPhotoModal(
-            'แนบรูปบัตรคณะกรรมการ • ' + card.person_name,
-            [card],
-            { sub: card.comp_name_clean + ' • ' + card.school_name }
-          );
-        }
-      });
-    });
-
-    tbody.querySelectorAll('[data-print-judge-id]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const jId = btn.getAttribute('data-print-judge-id');
-        const judge = (state.judges || []).find((x) => x.judge_id === jId);
-        if (judge) printJudgeIdCard(judge);
-      });
-    });
-
-    tbody.querySelectorAll('[data-print-judge-cert]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const jId = btn.getAttribute('data-print-judge-cert');
-        const judge = (state.judges || []).find((x) => x.judge_id === jId);
-        if (judge) {
-          const jName = judge.judge_name || judge.full_name || '';
-          printCertificatesWindow([
-            {
-              cert_code: judge.cert_code || ('WYK74-' + judge.judge_id),
-              role_type: 'JUDGE',
-              role_label: 'คณะกรรมการตัดสิน',
-              recipient_name: formatFullNameForPrint(judge.prefix, jName),
-              school_name: judge.school_name || '',
-              comp_id: judge.comp_id || '',
-              comp_name: judge.comp_name || '',
-              learning_area: judge.learning_area || '',
-              level: judge.level || '',
-              medal: 'คณะกรรมการตัดสิน',
-              award_title: 'ปฏิบัติหน้าที่ ' + (judge.role || 'กรรมการตัดสิน')
-            }
-          ]);
-        }
-      });
-    });
-
-    tbody.querySelectorAll('[data-del-judge]').forEach(function (btn) {
-      btn.addEventListener('click', async function () {
-        if (!state.isAdmin) return;
-        const jId = btn.getAttribute('data-del-judge');
-        const judge = (state.judges || []).find((x) => x.judge_id === jId);
-        if (!judge) return;
-        const jName = judge.judge_name || judge.full_name || '';
-        const ok = window.confirm('ยืนยันการลบรายชื่อกรรมการ "' + (judge.prefix || '') + jName + '" ใช่หรือไม่?');
-        if (!ok) return;
-        state.judges = state.judges.filter((x) => x.judge_id !== jId);
-        saveState();
-        await postToGoogleSheets({
-          action: 'delete_judge',
-          judge_id: jId,
-          admin_pin: state.adminPin
-        });
-        renderAll();
-        showToast('ลบรายชื่อกรรมการเรียบร้อยแล้ว', 'warning');
-      });
-    });
+    bindJudgeActionButtons(tbody);
   }
 
   // ==========================================
@@ -8475,7 +10080,7 @@
               ? `<span class="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-heading text-xs font-semibold">คะแนนเท่ากันรอชี้ขาด</span>`
               : '';
 
-            const adminBtn = state.isAdmin
+            const adminBtn = isEffectiveAdmin()
               ? `<button type="button" data-open-score="${escapeHtml(c.comp_id)}" class="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-heading text-xs font-semibold transition">บันทึก/แก้ไขคะแนน</button>`
               : '';
 
@@ -9544,6 +11149,27 @@
     comp.venue_building = document.getElementById('scheduleBuildingInput').value.trim();
     comp.venue_room = document.getElementById('scheduleRoomInput').value.trim();
 
+    const plan = getEffectiveSchedulePlan();
+    if (!plan.masterLocked && plan.allocations) {
+      const existingA = plan.allocations[comp.comp_id];
+      const matchedDay = (plan.days || []).find((d) => d.label === comp.comp_date);
+      const parsedRange = parseTimeRangeMinutes(comp.comp_time);
+      const dayId = (matchedDay && matchedDay.id) || (existingA && existingA.dayId) || (plan.days[0] && plan.days[0].id) || 'D1';
+      plan.allocations[comp.comp_id] = Object.assign({}, existingA || {}, {
+        comp_id: comp.comp_id,
+        dayId: dayId,
+        slotCode: 'CUSTOM',
+        slotKey: dayId + '-CUSTOM',
+        dateText: comp.comp_date,
+        timeText: comp.comp_time,
+        startMin: parsedRange ? parsedRange[0] : (existingA && existingA.startMin) || 540,
+        endMin: parsedRange ? parsedRange[1] : (existingA && existingA.endMin) || 720,
+        building: comp.venue_building,
+        room: comp.venue_room,
+        locked: Boolean(existingA && existingA.locked)
+      });
+    }
+
     saveState();
     closeScheduleEditModal();
     renderAll();
@@ -10051,11 +11677,11 @@
       let awardRaw = '';
       if (isJudge) {
         const jRole = String(c.grade_or_pos || '').trim();
-        const isPlainMember =
-          !jRole || jRole === 'กรรมการ' || jRole === 'กรรมการตัดสิน' || jRole === 'คณะกรรมการตัดสิน';
-        awardRaw = isPlainMember
-          ? 'ได้ปฏิบัติหน้าที่คณะกรรมการตัดสินการแข่งขัน'
-          : `ได้ปฏิบัติหน้าที่${jRole}ตัดสินการแข่งขัน`;
+        if (!jRole || jRole === 'กรรมการ' || jRole === 'กรรมการตัดสิน' || jRole === 'คณะกรรมการตัดสิน') {
+          awardRaw = 'ได้ปฏิบัติหน้าที่กรรมการตัดสินการแข่งขัน';
+        } else {
+          awardRaw = `ได้ปฏิบัติหน้าที่${jRole}ตัดสินการแข่งขัน`;
+        }
       } else if (isTeacher) {
         const rawT = String(c.award_title || '').trim();
         if (rawT.indexOf('ครูผู้ฝึกสอน') === 0) {
@@ -13052,11 +14678,1746 @@
     }
   }
 
+  // ==========================================
+  // SCHEDULE & VENUE ENGINE (สถานที่และกำหนดการ + กันชนกรรมการ)
+  // ==========================================
+  const SCHEDULE_TIME_PRESETS = {
+    AM1: { code: 'AM1', label: '09.00 - 10.30 น.', startMin: 540, endMin: 630, durationMin: 90 },
+    AM2: { code: 'AM2', label: '10.30 - 12.00 น.', startMin: 630, endMin: 720, durationMin: 90 },
+    PM1: { code: 'PM1', label: '13.00 - 14.30 น.', startMin: 780, endMin: 870, durationMin: 90 },
+    PM2: { code: 'PM2', label: '14.30 - 16.00 น.', startMin: 870, endMin: 960, durationMin: 90 },
+    AM: { code: 'AM', label: '09.00 - 12.00 น.', startMin: 540, endMin: 720, durationMin: 180 },
+    PM: { code: 'PM', label: '13.00 - 16.00 น.', startMin: 780, endMin: 960, durationMin: 180 },
+    FULL: { code: 'FULL', label: '09.00 - 16.00 น. (พัก 12.00-13.00)', startMin: 540, endMin: 960, durationMin: 360 }
+  };
+
+  function getEffectiveSchedulePlan() {
+    if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+    if (!state.config.schedulePlan || typeof state.config.schedulePlan !== 'object') {
+      state.config.schedulePlan = cloneDeep(DEFAULT_SCHEDULE_PLAN);
+    }
+    const plan = state.config.schedulePlan;
+    if (!plan.allocations || typeof plan.allocations !== 'object') plan.allocations = {};
+    if (!Array.isArray(plan.days) || plan.days.length === 0) {
+      if (plan.dayMode === '1day') {
+        plan.days = [{ id: 'D1', label: plan.day1Label || '24 พ.ย. 2569' }];
+      } else {
+        plan.days = [
+          { id: 'D1', label: plan.day1Label || '24 พ.ย. 2569' },
+          { id: 'D2', label: plan.day2Label || '25 พ.ย. 2569' }
+        ];
+      }
+    }
+    plan.days = plan.days.map(function (d, i) {
+      return {
+        id: (d && d.id) || 'D' + (i + 1),
+        label: String((d && d.label) || 'วันที่ ' + (i + 1)).trim()
+      };
+    });
+    if (!plan.timeProfile) {
+      if (plan.slotMode === '2slots') plan.timeProfile = 'half_day';
+      else plan.timeProfile = 'auto_rules';
+    }
+    if (!Array.isArray(plan.rooms)) plan.rooms = [];
+    plan.masterLocked = Boolean(plan.masterLocked);
+    if (typeof plan.blurVenue !== 'boolean') plan.blurVenue = true;
+    return plan;
+  }
+
+  function getScheduleSlotDefs(timeProfile) {
+    if (timeProfile === 'half_day' || timeProfile === '2slots') {
+      return [SCHEDULE_TIME_PRESETS.AM, SCHEDULE_TIME_PRESETS.PM];
+    }
+    if (timeProfile === 'short_slots' || timeProfile === '4slots') {
+      return [SCHEDULE_TIME_PRESETS.AM1, SCHEDULE_TIME_PRESETS.AM2, SCHEDULE_TIME_PRESETS.PM1, SCHEDULE_TIME_PRESETS.PM2];
+    }
+    if (timeProfile === 'full_day') {
+      return [SCHEDULE_TIME_PRESETS.FULL];
+    }
+    return [
+      SCHEDULE_TIME_PRESETS.AM1,
+      SCHEDULE_TIME_PRESETS.AM2,
+      SCHEDULE_TIME_PRESETS.PM1,
+      SCHEDULE_TIME_PRESETS.PM2,
+      SCHEDULE_TIME_PRESETS.AM,
+      SCHEDULE_TIME_PRESETS.PM,
+      SCHEDULE_TIME_PRESETS.FULL
+    ];
+  }
+
+  function inferCompRuleDurationProfile(comp) {
+    const name = String((comp && comp.comp_name) || '');
+    const area = String((comp && comp.learning_area) || '');
+    const fullDayKw = ['เอแม็ท', 'a-math', 'ครอสเวิร์ด', 'คำคม', 'ซูโดกุ', 'ต่อสมการ', 'หุ่นยนต์', 'นักบินน้อย', 'แรลลี่', 'jfp'];
+    if (fullDayKw.some((k) => name.toLowerCase().includes(k))) return 'FULL';
+    const halfDayKw = [
+      'โครงงาน',
+      'นิทาน',
+      'วาดภาพ',
+      'สร้างภาพ',
+      'จิตรกรรม',
+      'ประติมากรรม',
+      'การ์ตูน',
+      'พับกระดาษ',
+      'ตัดกระดาษ',
+      'ร้อยมาลัย',
+      'ทำอาหาร',
+      'นาฏศิลป์',
+      'คีตะ',
+      'แอโรบิก',
+      'หนังสือเล่มเล็ก',
+      'เขียนโปรแกรม',
+      'เว็บไซต์',
+      'ภาพยนตร์สั้น',
+      'ดนตรี',
+      'วง',
+      'รำ',
+      'ขับร้อง'
+    ];
+    if (halfDayKw.some((k) => name.includes(k)) || /^(1\.|4\.|6\.|7\.|8\.|13\.)/.test(area.trim())) {
+      return 'HALF';
+    }
+    return 'SHORT';
+  }
+
+  function getCandidateTimeSlotsForComp(comp, timeProfile) {
+    if (timeProfile === 'half_day' || timeProfile === '2slots') {
+      return [SCHEDULE_TIME_PRESETS.AM, SCHEDULE_TIME_PRESETS.PM];
+    }
+    if (timeProfile === 'short_slots' || timeProfile === '4slots') {
+      return [SCHEDULE_TIME_PRESETS.AM1, SCHEDULE_TIME_PRESETS.AM2, SCHEDULE_TIME_PRESETS.PM1, SCHEDULE_TIME_PRESETS.PM2];
+    }
+    if (timeProfile === 'full_day') {
+      return [SCHEDULE_TIME_PRESETS.FULL];
+    }
+    const pref = inferCompRuleDurationProfile(comp);
+    if (pref === 'FULL') {
+      return [SCHEDULE_TIME_PRESETS.FULL, SCHEDULE_TIME_PRESETS.AM, SCHEDULE_TIME_PRESETS.PM];
+    }
+    if (pref === 'HALF') {
+      return [
+        SCHEDULE_TIME_PRESETS.AM,
+        SCHEDULE_TIME_PRESETS.PM,
+        SCHEDULE_TIME_PRESETS.AM1,
+        SCHEDULE_TIME_PRESETS.AM2,
+        SCHEDULE_TIME_PRESETS.PM1,
+        SCHEDULE_TIME_PRESETS.PM2
+      ];
+    }
+    return [
+      SCHEDULE_TIME_PRESETS.AM1,
+      SCHEDULE_TIME_PRESETS.AM2,
+      SCHEDULE_TIME_PRESETS.PM1,
+      SCHEDULE_TIME_PRESETS.PM2,
+      SCHEDULE_TIME_PRESETS.AM,
+      SCHEDULE_TIME_PRESETS.PM
+    ];
+  }
+
+  function getLevelSortOrder(level) {
+    const lv = String(level || '');
+    if (lv.indexOf('ปฐมวัย') !== -1) return 1;
+    if (lv === 'ป.1–ป.3') return 2;
+    if (lv === 'ป.4–ป.6') return 3;
+    if (lv === 'ป.1–ป.6') return 4;
+    if (lv.indexOf('ป.1–ม.3') !== -1) return 5;
+    if (lv.indexOf('ม.1–ม.3') !== -1) return 6;
+    return 9;
+  }
+
+  function countOverlappingRoomBookings(roomIntervals, dayId, roomName, candSegs) {
+    const arr = (roomIntervals[dayId] && roomIntervals[dayId][roomName]) || [];
+    let cnt = 0;
+    arr.forEach(function (segs) {
+      if (intervalsListOverlap(segs, candSegs)) cnt++;
+    });
+    return cnt;
+  }
+
+  function pickPreferredRoomForComp(comp, dayId, candSegs, rooms, roomIntervals) {
+    if (!Array.isArray(rooms) || rooms.length === 0) return '';
+    const area = String(comp.learning_area || '');
+    const name = String(comp.comp_name || '');
+    const level = String(comp.level || '');
+    const preferredKeywords = [];
+    if (area.includes('คอมพิวเตอร์') || area.includes('1.') || name.includes('หุ่นยนต์') || name.includes('การ์ตูน')) {
+      preferredKeywords.push('คอมพิวเตอร์');
+    } else if (area.includes('วิทยาศาสตร์') || name.includes('โครงงานวิทย')) {
+      preferredKeywords.push('วิทยาศาสตร์');
+    } else if (area.includes('ปฐมวัย') || level.includes('ปฐมวัย')) {
+      preferredKeywords.push('ปฐมวัย');
+    } else if (area.includes('ดนตรี') || area.includes('นาฏศิลป์') || name.includes('ขับร้อง') || name.includes('รำ')) {
+      preferredKeywords.push('หอประชุม');
+    } else if (area.includes('พลศึกษา') || name.includes('แอโรบิก') || name.includes('คีตะ') || name.includes('ผูกเงื่อน')) {
+      preferredKeywords.push('ลาน', 'สนาม', 'หอประชุม');
+    } else if (area.includes('ภาษาไทย') || area.includes('คณิตศาสตร์') || area.includes('ภาษาอังกฤษ') || area.includes('สังคม')) {
+      preferredKeywords.push('วิชาการ', '101', '102', '201');
+    }
+
+    const ranked = rooms.slice().sort(function (ra, rb) {
+      const ca = countOverlappingRoomBookings(roomIntervals, dayId, ra, candSegs);
+      const cb = countOverlappingRoomBookings(roomIntervals, dayId, rb, candSegs);
+      if (ca !== cb) return ca - cb;
+      const pa = preferredKeywords.some((kw) => ra.includes(kw)) ? 0 : 1;
+      const pb = preferredKeywords.some((kw) => rb.includes(kw)) ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return rooms.indexOf(ra) - rooms.indexOf(rb);
+    });
+    const chosen = ranked[0] || rooms[0] || '';
+    if (chosen) {
+      if (!roomIntervals[dayId]) roomIntervals[dayId] = {};
+      if (!roomIntervals[dayId][chosen]) roomIntervals[dayId][chosen] = [];
+      roomIntervals[dayId][chosen].push(candSegs);
+    }
+    return chosen;
+  }
+
+  function loadScheduleHistoryList() {
+    try {
+      const raw = localStorage.getItem(SCHEDULE_HISTORY_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      state.scheduleHistory = Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      state.scheduleHistory = [];
+    }
+    return state.scheduleHistory;
+  }
+
+  function appendScheduleHistorySnapshot(noteLabel) {
+    const list = loadScheduleHistoryList();
+    const plan = getEffectiveSchedulePlan();
+    const snap = {
+      snap_id: 'SCH-' + Date.now(),
+      saved_at: formatNowTimestamp(),
+      note: String(noteLabel || 'ปรับปรุงกำหนดการแข่งขัน').trim(),
+      activeCount: Object.keys(plan.allocations || {}).length,
+      schedulePlan: cloneDeep(plan)
+    };
+    state.scheduleHistory = [snap].concat(list).slice(0, MAX_SCHEDULE_HISTORY);
+    try {
+      localStorage.setItem(SCHEDULE_HISTORY_KEY, JSON.stringify(state.scheduleHistory));
+    } catch (e) {}
+    renderScheduleHistoryList();
+  }
+
+  function restoreScheduleHistorySnapshot(snapId) {
+    const plan = getEffectiveSchedulePlan();
+    if (plan.masterLocked) {
+      showToast('ผังนี้ถูกล็อกถาวรไว้ กรุณาปลดล็อกก่อนกู้คืนผังย้อนหลัง', 'warning');
+      return;
+    }
+    const list = loadScheduleHistoryList();
+    const target = list.find((s) => s.snap_id === snapId);
+    if (!target || !target.schedulePlan) return;
+    if (!window.confirm('ต้องการกู้คืนกำหนดการ "' + target.note + '" กลับมาใช่หรือไม่?')) return;
+    appendScheduleHistorySnapshot('ก่อนกู้คืน: ' + target.note);
+    state.config.schedulePlan = cloneDeep(target.schedulePlan);
+    syncSchedulePlanToCompetitions();
+    saveState();
+    renderAll();
+    showToast('กู้คืนกำหนดการ "' + target.note + '" เรียบร้อยแล้ว', 'success');
+  }
+
+  function renderScheduleHistoryList() {
+    const listEl = document.getElementById('scheduleHistoryList');
+    const badgeEl = document.getElementById('scheduleHistoryCountBadge');
+    const list = loadScheduleHistoryList();
+    if (badgeEl) badgeEl.textContent = list.length + ' หมุดหมาย';
+    if (!listEl) return;
+    if (list.length === 0) {
+      listEl.innerHTML = '<div class="text-[11px] text-slate-400 py-1">ยังไม่มีประวัติการบันทึกตาราง</div>';
+      return;
+    }
+    listEl.innerHTML = list
+      .map(function (s) {
+        return (
+          '<div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">' +
+          '<div class="min-w-0">' +
+          '<div class="font-heading font-semibold text-slate-800 truncate">' +
+          escapeHtml(s.note) +
+          '</div>' +
+          '<div class="text-[11px] text-slate-500">' +
+          escapeHtml(s.saved_at) +
+          ' • จัดแล้ว ' +
+          (s.activeCount || 0) +
+          ' รายการ</div>' +
+          '</div>' +
+          '<button type="button" data-restore-sched-hist="' +
+          escapeHtml(s.snap_id) +
+          '" class="px-2.5 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-100 font-heading text-[11px] font-medium text-slate-800 cursor-pointer shrink-0">กู้คืนชุดนี้</button>' +
+          '</div>'
+        );
+      })
+      .join('');
+
+    listEl.querySelectorAll('[data-restore-sched-hist]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        restoreScheduleHistorySnapshot(btn.getAttribute('data-restore-sched-hist'));
+      });
+    });
+  }
+
+  function syncSchedulePlanToCompetitions() {
+    const plan = getEffectiveSchedulePlan();
+    const allocs = plan.allocations || {};
+    (state.competitions || []).forEach(function (c) {
+      const a = allocs[c.comp_id];
+      if (a) {
+        c.comp_date = a.dateText;
+        c.comp_time = a.timeText;
+        c.venue_building = a.building !== undefined ? a.building : plan.building;
+        c.venue_room = a.room || '';
+      }
+    });
+  }
+
+  function readDaysFromScheduleDomOrPlan(plan) {
+    const dayInputs = document.querySelectorAll('[data-sched-day-label-idx]');
+    if (dayInputs && dayInputs.length > 0) {
+      const nextDays = [];
+      dayInputs.forEach(function (inp, i) {
+        const prev = (plan.days && plan.days[i]) || {};
+        nextDays.push({
+          id: prev.id || 'D' + (i + 1),
+          label: inp.value.trim() || 'วันที่ ' + (i + 1)
+        });
+      });
+      return nextDays;
+    }
+    return (plan.days || [{ id: 'D1', label: '24 พ.ย. 2569' }]).slice();
+  }
+
+  function computeAutoScheduleAllocation(reasonNote) {
+    const plan = getEffectiveSchedulePlan();
+    if (plan.masterLocked) {
+      showToast('ผังนี้ถูกล็อกถาวรไว้ กรุณากดปลดล็อกก่อนคำนวณใหม่', 'warning');
+      return;
+    }
+
+    const days = readDaysFromScheduleDomOrPlan(plan);
+    const dayById = {};
+    days.forEach((d) => {
+      dayById[d.id] = d;
+    });
+    const timeProfile = (document.getElementById('schedTimeProfileSelect') || {}).value || plan.timeProfile || 'auto_rules';
+    const strategy = (document.getElementById('schedStrategySelect') || {}).value || plan.strategy || 'same-area-day';
+    const bInputEl = document.getElementById('schedBuildingInput');
+    const building = bInputEl ? bInputEl.value.trim() : (plan.building || '');
+    const rInputEl = document.getElementById('schedRoomsInput');
+    const roomsRaw = rInputEl ? rInputEl.value.trim() : null;
+    const rooms =
+      roomsRaw !== null
+        ? roomsRaw.split(',').map((r) => r.trim()).filter(Boolean)
+        : Array.isArray(plan.rooms)
+        ? plan.rooms.slice()
+        : [];
+
+    const compSchoolsMap = {};
+    const compCoachKeysMap = {};
+    (state.registrations || []).forEach(function (r) {
+      if (!compSchoolsMap[r.comp_id]) compSchoolsMap[r.comp_id] = new Set();
+      if (r.school_name) compSchoolsMap[r.comp_id].add(r.school_name);
+      if (!compCoachKeysMap[r.comp_id]) compCoachKeysMap[r.comp_id] = [];
+      (r.teachers || []).forEach(function (t) {
+        const tn = ((t && (t.name || t.full_name)) || '').trim();
+        if (tn && r.school_name) compCoachKeysMap[r.comp_id].push(r.school_name + '::' + tn);
+      });
+    });
+
+    const activeComps = (state.competitions || []).filter(function (c) {
+      const cnt = compSchoolsMap[c.comp_id] ? compSchoolsMap[c.comp_id].size : 0;
+      return isCompetitionByeStatus(c, cnt) === 'ACTIVE';
+    });
+
+    if (activeComps.length === 0) {
+      showToast('ยังไม่มีรายการที่เข้าเกณฑ์แข่งขันจริง (ต้องมีผู้สมัครอย่างน้อย 2 รร. หรือมัธยม 3 รร.)', 'warning');
+      return;
+    }
+
+    if (Object.keys(plan.allocations || {}).length > 0) {
+      appendScheduleHistorySnapshot(reasonNote || 'ก่อนคำนวณตารางใหม่');
+    }
+
+    // Build existing judge -> comp lookup so scheduler routes around already-assigned judges
+    const compJudgeKeysMap = {};
+    (state.judges || []).forEach(function (j) {
+      const cid = String(j.comp_id || '');
+      const jName = (j.judge_name || j.full_name || '').trim();
+      if (!cid || !jName) return;
+      const pk = (j.school_name || '') + '::' + jName;
+      if (!compJudgeKeysMap[cid]) compJudgeKeysMap[cid] = [];
+      if (!compJudgeKeysMap[cid].includes(pk)) compJudgeKeysMap[cid].push(pk);
+    });
+
+    const prevAllocs = plan.allocations || {};
+    const newAllocs = {};
+    const lockedCompIds = new Set();
+    const dayLoad = {};
+    days.forEach((d) => {
+      dayLoad[d.id] = 0;
+    });
+
+    const judgeOccupiedIntervals = {};
+    const liveCoachIntervals = {};
+    const areaIntervals = {};
+    const levelIntervals = {};
+    const roomIntervals = {};
+    const lockedAreaPreferredDay = {};
+
+    activeComps.forEach(function (c) {
+      const prevA = prevAllocs[c.comp_id];
+      if (prevA && prevA.locked && dayById[prevA.dayId]) {
+        lockedCompIds.add(c.comp_id);
+        newAllocs[c.comp_id] = cloneDeep(prevA);
+        const iv = getActiveIntervalsFromAlloc(prevA, c);
+        dayLoad[iv.dayId] = (dayLoad[iv.dayId] || 0) + 1;
+        const areaKey = String(c.learning_area || '').trim();
+        if (!lockedAreaPreferredDay[areaKey]) lockedAreaPreferredDay[areaKey] = iv.dayId;
+        (compJudgeKeysMap[c.comp_id] || []).forEach(function (pk) {
+          if (!judgeOccupiedIntervals[pk]) judgeOccupiedIntervals[pk] = [];
+          judgeOccupiedIntervals[pk].push({ dayId: iv.dayId, segments: iv.segments, comp_id: c.comp_id });
+        });
+        if (isCompetitionLiveFormat(c)) {
+          (compCoachKeysMap[c.comp_id] || []).forEach(function (ck) {
+            if (!liveCoachIntervals[ck]) liveCoachIntervals[ck] = [];
+            liveCoachIntervals[ck].push({ dayId: iv.dayId, segments: iv.segments });
+          });
+        }
+        if (!areaIntervals[areaKey]) areaIntervals[areaKey] = [];
+        areaIntervals[areaKey].push({ dayId: iv.dayId, segments: iv.segments });
+        const lvOrd = getLevelSortOrder(c.level);
+        if (!levelIntervals[lvOrd]) levelIntervals[lvOrd] = [];
+        levelIntervals[lvOrd].push({ dayId: iv.dayId, segments: iv.segments });
+        if (prevA.room) {
+          if (!roomIntervals[iv.dayId]) roomIntervals[iv.dayId] = {};
+          if (!roomIntervals[iv.dayId][prevA.room]) roomIntervals[iv.dayId][prevA.room] = [];
+          roomIntervals[iv.dayId][prevA.room].push(iv.segments);
+        }
+      }
+    });
+
+    const unlockedComps = activeComps.filter((c) => !lockedCompIds.has(c.comp_id));
+    const dayCompAssignment = {};
+
+    if (days.length === 1) {
+      unlockedComps.forEach(function (c) {
+        dayCompAssignment[c.comp_id] = days[0].id;
+      });
+    } else if (strategy === 'same-level-day') {
+      const groups = {};
+      unlockedComps.forEach(function (c) {
+        const lvOrd = getLevelSortOrder(c.level);
+        const key = lvOrd + '::' + (c.learning_area || '');
+        if (!groups[key]) groups[key] = { lvOrd: lvOrd, area: c.learning_area || '', comps: [] };
+        groups[key].comps.push(c);
+      });
+      Object.values(groups)
+        .sort((a, b) => a.lvOrd - b.lvOrd || b.comps.length - a.comps.length)
+        .forEach(function (g) {
+          const sortedDays = days.slice().sort(function (da, db) {
+            return (dayLoad[da.id] || 0) - (dayLoad[db.id] || 0);
+          });
+          const idealIdx = Math.min(days.length - 1, Math.floor(((g.lvOrd - 1) / 6) * days.length));
+          const idealDayId = days[idealIdx].id;
+          const minLoad = dayLoad[sortedDays[0].id] || 0;
+          let chosenDayId = sortedDays[0].id;
+          if ((dayLoad[idealDayId] || 0) <= minLoad + 6) chosenDayId = idealDayId;
+          g.comps.forEach((c) => {
+            dayCompAssignment[c.comp_id] = chosenDayId;
+          });
+          dayLoad[chosenDayId] = (dayLoad[chosenDayId] || 0) + g.comps.length;
+        });
+    } else {
+      const byArea = {};
+      unlockedComps.forEach(function (c) {
+        const key = String(c.learning_area || 'อื่นๆ').trim();
+        if (!byArea[key]) byArea[key] = { area: key, areaNum: parseFloat(getAreaPrefixNum(key) || '999'), comps: [] };
+        byArea[key].comps.push(c);
+      });
+      const areaBlocks = Object.values(byArea).map(function (b) {
+        const avgLv = b.comps.reduce((s, c) => s + getLevelSortOrder(c.level), 0) / b.comps.length;
+        return Object.assign(b, { avgLv: avgLv });
+      });
+      areaBlocks.sort((a, b) => b.comps.length - a.comps.length || a.avgLv - b.avgLv || a.areaNum - b.areaNum);
+
+      areaBlocks.forEach(function (blk) {
+        let chosenDayId = lockedAreaPreferredDay[blk.area];
+        if (!chosenDayId || !dayById[chosenDayId]) {
+          const sortedDays = days.slice().sort(function (da, db) {
+            return (dayLoad[da.id] || 0) - (dayLoad[db.id] || 0);
+          });
+          chosenDayId = sortedDays[0].id;
+        }
+        blk.comps.forEach((c) => {
+          dayCompAssignment[c.comp_id] = chosenDayId;
+        });
+        dayLoad[chosenDayId] = (dayLoad[chosenDayId] || 0) + blk.comps.length;
+      });
+    }
+
+    const orderedComps = unlockedComps.slice().sort(function (a, b) {
+      const ja = (compJudgeKeysMap[a.comp_id] || []).length > 0 ? 0 : 1;
+      const jb = (compJudgeKeysMap[b.comp_id] || []).length > 0 ? 0 : 1;
+      if (ja !== jb) return ja - jb;
+      const da = dayCompAssignment[a.comp_id];
+      const db = dayCompAssignment[b.comp_id];
+      if (da !== db) return da.localeCompare(db);
+      if (strategy === 'same-level-day') {
+        const la = getLevelSortOrder(a.level);
+        const lb = getLevelSortOrder(b.level);
+        if (la !== lb) return la - lb;
+        return parseFloat(getAreaPrefixNum(a.learning_area) || '999') - parseFloat(getAreaPrefixNum(b.learning_area) || '999');
+      }
+      const aa = parseFloat(getAreaPrefixNum(a.learning_area) || '999');
+      const ab = parseFloat(getAreaPrefixNum(b.learning_area) || '999');
+      if (aa !== ab) return aa - ab;
+      const la = getLevelSortOrder(a.level);
+      const lb = getLevelSortOrder(b.level);
+      if (la !== lb) return la - lb;
+      return String(a.comp_id).localeCompare(String(b.comp_id));
+    });
+
+    orderedComps.forEach(function (c) {
+      const primaryDayId = dayCompAssignment[c.comp_id] || days[0].id;
+      const isLive = isCompetitionLiveFormat(c);
+      const coaches = compCoachKeysMap[c.comp_id] || [];
+      const judgesForComp = compJudgeKeysMap[c.comp_id] || [];
+      const areaKey = String(c.learning_area || '').trim();
+      const lvOrd = getLevelSortOrder(c.level);
+      const candidateSlots = getCandidateTimeSlotsForComp(c, timeProfile);
+      const dayCandidates = [primaryDayId].concat(days.map((d) => d.id).filter((id) => id !== primaryDayId));
+
+      let bestChoice = {
+        dayId: primaryDayId,
+        slot: candidateSlots[0],
+        segs: splitLunchBreakSegments(candidateSlots[0].startMin, candidateSlots[0].endMin)
+      };
+      let bestScore = Infinity;
+
+      dayCandidates.forEach(function (dayId, dayRank) {
+        candidateSlots.forEach(function (sl, slRank) {
+          const candSegs = splitLunchBreakSegments(sl.startMin, sl.endMin);
+          let penalty = 0;
+
+          if (dayRank > 0) penalty += 140 + dayRank * 20;
+
+          // 1. Existing judge overlap penalty
+          judgesForComp.forEach(function (pk) {
+            const occ = judgeOccupiedIntervals[pk] || [];
+            if (occ.some((o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs))) {
+              penalty += 500;
+            }
+          });
+
+          // 2. Live coach overlap penalty
+          if (isLive && coaches.length > 0) {
+            coaches.forEach(function (ck) {
+              const occ = liveCoachIntervals[ck] || [];
+              if (occ.some((o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs))) {
+                penalty += 200;
+              }
+            });
+          }
+
+          // 3. Same category overlap penalty
+          const sameAreaOverlapCnt = (areaIntervals[areaKey] || []).filter(
+            (o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs)
+          ).length;
+          penalty += sameAreaOverlapCnt * 28;
+
+          // 4. Room congestion penalty (only when rooms exist)
+          if (rooms.length > 0) {
+            let roomUsedTotal = 0;
+            Object.values(roomIntervals[dayId] || {}).forEach(function (segsList) {
+              if (segsList.some((segs) => intervalsListOverlap(segs, candSegs))) roomUsedTotal++;
+            });
+            if (roomUsedTotal >= rooms.length) penalty += 90 + (roomUsedTotal - rooms.length) * 30;
+            else penalty += roomUsedTotal * 2;
+          }
+
+          // 5. Rule duration preference + level clustering
+          penalty += slRank * 4;
+          const sameLvOverlapCnt = (levelIntervals[lvOrd] || []).filter(
+            (o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs)
+          ).length;
+          penalty -= Math.min(sameLvOverlapCnt, 2);
+
+          if (penalty < bestScore) {
+            bestScore = penalty;
+            bestChoice = { dayId: dayId, slot: sl, segs: candSegs };
+          }
+        });
+      });
+
+      const finalDayId = bestChoice.dayId;
+      const finalSlot = bestChoice.slot;
+      const finalSegs = bestChoice.segs;
+      const finalSlotKey = finalDayId + '-' + finalSlot.code;
+      const dateText = (dayById[finalDayId] && dayById[finalDayId].label) || finalDayId;
+      const room = pickPreferredRoomForComp(c, finalDayId, finalSegs, rooms, roomIntervals);
+
+      judgesForComp.forEach(function (pk) {
+        if (!judgeOccupiedIntervals[pk]) judgeOccupiedIntervals[pk] = [];
+        judgeOccupiedIntervals[pk].push({ dayId: finalDayId, segments: finalSegs, comp_id: c.comp_id });
+      });
+      if (isLive) {
+        coaches.forEach(function (ck) {
+          if (!liveCoachIntervals[ck]) liveCoachIntervals[ck] = [];
+          liveCoachIntervals[ck].push({ dayId: finalDayId, segments: finalSegs });
+        });
+      }
+      if (!areaIntervals[areaKey]) areaIntervals[areaKey] = [];
+      areaIntervals[areaKey].push({ dayId: finalDayId, segments: finalSegs });
+      if (!levelIntervals[lvOrd]) levelIntervals[lvOrd] = [];
+      levelIntervals[lvOrd].push({ dayId: finalDayId, segments: finalSegs });
+
+      newAllocs[c.comp_id] = {
+        comp_id: c.comp_id,
+        dayId: finalDayId,
+        slotCode: finalSlot.code,
+        slotKey: finalSlotKey,
+        dateText: dateText,
+        timeText: finalSlot.label,
+        startMin: finalSlot.startMin,
+        endMin: finalSlot.endMin,
+        building: building,
+        room: room,
+        locked: false
+      };
+    });
+
+    plan.days = days;
+    plan.timeProfile = timeProfile;
+    plan.strategy = strategy;
+    plan.building = building;
+    plan.rooms = rooms;
+    plan.allocations = newAllocs;
+    plan.lastGeneratedAt = formatNowTimestamp();
+
+    syncSchedulePlanToCompetitions();
+    appendScheduleHistorySnapshot(reasonNote || 'ประมวลผลอัตโนมัติ (' + Object.keys(newAllocs).length + ' รายการ)');
+    saveState();
+    renderAll();
+
+    const conflicts = analyzeScheduleConflicts();
+    showToast(
+      'จัดตารางแข่งขัน ' +
+        Object.keys(newAllocs).length +
+        ' รายการเรียบร้อยแล้ว' +
+        (conflicts.judgeClashes.length > 0 ? ' (พบกรรมการชน ' + conflicts.judgeClashes.length + ' จุด)' : ''),
+      conflicts.judgeClashes.length > 0 ? 'warning' : 'success'
+    );
+  }
+
+  function analyzeScheduleConflicts() {
+    const plan = getEffectiveSchedulePlan();
+    const allocs = plan.allocations || {};
+    const compMap = {};
+    (state.competitions || []).forEach((c) => {
+      compMap[c.comp_id] = c;
+    });
+
+    const activeAllocs = Object.values(allocs)
+      .filter((a) => a && a.comp_id)
+      .map(function (a) {
+        const comp = compMap[a.comp_id] || {};
+        const iv = getActiveIntervalsFromAlloc(a, comp);
+        return { alloc: a, comp: comp, iv: iv };
+      });
+
+    // Room clashes only among non-empty rooms with overlapping intervals
+    const roomClashes = [];
+    const byRoomDay = {};
+    activeAllocs.forEach(function (entry) {
+      const rm = String(entry.alloc.room || '').trim();
+      if (!rm) return;
+      const rk = entry.iv.dayId + '::' + rm;
+      if (!byRoomDay[rk]) byRoomDay[rk] = [];
+      byRoomDay[rk].push(entry);
+    });
+    Object.entries(byRoomDay).forEach(function (rEntry) {
+      const list = rEntry[1];
+      const clashedIds = new Set();
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          if (intervalsListOverlap(list[i].iv.segments, list[j].iv.segments)) {
+            clashedIds.add(list[i].alloc.comp_id);
+            clashedIds.add(list[j].alloc.comp_id);
+          }
+        }
+      }
+      if (clashedIds.size > 0) {
+        roomClashes.push({ key: rEntry[0], compIds: Array.from(clashedIds) });
+      }
+    });
+
+    // Judge clashes via pairwise interval overlap
+    const judgeClashes = [];
+    if (!isScheduleModeDisabled() && Array.isArray(state.judges) && state.judges.length > 0) {
+      const allocByCompId = {};
+      activeAllocs.forEach((e) => {
+        allocByCompId[e.alloc.comp_id] = e;
+      });
+      const byPerson = {};
+      state.judges.forEach(function (j) {
+        const compId = String(j.comp_id || '');
+        const entry = allocByCompId[compId];
+        if (!entry) return;
+        const jName = (j.judge_name || j.full_name || '').trim();
+        if (!jName) return;
+        const pKey = (j.school_name || '') + '::' + jName;
+        if (!byPerson[pKey]) {
+          byPerson[pKey] = {
+            personKey: pKey,
+            fullName: formatFullNameForPrint(j.prefix, jName),
+            schoolName: j.school_name || '',
+            assignments: []
+          };
+        }
+        byPerson[pKey].assignments.push({ judge: j, entry: entry });
+      });
+
+      Object.values(byPerson).forEach(function (p) {
+        const list = p.assignments;
+        for (let i = 0; i < list.length; i++) {
+          for (let k = i + 1; k < list.length; k++) {
+            const a = list[i];
+            const b = list[k];
+            if (a.judge.comp_id === b.judge.comp_id) continue;
+            if (
+              a.entry.iv.dayId === b.entry.iv.dayId &&
+              intervalsListOverlap(a.entry.iv.segments, b.entry.iv.segments)
+            ) {
+              judgeClashes.push({
+                personKey: p.personKey,
+                fullName: p.fullName,
+                schoolName: p.schoolName,
+                judgeA: a.judge,
+                judgeB: b.judge,
+                entryA: a.entry,
+                entryB: b.entry,
+                compIds: [a.judge.comp_id, b.judge.comp_id]
+              });
+            }
+          }
+        }
+      });
+    }
+
+    return { roomClashes: roomClashes, judgeClashes: judgeClashes };
+  }
+
+  function findBestReplacementCandidateForClash(judgeObj, targetCompId) {
+    const comp = (state.competitions || []).find((c) => c.comp_id === targetCompId);
+    if (!comp) return null;
+    const pool = buildAutoJudgeTeacherPool();
+    const targetIv = getCompScheduleIntervalMeta(targetCompId);
+    const competingSchools = new Set(
+      (state.registrations || []).filter((r) => r.comp_id === targetCompId).map((r) => r.school_name)
+    );
+    const existingKeys = new Set(
+      (state.judges || [])
+        .filter((j) => j.comp_id === targetCompId)
+        .map((j) => (j.school_name || '') + '::' + (j.judge_name || j.full_name || '').trim())
+    );
+
+    const occupiedByTeacher = {};
+    (state.judges || []).forEach(function (j) {
+      const pk = (j.school_name || '') + '::' + (j.judge_name || j.full_name || '').trim();
+      const iv = getCompScheduleIntervalMeta(j.comp_id);
+      if (!occupiedByTeacher[pk]) occupiedByTeacher[pk] = [];
+      occupiedByTeacher[pk].push(iv);
+    });
+
+    const candidates = pool.filter(function (t) {
+      const pk = (t.school_name || '') + '::' + (t.full_name || '').trim();
+      if (existingKeys.has(pk)) return false;
+      const busyList = occupiedByTeacher[pk] || [];
+      return !busyList.some((iv) => iv.dayId === targetIv.dayId && intervalsListOverlap(iv.segments, targetIv.segments));
+    });
+
+    candidates.sort(function (a, b) {
+      const ra = getMajorMatchRank(a.major, comp.learning_area);
+      const rb = getMajorMatchRank(b.major, comp.learning_area);
+      if (ra !== rb) return ra - rb;
+      const sa = competingSchools.has(a.school_name) ? 1 : 0;
+      const sb = competingSchools.has(b.school_name) ? 1 : 0;
+      if (sa !== sb) return sa - sb;
+      const ca = (occupiedByTeacher[(a.school_name || '') + '::' + a.full_name] || []).length;
+      const cb = (occupiedByTeacher[(b.school_name || '') + '::' + b.full_name] || []).length;
+      return ca - cb;
+    });
+
+    const best = candidates[0];
+    if (!best) return null;
+    return {
+      prefix: best.prefix || 'นาย',
+      full_name: best.full_name,
+      school_name: best.school_name,
+      major: best.major,
+      note: 'เปลี่ยนตัวแทนจุดเวลาชน (' + targetCompId + ')'
+    };
+  }
+
+  function findConflictFreeSlotForComp(compId) {
+    const plan = getEffectiveSchedulePlan();
+    const alloc = plan.allocations && plan.allocations[compId];
+    const comp = (state.competitions || []).find((c) => c.comp_id === compId);
+    if (!alloc || !comp) return null;
+
+    const judgesOfComp = new Set(
+      (state.judges || [])
+        .filter((j) => j.comp_id === compId)
+        .map((j) => (j.school_name || '') + '::' + (j.judge_name || j.full_name || '').trim())
+    );
+    const otherJudgeIntervals = [];
+    (state.judges || []).forEach(function (j) {
+      if (j.comp_id === compId) return;
+      const pk = (j.school_name || '') + '::' + (j.judge_name || j.full_name || '').trim();
+      if (!judgesOfComp.has(pk)) return;
+      const oa = plan.allocations && plan.allocations[j.comp_id];
+      if (!oa) return;
+      const oc = (state.competitions || []).find((c) => c.comp_id === j.comp_id);
+      otherJudgeIntervals.push(getActiveIntervalsFromAlloc(oa, oc));
+    });
+
+    const otherRoomIntervals = [];
+    if (alloc.room) {
+      Object.values(plan.allocations || {}).forEach(function (oa) {
+        if (!oa || oa.comp_id === compId || oa.room !== alloc.room) return;
+        const oc = (state.competitions || []).find((c) => c.comp_id === oa.comp_id);
+        otherRoomIntervals.push(getActiveIntervalsFromAlloc(oa, oc));
+      });
+    }
+
+    const candidateSlots = getCandidateTimeSlotsForComp(comp, plan.timeProfile || 'auto_rules');
+    const orderedDays = (plan.days || []).slice().sort(function (a, b) {
+      if (a.id === alloc.dayId && b.id !== alloc.dayId) return -1;
+      if (b.id === alloc.dayId && a.id !== alloc.dayId) return 1;
+      return 0;
+    });
+
+    let bestOption = null;
+    let bestPenalty = Infinity;
+
+    orderedDays.forEach(function (d, dIdx) {
+      candidateSlots.forEach(function (sl, sIdx) {
+        if (d.id === alloc.dayId && sl.code === alloc.slotCode) return;
+        const segs = splitLunchBreakSegments(sl.startMin, sl.endMin);
+        const judgeOverlap = otherJudgeIntervals.filter(
+          (iv) => iv.dayId === d.id && intervalsListOverlap(iv.segments, segs)
+        ).length;
+        if (judgeOverlap > 0) return;
+        const roomOverlap = otherRoomIntervals.filter(
+          (iv) => iv.dayId === d.id && intervalsListOverlap(iv.segments, segs)
+        ).length;
+        const penalty = dIdx * 50 + roomOverlap * 30 + sIdx;
+        if (penalty < bestPenalty) {
+          bestPenalty = penalty;
+          bestOption = {
+            dayId: d.id,
+            dateText: d.label,
+            slotCode: sl.code,
+            timeText: sl.label,
+            startMin: sl.startMin,
+            endMin: sl.endMin
+          };
+        }
+      });
+    });
+
+    return bestOption;
+  }
+
+  function openScheduleRegenConfirmModal(defaultNote) {
+    const modal = document.getElementById('scheduleRegenConfirmModal');
+    const noteEl = document.getElementById('scheduleRegenNoteInput');
+    const codeEl = document.getElementById('scheduleRegenCodeInput');
+    const submitBtn = document.getElementById('btnSubmitScheduleRegenModal');
+    if (!modal) return;
+    if (noteEl) noteEl.value = defaultNote || '';
+    if (codeEl) codeEl.value = '';
+    if (submitBtn) submitBtn.disabled = true;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function closeScheduleRegenConfirmModal() {
+    const modal = document.getElementById('scheduleRegenConfirmModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  }
+
+  function getScheduleViewEntries() {
+    const plan = getEffectiveSchedulePlan();
+    const allocs = plan.allocations || {};
+    const dayVal = (document.getElementById('schedViewDayFilter') || {}).value || 'ALL';
+    const areaVal = (document.getElementById('schedViewAreaFilter') || {}).value || 'ALL';
+    const levelVal = (document.getElementById('schedViewLevelFilter') || {}).value || 'ALL';
+    const schoolVal = (document.getElementById('schedViewSchoolFilter') || {}).value || 'ALL';
+    const searchVal = ((document.getElementById('schedViewSearchInput') || {}).value || '').trim().toLowerCase();
+    const activeOnlyEl = document.getElementById('schedViewActiveOnly');
+    const activeOnly = activeOnlyEl ? activeOnlyEl.checked : true;
+
+    const regByComp = {};
+    (state.registrations || []).forEach(function (r) {
+      if (!regByComp[r.comp_id]) regByComp[r.comp_id] = [];
+      regByComp[r.comp_id].push(r);
+    });
+
+    const out = [];
+    (state.competitions || []).forEach(function (c) {
+      const regs = regByComp[c.comp_id] || [];
+      const schSet = new Set(regs.map((r) => r.school_name));
+      const status = isCompetitionByeStatus(c, schSet.size);
+      if (activeOnly && status !== 'ACTIVE') return;
+      const alloc = allocs[c.comp_id] || null;
+
+      if (dayVal !== 'ALL') {
+        if (!alloc || alloc.dayId !== dayVal) return;
+      }
+      if (areaVal !== 'ALL' && c.learning_area !== areaVal) return;
+      if (levelVal !== 'ALL' && c.level !== levelVal) return;
+      if (schoolVal !== 'ALL' && !schSet.has(schoolVal)) return;
+      if (searchVal) {
+        const hay = (
+          (c.comp_name || '') +
+          ' ' +
+          (c.learning_area || '') +
+          ' ' +
+          (c.level || '') +
+          ' ' +
+          (alloc ? (alloc.room || '') + ' ' + alloc.dateText + ' ' + alloc.timeText : '')
+        ).toLowerCase();
+        if (!hay.includes(searchVal)) return;
+      }
+
+      out.push({
+        comp: c,
+        status: status,
+        teamCount: schSet.size,
+        schools: Array.from(schSet).sort(),
+        alloc: alloc
+      });
+    });
+
+    return out;
+  }
+
+  function renderScheduleDaysList(plan, effAdmin) {
+    const listEl = document.getElementById('schedDaysList');
+    const badgeEl = document.getElementById('schedDaysCountBadge');
+    if (badgeEl) badgeEl.textContent = plan.days.length + ' วัน';
+    if (!listEl) return;
+
+    listEl.innerHTML = plan.days
+      .map(function (d, idx) {
+        const rmBtn =
+          plan.days.length > 1
+            ? '<button type="button" data-sched-remove-day="' +
+              idx +
+              '" ' +
+              (plan.masterLocked ? 'disabled ' : '') +
+              'class="px-2 py-1 rounded border border-rose-200 bg-rose-50 hover:bg-rose-100 disabled:opacity-40 text-rose-700 font-heading text-[11px] shrink-0 cursor-pointer">ลบ</button>'
+            : '';
+        return (
+          '<div class="p-2 rounded-lg border border-slate-200 bg-white flex items-center gap-1.5">' +
+          '<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-heading text-[11px] font-semibold shrink-0">วัน ' +
+          (idx + 1) +
+          '</span>' +
+          '<input type="text" data-sched-day-label-idx="' +
+          idx +
+          '" value="' +
+          escapeHtml(d.label) +
+          '" ' +
+          (plan.masterLocked ? 'disabled ' : '') +
+          'class="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1 text-xs focus:border-slate-900 focus:outline-none disabled:bg-slate-50" />' +
+          rmBtn +
+          '</div>'
+        );
+      })
+      .join('');
+
+    if (!effAdmin) return;
+    listEl.querySelectorAll('[data-sched-day-label-idx]').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        if (plan.masterLocked) return;
+        const i = parseInt(inp.getAttribute('data-sched-day-label-idx'), 10);
+        if (!Number.isNaN(i) && plan.days[i]) {
+          const val = inp.value.trim() || 'วันที่ ' + (i + 1);
+          plan.days[i].label = val;
+          Object.values(plan.allocations || {}).forEach(function (a) {
+            if (a && a.dayId === plan.days[i].id) a.dateText = val;
+          });
+          syncSchedulePlanToCompetitions();
+          saveState();
+          renderScheduleTab();
+        }
+      });
+    });
+    listEl.querySelectorAll('[data-sched-remove-day]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (plan.masterLocked || plan.days.length <= 1) return;
+        const i = parseInt(btn.getAttribute('data-sched-remove-day'), 10);
+        if (Number.isNaN(i)) return;
+        plan.days.splice(i, 1);
+        saveState();
+        renderScheduleTab();
+      });
+    });
+  }
+
+  function renderScheduleClashesResolverBox(conflicts, plan, effAdmin) {
+    const box = document.getElementById('scheduleResolveClashesBox');
+    if (!box) return;
+    if (!effAdmin || !conflicts || conflicts.judgeClashes.length === 0) {
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      return;
+    }
+
+    const cardsHtml = conflicts.judgeClashes
+      .map(function (jc, idx) {
+        const aA = jc.entryA.alloc;
+        const aB = jc.entryB.alloc;
+        const isBLocked = Boolean(aB.locked) || plan.masterLocked;
+        const compLabelA = '[' + jc.entryA.comp.comp_id + '] ' + jc.entryA.comp.comp_name + ' (' + aA.dateText + ' ' + aA.timeText + ')';
+        const compLabelB = '[' + jc.entryB.comp.comp_id + '] ' + jc.entryB.comp.comp_name + ' (' + aB.dateText + ' ' + aB.timeText + ')';
+        return (
+          '<div class="p-2.5 rounded-lg border border-rose-200 bg-white flex flex-col lg:flex-row lg:items-center justify-between gap-2">' +
+          '<div class="min-w-0 space-y-0.5">' +
+          '<div class="font-heading font-semibold text-rose-900">' +
+          (idx + 1) +
+          '. ' +
+          escapeHtml(jc.fullName) +
+          ' <span class="font-normal text-slate-600">(' +
+          escapeHtml(jc.schoolName) +
+          ')</span></div>' +
+          '<div class="text-[11px] text-slate-700">ชนระหว่าง: <span class="font-medium">' +
+          escapeHtml(compLabelA) +
+          '</span> และ <span class="font-medium">' +
+          escapeHtml(compLabelB) +
+          '</span></div>' +
+          '</div>' +
+          '<div class="flex flex-wrap items-center gap-1.5 shrink-0">' +
+          '<button type="button" data-clash-replace-judge="' +
+          escapeHtml(jc.judgeB.judge_id) +
+          '" data-clash-replace-comp="' +
+          escapeHtml(jc.judgeB.comp_id) +
+          '" class="px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-heading text-[11px] font-semibold cursor-pointer">เปลี่ยนตัวกรรมการ</button>' +
+          '<button type="button" data-clash-move-comp="' +
+          escapeHtml(jc.judgeB.comp_id) +
+          '" ' +
+          (isBLocked ? 'disabled title="รายการหรือผังถูกล็อกไว้ กรุณาปลดล็อกก่อนย้ายเวลา" ' : '') +
+          'class="px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 disabled:opacity-45 disabled:cursor-not-allowed text-amber-900 border border-amber-200 font-heading text-[11px] font-semibold cursor-pointer">' +
+          (isBLocked ? 'ถูกล็อก (ย้ายไม่ได้)' : 'ขยับเวลาหนี') +
+          '</button>' +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+
+    box.classList.remove('hidden');
+    box.innerHTML =
+      '<div class="flex flex-wrap items-center justify-between gap-2">' +
+      '<div class="font-heading font-semibold text-rose-900">พบตารางกรรมการชนเวลา ' +
+      conflicts.judgeClashes.length +
+      ' จุด — เลือกวิธีแก้ด้วยตนเอง (ระบบจะไม่เขียนทับให้อัตโนมัติโดยไม่ยืนยัน)</div>' +
+      '</div>' +
+      '<div class="space-y-1.5">' +
+      cardsHtml +
+      '</div>';
+
+    box.querySelectorAll('[data-clash-replace-judge]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const jId = btn.getAttribute('data-clash-replace-judge');
+        const cId = btn.getAttribute('data-clash-replace-comp');
+        const judgeObj = (state.judges || []).find((j) => j.judge_id === jId);
+        const suggested = judgeObj ? findBestReplacementCandidateForClash(judgeObj, cId) : null;
+        openJudgeReplaceModal(jId, suggested);
+      });
+    });
+
+    box.querySelectorAll('[data-clash-move-comp]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const cId = btn.getAttribute('data-clash-move-comp');
+        const targetAlloc = plan.allocations && plan.allocations[cId];
+        const comp = (state.competitions || []).find((c) => c.comp_id === cId);
+        if (!targetAlloc || !comp) return;
+        if (plan.masterLocked || targetAlloc.locked) {
+          showToast('รายการหรือผังนี้ถูกล็อกไว้ กรุณาปลดล็อกก่อนขยับเวลา', 'warning');
+          return;
+        }
+        const freeSlot = findConflictFreeSlotForComp(cId);
+        if (!freeSlot) {
+          showToast('ไม่พบช่วงเวลาที่ว่างและไม่ชนกรรมการอื่น กรุณาลองเพิ่มวันแข่งขันหรือเปลี่ยนตัวกรรมการแทน', 'warning');
+          return;
+        }
+        const ok = window.confirm(
+          'ยืนยันขยับเวลา "' +
+            comp.comp_name +
+            '"\nจาก: ' +
+            targetAlloc.dateText +
+            ' (' +
+            targetAlloc.timeText +
+            ')\nเป็น: ' +
+            freeSlot.dateText +
+            ' (' +
+            freeSlot.timeText +
+            ') ใช่หรือไม่?'
+        );
+        if (!ok) return;
+        appendScheduleHistorySnapshot('ขยับเวลาหนีจุดชน: ' + cId);
+        targetAlloc.dayId = freeSlot.dayId;
+        targetAlloc.dateText = freeSlot.dateText;
+        targetAlloc.slotCode = freeSlot.slotCode;
+        targetAlloc.slotKey = freeSlot.dayId + '-' + freeSlot.slotCode;
+        targetAlloc.timeText = freeSlot.timeText;
+        targetAlloc.startMin = freeSlot.startMin;
+        targetAlloc.endMin = freeSlot.endMin;
+        syncSchedulePlanToCompetitions();
+        saveState();
+        renderAll();
+        showToast('ขยับเวลารายการ "' + comp.comp_name + '" เรียบร้อยแล้ว', 'success');
+      });
+    });
+  }
+
+  function renderScheduleTab() {
+    const plan = getEffectiveSchedulePlan();
+    const blurVenue = plan.blurVenue !== false;
+    const isAdmin = isEffectiveAdmin();
+    const adminCard = document.getElementById('adminSchedulePlannerCard');
+    if (adminCard) {
+      adminCard.classList.toggle('hidden', !isAdmin);
+      if (isAdmin) {
+        renderScheduleDaysList(plan, isAdmin);
+        const tpSel = document.getElementById('schedTimeProfileSelect');
+        if (tpSel && document.activeElement !== tpSel) {
+          tpSel.value = plan.timeProfile || 'auto_rules';
+          tpSel.disabled = plan.masterLocked;
+        }
+        const stSel = document.getElementById('schedStrategySelect');
+        if (stSel && document.activeElement !== stSel) {
+          stSel.value = plan.strategy || 'same-area-day';
+          stSel.disabled = plan.masterLocked;
+        }
+        const bIn = document.getElementById('schedBuildingInput');
+        if (bIn && document.activeElement !== bIn) {
+          bIn.value = plan.building || '';
+          bIn.disabled = plan.masterLocked;
+        }
+        const rIn = document.getElementById('schedRoomsInput');
+        if (rIn && document.activeElement !== rIn) {
+          rIn.value = (plan.rooms || []).join(', ');
+          rIn.disabled = plan.masterLocked;
+        }
+        const btnAddDay = document.getElementById('btnAddSchedDay');
+        const btnPullDays = document.getElementById('btnPullSchedDaysFromTimeline');
+        const btnClearRooms = document.getElementById('btnClearSchedRooms');
+        const btnRunSched = document.getElementById('btnRunAutoSchedule');
+        if (btnAddDay) btnAddDay.disabled = plan.masterLocked;
+        if (btnPullDays) btnPullDays.disabled = plan.masterLocked;
+        if (btnClearRooms) btnClearRooms.disabled = plan.masterLocked;
+        if (btnRunSched) btnRunSched.disabled = plan.masterLocked;
+
+        const lockBadge = document.getElementById('schedMasterLockBadge');
+        const btnMasterLock = document.getElementById('btnToggleScheduleMasterLock');
+        if (lockBadge) lockBadge.classList.toggle('hidden', !plan.masterLocked);
+        if (btnMasterLock) {
+          btnMasterLock.textContent = plan.masterLocked
+            ? 'ปลดล็อกผัง (อนุญาตจัดใหม่)'
+            : 'ล็อกผังทั้งกระดาน (กันกดทับทั้งตารางและกรรมการ)';
+          btnMasterLock.className = plan.masterLocked
+            ? 'px-3 py-1.5 rounded-lg border border-slate-900 bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold shrink-0 transition cursor-pointer'
+            : 'px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-heading text-xs font-semibold shrink-0 transition cursor-pointer';
+        }
+        renderScheduleHistoryList();
+      }
+    }
+
+    const publicScopeTag = document.getElementById('schedulePublicScopeTag');
+    if (publicScopeTag) {
+      if (isAdmin) {
+        const isSchedPublic = isFeatureOpenToPublic('schedule');
+        publicScopeTag.classList.remove('hidden');
+        publicScopeTag.textContent = isSchedPublic
+          ? 'คนทั่วไปก็เห็นส่วนนี้'
+          : 'เฉพาะแอดมินเห็น (ยังไม่เปิดสาธารณะ)';
+        publicScopeTag.className = isSchedPublic
+          ? 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200'
+          : 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-amber-50 text-amber-800 border border-amber-200';
+      } else {
+        publicScopeTag.classList.add('hidden');
+      }
+    }
+
+    const dayFilterEl = document.getElementById('schedViewDayFilter');
+    if (dayFilterEl) {
+      const prevDayVal = dayFilterEl.value || 'ALL';
+      dayFilterEl.innerHTML =
+        '<option value="ALL">ทุกวันแข่งขัน (' +
+        plan.days.length +
+        ' วัน)</option>' +
+        plan.days
+          .map(function (d, i) {
+            return '<option value="' + escapeHtml(d.id) + '">วันที่ ' + (i + 1) + ': ' + escapeHtml(d.label) + '</option>';
+          })
+          .join('');
+      if (plan.days.some((d) => d.id === prevDayVal)) dayFilterEl.value = prevDayVal;
+      else dayFilterEl.value = 'ALL';
+    }
+
+    const subtitleEl = document.getElementById('schedulePublicSubtitle');
+    if (subtitleEl) {
+      subtitleEl.textContent = blurVenue
+        ? 'กำหนดวันและเวลาแข่งขัน (จบภายในวันเดียว) • สถานที่/ห้องสอบ: รอประกาศห้องสอบเพิ่มเติม'
+        : 'ตรวจสอบวัน เวลา และห้องสอบ ณ ' + (plan.building || 'สนามแข่งขัน');
+    }
+
+    document.querySelectorAll('.sched-subview-btn').forEach(function (btn) {
+      const isAct = btn.getAttribute('data-schedule-subview') === (state.scheduleSubview || 'timeline');
+      btn.className = isAct
+        ? 'sched-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-white text-slate-900 shadow-2xs transition cursor-pointer'
+        : 'sched-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer';
+    });
+
+    const conflicts = analyzeScheduleConflicts();
+    const conflictBanner = document.getElementById('scheduleConflictBanner');
+    const clashCompSet = new Set();
+    conflicts.roomClashes.forEach((rc) => rc.compIds.forEach((id) => clashCompSet.add(id)));
+    conflicts.judgeClashes.forEach((jc) => jc.compIds.forEach((id) => clashCompSet.add(id)));
+
+    if (conflictBanner) {
+      const allocTotal = Object.keys(plan.allocations || {}).length;
+      if (allocTotal === 0) {
+        conflictBanner.innerHTML =
+          '<span class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-heading font-medium">ยังไม่ได้กดคำนวณจัดตาราง • กดปุ่มขวาเพื่อประมวลผล</span>';
+      } else {
+        conflictBanner.innerHTML =
+          '<span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-heading font-medium">จัดแล้ว ' +
+          allocTotal +
+          ' รายการ</span>' +
+          '<span class="px-2.5 py-1 rounded-lg ' +
+          (conflicts.roomClashes.length ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-slate-100 text-slate-700') +
+          ' font-heading font-medium">ห้องซ้ำช่วงเวลา: ' +
+          conflicts.roomClashes.length +
+          ' จุด</span>' +
+          '<span class="px-2.5 py-1 rounded-lg ' +
+          (conflicts.judgeClashes.length ? 'bg-rose-50 text-rose-800 border border-rose-200' : 'bg-slate-100 text-slate-700') +
+          ' font-heading font-medium">กรรมการชน: ' +
+          conflicts.judgeClashes.length +
+          ' จุด</span>';
+      }
+    }
+
+    renderScheduleClashesResolverBox(conflicts, plan, isAdmin);
+
+    const entries = getScheduleViewEntries();
+    const statsEl = document.getElementById('scheduleSummaryStats');
+    if (statsEl) {
+      const areaCnt = new Set(entries.map((e) => e.comp.learning_area)).size;
+      const dayCardsHtml = plan.days
+        .slice(0, 2)
+        .map(function (d, i) {
+          const cnt = entries.filter((e) => e.alloc && e.alloc.dayId === d.id).length;
+          const cls = i === 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-indigo-50 border-indigo-200 text-indigo-700';
+          const numCls = i === 0 ? 'text-blue-900' : 'text-indigo-900';
+          return (
+            '<div class="p-3 rounded-xl border ' +
+            cls +
+            '"><div>วันที่ ' +
+            (i + 1) +
+            ' (' +
+            escapeHtml(d.label) +
+            ')</div><div class="text-base font-bold font-heading ' +
+            numCls +
+            '">' +
+            cnt +
+            ' รายการ</div></div>'
+          );
+        })
+        .join('');
+      const thirdCardHtml =
+        plan.days.length > 2
+          ? '<div class="p-3 rounded-xl bg-violet-50 border border-violet-200"><div class="text-violet-700">วันอื่น ๆ (วันที่ 3–' +
+            plan.days.length +
+            ')</div><div class="text-base font-bold font-heading text-violet-900">' +
+            entries.filter((e) => e.alloc && !['D1', 'D2'].includes(e.alloc.dayId)).length +
+            ' รายการ</div></div>'
+          : '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200"><div class="text-emerald-700">ครอบคลุมหมวดกิจกรรม</div><div class="text-base font-bold font-heading text-emerald-900">' +
+            areaCnt +
+            ' หมวด</div></div>';
+
+      statsEl.innerHTML =
+        '<div class="p-3 rounded-xl bg-slate-50 border border-slate-200"><div class="text-slate-500">รายการที่แสดง</div><div class="text-base font-bold font-heading text-slate-900">' +
+        entries.length +
+        ' รายการ</div></div>' +
+        dayCardsHtml +
+        thirdCardHtml;
+    }
+
+    const container = document.getElementById('scheduleContentContainer');
+    if (!container) return;
+    if (entries.length === 0) {
+      container.innerHTML =
+        '<div class="py-10 text-center text-slate-400 text-sm border border-dashed border-slate-200 rounded-xl">ยังไม่มีรายการแข่งขันหรือยังไม่พบรายการตามตัวกรอง</div>';
+      return;
+    }
+
+    const allPresetSlots = getScheduleSlotDefs('auto_rules');
+    const renderVenueBadge = function (alloc) {
+      if (!alloc) return '<span class="text-slate-400 text-xs">-</span>';
+      if (blurVenue) {
+        if (isAdmin) {
+          return (
+            '<span class="inline-flex items-center gap-1.5 text-xs text-slate-600">' +
+            '<span class="blur-[3px] select-none">' +
+            escapeHtml(alloc.room || 'ยังไม่ระบุห้องสอบ') +
+            '</span>' +
+            '<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-heading">เบลอสาธารณะ</span>' +
+            '</span>'
+          );
+        }
+        return '<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[11px] font-heading">รอประกาศสถานที่ / ห้องสอบ</span>';
+      }
+      if (!alloc.room) {
+        return '<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[11px] font-heading">ยังไม่ระบุห้องสอบ</span>';
+      }
+      return '<span class="text-xs font-medium text-slate-800">' + escapeHtml(alloc.room) + '</span>';
+    };
+
+    const renderAdminInlineControls = function (c, alloc) {
+      if (!isAdmin || !alloc) return '';
+      const isRowLocked = Boolean(alloc.locked) || plan.masterLocked;
+      const dayOpts = plan.days
+        .map(
+          (d, i) =>
+            '<option value="' +
+            escapeHtml(d.id) +
+            '"' +
+            (alloc.dayId === d.id ? ' selected' : '') +
+            '>วันที่ ' +
+            (i + 1) +
+            ': ' +
+            escapeHtml(d.label) +
+            '</option>'
+        )
+        .join('');
+      const hasPresetMatch = allPresetSlots.some((s) => s.code === alloc.slotCode && s.label === alloc.timeText);
+      const slotOpts =
+        (hasPresetMatch
+          ? ''
+          : '<option value="CUSTOM" selected>' + escapeHtml(alloc.timeText || 'เวลาที่กำหนดเอง') + '</option>') +
+        allPresetSlots
+          .map(
+            (s) =>
+              '<option value="' +
+              escapeHtml(s.code) +
+              '"' +
+              (alloc.slotCode === s.code && s.label === alloc.timeText ? ' selected' : '') +
+              '>' +
+              escapeHtml(s.label) +
+              '</option>'
+          )
+          .join('');
+      const roomOpts =
+        '<option value=""' +
+        (!alloc.room ? ' selected' : '') +
+        '>-- ยังไม่ระบุห้อง --</option>' +
+        (plan.rooms || [])
+          .map((rm) => '<option value="' + escapeHtml(rm) + '"' + (alloc.room === rm ? ' selected' : '') + '>' + escapeHtml(rm) + '</option>')
+          .join('');
+      return (
+        '<div class="flex flex-wrap items-center gap-1.5 mt-1.5">' +
+        '<select data-sched-edit-day="' + escapeHtml(c.comp_id) + '" ' + (isRowLocked ? 'disabled ' : '') + 'class="rounded border border-slate-300 bg-white disabled:bg-slate-100 px-2 py-1 text-[11px]">' + dayOpts + '</select>' +
+        '<select data-sched-edit-slot="' + escapeHtml(c.comp_id) + '" ' + (isRowLocked ? 'disabled ' : '') + 'class="rounded border border-slate-300 bg-white disabled:bg-slate-100 px-2 py-1 text-[11px]">' + slotOpts + '</select>' +
+        '<select data-sched-edit-room="' + escapeHtml(c.comp_id) + '" ' + (isRowLocked ? 'disabled ' : '') + 'class="rounded border border-slate-300 bg-white disabled:bg-slate-100 px-2 py-1 text-[11px] ' + (blurVenue ? 'opacity-70' : '') + '">' + roomOpts + '</select>' +
+        '<button type="button" data-open-schedule="' + escapeHtml(c.comp_id) + '" ' + (isRowLocked ? 'disabled ' : '') + 'class="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-45 text-slate-700 font-heading text-[11px] cursor-pointer" title="กรอกช่วงเวลา/ห้องแบบกำหนดเอง">แก้เวลาเอง</button>' +
+        '<button type="button" data-sched-toggle-lock="' +
+        escapeHtml(c.comp_id) +
+        '" ' +
+        (plan.masterLocked ? 'disabled ' : '') +
+        'class="inline-flex items-center gap-1 px-2 py-1 rounded border font-heading text-[11px] cursor-pointer ' +
+        (alloc.locked
+          ? 'border-slate-900 bg-slate-900 text-white'
+          : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-700') +
+        '">' +
+        (alloc.locked ? 'ล็อกอยู่ (คงเวลาและกรรมการ)' : 'ล็อกรายการนี้') +
+        '</button>' +
+        '</div>'
+      );
+    };
+
+    const subview = state.scheduleSubview || 'timeline';
+    if (subview === 'by-comp') {
+      const areaGroups = {};
+      entries.forEach(function (e) {
+        const ak = e.comp.learning_area || 'ไม่ระบุหมวด';
+        if (!areaGroups[ak]) areaGroups[ak] = [];
+        areaGroups[ak].push(e);
+      });
+      container.innerHTML = Object.entries(areaGroups)
+        .sort((a, b) => parseFloat(getAreaPrefixNum(a[0]) || '999') - parseFloat(getAreaPrefixNum(b[0]) || '999'))
+        .map(function (grp, gIdx) {
+          const rows = grp[1]
+            .map(function (e, iIdx) {
+              const a = e.alloc;
+              const isClash = clashCompSet.has(e.comp.comp_id);
+              return (
+                '<div class="p-3 rounded-xl border ' +
+                (isClash ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-white') +
+                ' flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
+                '<div class="min-w-0 space-y-0.5">' +
+                '<div class="font-heading font-semibold text-sm text-slate-900">' +
+                (gIdx + 1) + '.' + (iIdx + 1) + ' ' + escapeHtml(e.comp.comp_name) +
+                ' <span class="text-xs font-normal text-slate-600">(' + escapeHtml(e.comp.level) + ')</span>' +
+                (isClash ? ' <span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-heading">เวลา/ห้องชน</span>' : '') +
+                (a && a.locked ? ' <span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-heading">ล็อกไว้</span>' : '') +
+                '</div>' +
+                '<div class="text-xs text-slate-600">' +
+                (a ? escapeHtml(a.dateText + ' • ' + a.timeText) : 'ยังไม่ได้จัดเวลา (รายการบาย/รอจัด)') +
+                ' • ' +
+                e.teamCount +
+                ' โรงเรียน</div>' +
+                renderAdminInlineControls(e.comp, a) +
+                '</div>' +
+                '<div class="shrink-0">' +
+                renderVenueBadge(a) +
+                '</div>' +
+                '</div>'
+              );
+            })
+            .join('');
+          return (
+            '<div class="space-y-2">' +
+            '<div class="px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-between">' +
+            '<h3 class="font-heading font-bold text-sm text-slate-900">' + (gIdx + 1) + '. ' + escapeHtml(stripAreaNumberPrefix(grp[0])) + '</h3>' +
+            '<span class="text-xs font-heading text-slate-600">' + grp[1].length + ' รายการ</span>' +
+            '</div>' +
+            '<div class="space-y-2">' + rows + '</div>' +
+            '</div>'
+          );
+        })
+        .join('');
+    } else if (subview === 'by-school') {
+      const schFilterVal = (document.getElementById('schedViewSchoolFilter') || {}).value || 'ALL';
+      const targetSchool = schFilterVal !== 'ALL' ? schFilterVal : (state.schools[0] && state.schools[0].school_name) || '';
+      const schEntries = entries.filter((e) => e.schools.includes(targetSchool));
+      const sorted = schEntries.slice().sort(function (a, b) {
+        const ivA = a.alloc ? getActiveIntervalsFromAlloc(a.alloc, a.comp) : null;
+        const ivB = b.alloc ? getActiveIntervalsFromAlloc(b.alloc, b.comp) : null;
+        if (ivA && ivB) {
+          if (ivA.dayId !== ivB.dayId) return ivA.dayId.localeCompare(ivB.dayId);
+          if (ivA.startMin !== ivB.startMin) return ivA.startMin - ivB.startMin;
+        }
+        const ka = (a.alloc && a.alloc.dayId) || 'ZZ';
+        const kb = (b.alloc && b.alloc.dayId) || 'ZZ';
+        return ka.localeCompare(kb) || String(a.comp.comp_id).localeCompare(String(b.comp.comp_id));
+      });
+      container.innerHTML =
+        '<div class="p-3 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-blue-950 font-heading">' +
+        'ตารางคิวแข่งขันของ: <strong>' + escapeHtml(targetSchool) + '</strong> (' + sorted.length + ' รายการ • เลือกเปลี่ยนโรงเรียนได้ที่ช่อง "คิวของโรงเรียน" ด้านบน)' +
+        '</div>' +
+        (sorted.length === 0
+          ? '<div class="py-8 text-center text-slate-400 text-sm">โรงเรียนนี้ยังไม่มีรายการที่แสดงตามตัวกรอง</div>'
+          : '<div class="overflow-x-auto border border-slate-200 rounded-xl"><table class="w-full text-xs sm:text-sm text-left"><thead class="bg-slate-50 text-slate-500 font-heading border-b border-slate-200"><tr><th class="py-2.5 px-3">วัน / เวลา</th><th class="py-2.5 px-3">หมวดกิจกรรม</th><th class="py-2.5 px-3">รายการแข่งขัน (ระดับ)</th><th class="py-2.5 px-3">สถานที่ / ห้องสอบ</th></tr></thead><tbody class="divide-y divide-slate-100">' +
+            sorted
+              .map(function (e) {
+                const a = e.alloc;
+                return (
+                  '<tr class="hover:bg-slate-50"><td class="py-2.5 px-3 whitespace-nowrap font-heading font-medium text-slate-900">' +
+                  (a ? escapeHtml(a.dateText + ' • ' + a.timeText) : 'รอจัดเวลา') +
+                  '</td><td class="py-2.5 px-3 text-xs text-slate-600">' +
+                  escapeHtml(stripAreaNumberPrefix(e.comp.learning_area)) +
+                  '</td><td class="py-2.5 px-3 font-heading font-semibold text-slate-900">' +
+                  escapeHtml(e.comp.comp_name) +
+                  ' (' +
+                  escapeHtml(e.comp.level) +
+                  ')</td><td class="py-2.5 px-3">' +
+                  renderVenueBadge(a) +
+                  '</td></tr>'
+                );
+              })
+              .join('') +
+            '</tbody></table></div>');
+    } else {
+      const groupMap = {};
+      entries.forEach(function (e) {
+        if (!e.alloc) {
+          if (!groupMap.UNSCHEDULED) groupMap.UNSCHEDULED = { sortKey: 'ZZZ', headTitle: 'รายการบาย / ยังไม่กำหนดเวลา', items: [] };
+          groupMap.UNSCHEDULED.items.push(e);
+          return;
+        }
+        const a = e.alloc;
+        const iv = getActiveIntervalsFromAlloc(a, e.comp);
+        const dayOrd = plan.days.findIndex((d) => d.id === iv.dayId);
+        const gk =
+          String(dayOrd >= 0 ? dayOrd : 99).padStart(2, '0') +
+          ':' +
+          String(iv.startMin).padStart(4, '0') +
+          ':' +
+          String(iv.endMin).padStart(4, '0') +
+          ':' +
+          a.timeText;
+        if (!groupMap[gk]) {
+          groupMap[gk] = {
+            sortKey: gk,
+            headTitle: (a.dateText || iv.dayId) + ' • ' + (a.timeText || ''),
+            items: []
+          };
+        }
+        groupMap[gk].items.push(e);
+      });
+
+      const blocks = Object.values(groupMap)
+        .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+        .map(function (grp) {
+          const list = grp.items;
+          const rows = list
+            .map(function (e) {
+              const a = e.alloc;
+              const isClash = clashCompSet.has(e.comp.comp_id);
+              return (
+                '<div class="p-3 rounded-lg border ' +
+                (isClash ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-white') +
+                ' flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
+                '<div class="min-w-0">' +
+                '<div class="flex flex-wrap items-center gap-1.5">' +
+                '<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-heading text-[11px]">' +
+                escapeHtml(stripAreaNumberPrefix(e.comp.learning_area)) +
+                '</span>' +
+                '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-heading text-[11px]">' +
+                escapeHtml(e.comp.level) +
+                '</span>' +
+                '<span class="text-[11px] text-slate-500">' +
+                e.teamCount +
+                ' โรงเรียน</span>' +
+                (isClash ? '<span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-heading">จุดชน</span>' : '') +
+                (a && a.locked ? '<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-heading">ล็อกไว้</span>' : '') +
+                '</div>' +
+                '<div class="font-heading font-semibold text-sm text-slate-900 mt-1">' +
+                escapeHtml(e.comp.comp_name) +
+                '</div>' +
+                renderAdminInlineControls(e.comp, a) +
+                '</div>' +
+                '<div class="shrink-0">' +
+                renderVenueBadge(a) +
+                '</div>' +
+                '</div>'
+              );
+            })
+            .join('');
+          return (
+            '<div class="space-y-2">' +
+            '<div class="px-3.5 py-2 rounded-lg bg-slate-900 text-white flex items-center justify-between text-xs font-heading">' +
+            '<span class="font-semibold">' + escapeHtml(grp.headTitle) + '</span>' +
+            '<span class="text-slate-300">' + list.length + ' รายการ</span>' +
+            '</div>' +
+            '<div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5">' +
+            rows +
+            '</div>' +
+            '</div>'
+          );
+        });
+      container.innerHTML = blocks.join('') || '<div class="py-8 text-center text-slate-400 text-sm">ไม่พบข้อมูล</div>';
+    }
+
+    if (isAdmin) {
+      const handleInlineChange = function (cid) {
+        if (plan.masterLocked) return;
+        const a = plan.allocations[cid];
+        if (!a || a.locked) return;
+        const dSel = container.querySelector('[data-sched-edit-day="' + cid + '"]');
+        const sSel = container.querySelector('[data-sched-edit-slot="' + cid + '"]');
+        const rSel = container.querySelector('[data-sched-edit-room="' + cid + '"]');
+        if (dSel) {
+          a.dayId = dSel.value;
+          const foundD = plan.days.find((d) => d.id === a.dayId);
+          a.dateText = foundD ? foundD.label : a.dayId;
+        }
+        if (sSel && sSel.value !== 'CUSTOM') {
+          a.slotCode = sSel.value;
+          const foundS = allPresetSlots.find((x) => x.code === a.slotCode);
+          if (foundS) {
+            a.timeText = foundS.label;
+            a.startMin = foundS.startMin;
+            a.endMin = foundS.endMin;
+          }
+        }
+        if (rSel) a.room = rSel.value;
+        a.slotKey = a.dayId + '-' + (a.slotCode || 'CUSTOM');
+        syncSchedulePlanToCompetitions();
+        saveState();
+        renderAll();
+        showToast('ปรับกำหนดการของรายการเรียบร้อย (ตรวจเช็กจุดชนให้แล้ว)', 'info');
+      };
+      container.querySelectorAll('[data-sched-edit-day], [data-sched-edit-slot], [data-sched-edit-room]').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          const cid =
+            sel.getAttribute('data-sched-edit-day') ||
+            sel.getAttribute('data-sched-edit-slot') ||
+            sel.getAttribute('data-sched-edit-room');
+          if (cid) handleInlineChange(cid);
+        });
+      });
+      container.querySelectorAll('[data-sched-toggle-lock]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          if (plan.masterLocked) {
+            showToast('ผังทั้งกระดานถูกล็อกอยู่ กรุณาปลดล็อกด้านบนก่อน', 'warning');
+            return;
+          }
+          const cid = btn.getAttribute('data-sched-toggle-lock');
+          const a = plan.allocations[cid];
+          if (!a) return;
+          a.locked = !a.locked;
+          saveState();
+          renderScheduleTab();
+          showToast(
+            a.locked
+              ? 'ล็อกรายการ "' + cid + '" แล้ว (ระบบจะคงทั้งวัน/เวลาและกรรมการไว้)'
+              : 'ปลดล็อกรายการ "' + cid + '" แล้ว',
+            'info'
+          );
+        });
+      });
+    }
+  }
+
+  function exportSchedulePdfWindow() {
+    const entries = getScheduleViewEntries();
+    if (entries.length === 0) {
+      showToast('ไม่มีรายการสำหรับพิมพ์กำหนดการ', 'warning');
+      return;
+    }
+    const plan = getEffectiveSchedulePlan();
+    const blurVenue = plan.blurVenue !== false && !isEffectiveAdmin();
+    const rowsHtml = entries
+      .map(function (e, idx) {
+        const a = e.alloc;
+        const venueTxt = !a ? '-' : blurVenue ? 'รอประกาศสถานที่ / ห้องสอบ' : a.room || 'ยังไม่ระบุห้องสอบ';
+        return (
+          '<tr>' +
+          '<td style="text-align:center;">' + (idx + 1) + '</td>' +
+          '<td>' + escapeHtml(stripAreaNumberPrefix(e.comp.learning_area)) + '</td>' +
+          '<td>' + escapeHtml(e.comp.comp_name + ' (' + e.comp.level + ')') + '</td>' +
+          '<td>' + escapeHtml(a ? a.dateText + ' ' + a.timeText : 'รอจัดเวลา') + '</td>' +
+          '<td>' + escapeHtml(venueTxt) + '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+    const w = window.open('', '_blank', 'width=980,height=800');
+    if (!w) {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป โปรดอนุญาต Pop-up', 'warning');
+      return;
+    }
+    w.document.open();
+    w.document.write(
+      '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>กำหนดการแข่งขัน - ศิลปหัตถกรรม ครั้งที่ 74</title><style>' +
+        "@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');" +
+        "@page { size: A4 portrait; margin: 16mm; } body { font-family: 'TH Sarabun New', 'Sarabun', sans-serif; font-size: 14pt; color: #000; }" +
+        'h2 { text-align: center; margin: 0 0 10px; font-size: 16pt; } table { width: 100%; border-collapse: collapse; }' +
+        'th, td { border: 1px solid #444; padding: 4px 6px; vertical-align: top; } th { background: #f1f5f9; }' +
+        '@media print { .no-print { display: none; } }' +
+        '</style></head><body>' +
+        '<div class="no-print" style="text-align:right;margin-bottom:10px;"><button onclick="window.print()" style="padding:6px 14px;cursor:pointer;">พิมพ์ / บันทึก PDF</button></div>' +
+        '<h2>กำหนดการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 • กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</h2>' +
+        '<table><thead><tr><th style="width:45px;">ที่</th><th style="width:20%;">หมวดกิจกรรม</th><th>รายการแข่งขัน</th><th style="width:23%;">วันและเวลา</th><th style="width:20%;">สถานที่ / ห้องสอบ</th></tr></thead><tbody>' +
+        rowsHtml +
+        '</tbody></table></body></html>'
+    );
+    w.document.close();
+  }
+
+  async function exportScheduleExcel() {
+    const entries = getScheduleViewEntries();
+    if (entries.length === 0) {
+      showToast('ไม่มีรายการสำหรับส่งออก Excel', 'warning');
+      return;
+    }
+    let ExcelJS;
+    try {
+      ExcelJS = await loadExcelJs();
+    } catch (err) {
+      showToast('ไม่สามารถโหลดตัวสร้างไฟล์ Excel ได้: ' + (err.message || err), 'error');
+      return;
+    }
+    const plan = getEffectiveSchedulePlan();
+    const blurVenue = plan.blurVenue !== false && !isEffectiveAdmin();
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('กำหนดการแข่งขัน');
+    ws.getRow(1).values = ['ลำดับ', 'หมวดกิจกรรม', 'รายการแข่งขัน', 'ระดับชั้น', 'วันที่แข่งขัน', 'ช่วงเวลา', 'สถานที่ / ห้องสอบ', 'จำนวนโรงเรียน'];
+    ws.getRow(1).eachCell((c) => {
+      c.font = { name: 'TH Sarabun New', size: 14, bold: true };
+    });
+    entries.forEach(function (e, i) {
+      const a = e.alloc;
+      const roomTxt = !a ? '-' : blurVenue ? 'รอประกาศสถานที่ / ห้องสอบ' : a.room || 'ยังไม่ระบุห้องสอบ';
+      ws.getRow(i + 2).values = [
+        i + 1,
+        stripAreaNumberPrefix(e.comp.learning_area),
+        e.comp.comp_name,
+        e.comp.level,
+        a ? a.dateText : '-',
+        a ? a.timeText : '-',
+        roomTxt,
+        e.teamCount
+      ];
+    });
+    ws.columns = [{ width: 8 }, { width: 26 }, { width: 42 }, { width: 14 }, { width: 16 }, { width: 20 }, { width: 26 }, { width: 14 }];
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const aEl = document.createElement('a');
+    aEl.href = url;
+    aEl.download = 'กำหนดการและสถานที่_ศิลปหัตถกรรม74.xlsx';
+    document.body.appendChild(aEl);
+    aEl.click();
+    aEl.remove();
+    URL.revokeObjectURL(url);
+    showToast('ส่งออกตารางกำหนดการ (.xlsx) เรียบร้อยแล้ว', 'success');
+  }
+
+  function applyAdminSettingsCategoryFilter(cat) {
+    const activeCat = cat || 'ALL';
+    state.adminSettingsCategory = activeCat;
+    document.querySelectorAll('.admin-cat-btn').forEach(function (btn) {
+      const isAct = btn.getAttribute('data-admin-cat-btn') === activeCat;
+      btn.className = isAct
+        ? 'admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white transition cursor-pointer'
+        : 'admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer';
+    });
+    document.querySelectorAll('#tab-settings .admin-setting-card').forEach(function (card) {
+      const cCat = card.getAttribute('data-admin-cat') || '';
+      const show = activeCat === 'ALL' || cCat === activeCat;
+      card.classList.toggle('hidden', !show);
+    });
+    const leftCol = document.getElementById('adminSettingsLeftCol');
+    const rightCol = document.getElementById('adminSettingsRightCol');
+    if (leftCol && rightCol) {
+      const leftVis = Array.from(leftCol.querySelectorAll('.admin-setting-card')).some((el) => !el.classList.contains('hidden'));
+      const rightVis = Array.from(rightCol.querySelectorAll('.admin-setting-card')).some((el) => !el.classList.contains('hidden'));
+      leftCol.classList.toggle('hidden', !leftVis);
+      rightCol.classList.toggle('hidden', !rightVis);
+      leftCol.classList.toggle('lg:col-span-6', leftVis && rightVis);
+      leftCol.classList.toggle('lg:col-span-12', leftVis && !rightVis);
+      rightCol.classList.toggle('lg:col-span-6', leftVis && rightVis);
+      rightCol.classList.toggle('lg:col-span-12', !leftVis && rightVis);
+    }
+  }
+
   function renderAll() {
     updateAdminAndStatusUI();
+    applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'ALL');
     renderDashboardTab();
     renderSchoolViewTab();
     renderCompetitionViewTab();
+    renderScheduleTab();
     renderJudgesTab();
     renderResultsTab();
     renderCertificatesTab();
@@ -13114,12 +16475,13 @@
       });
     });
 
-    // Admin Login / Logout Toggle
+    // Admin Login / Logout Toggle & Preview-as-Public Toggle
     const btnAdminToggle = document.getElementById('btnAdminToggle');
     if (btnAdminToggle) {
       btnAdminToggle.addEventListener('click', function () {
         if (state.isAdmin) {
           state.isAdmin = false;
+          state.previewAsPublic = false;
           state.adminPin = '';
           state.adminQuickDeleteEnabled = false;
           sessionStorage.removeItem(ADMIN_SESSION_KEY);
@@ -13133,6 +16495,34 @@
         } else {
           openAdminModal();
         }
+      });
+    }
+
+    const togglePublicPreviewMode = function (forceVal) {
+      if (!state.isAdmin) return;
+      state.previewAsPublic = typeof forceVal === 'boolean' ? forceVal : !state.previewAsPublic;
+      if (state.previewAsPublic && state.activeTab === 'settings') {
+        switchTab('dashboard');
+      } else {
+        renderAll();
+      }
+      showToast(
+        state.previewAsPublic
+          ? 'สลับเป็นมุมมองคนทั่วไปแล้ว (ซ่อนเครื่องมือแอดมินชั่วคราว)'
+          : 'กลับมาที่โหมดผู้ดูแลระบบ (Admin Mode) แล้ว',
+        'info'
+      );
+    };
+    const btnTogglePublicPreview = document.getElementById('btnTogglePublicPreview');
+    if (btnTogglePublicPreview) {
+      btnTogglePublicPreview.addEventListener('click', function () {
+        togglePublicPreviewMode();
+      });
+    }
+    const btnExitPublicPreview = document.getElementById('btnExitPublicPreview');
+    if (btnExitPublicPreview) {
+      btnExitPublicPreview.addEventListener('click', function () {
+        togglePublicPreviewMode(false);
       });
     }
 
@@ -14118,19 +17508,37 @@
     }
 
     const btnAutoJudgePreview = document.getElementById('btnAutoJudgePreview');
+    const runPreviewCalculation = function () {
+      const mode = (document.getElementById('autoJudgeModeSelect') || {}).value || 'B';
+      const allowExtra = Boolean((document.getElementById('autoJudgeExtraSpecialists') || {}).checked);
+      const includeBye = Boolean((document.getElementById('autoJudgeIncludeBye') || {}).checked);
+      const plan = computeAutoJudgeAllocation({
+        mode: mode,
+        allowExtraSpecialists: allowExtra,
+        includeBye: includeBye
+      });
+      state.autoJudgePreviewPlan = plan;
+      renderAutoJudgePreview(plan);
+    };
     if (btnAutoJudgePreview) {
       btnAutoJudgePreview.addEventListener('click', function () {
         if (!state.isAdmin) return;
-        const mode = (document.getElementById('autoJudgeModeSelect') || {}).value || 'B';
-        const allowExtra = Boolean((document.getElementById('autoJudgeExtraSpecialists') || {}).checked);
-        const includeBye = Boolean((document.getElementById('autoJudgeIncludeBye') || {}).checked);
-        const plan = computeAutoJudgeAllocation({
-          mode: mode,
-          allowExtraSpecialists: allowExtra,
-          includeBye: includeBye
-        });
-        state.autoJudgePreviewPlan = plan;
-        renderAutoJudgePreview(plan);
+        if (getEffectiveSchedulePlan().masterLocked) {
+          showToast('ผังทั้งกระดานถูกล็อกถาวรไว้ กรุณาปลดล็อกที่หน้า "สถานที่และกำหนดการ" ก่อนจัดสรรกรรมการใหม่', 'warning');
+          return;
+        }
+        const existingCount = (state.judges || []).length;
+        if (existingCount > 0) {
+          openJudgeRegenConfirmModal(
+            'ยืนยันการคำนวณผังกรรมการใหม่',
+            'ขณะนี้มีรายชื่อกรรมการอยู่แล้ว ' + existingCount + ' ตำแหน่ง การคำนวณใหม่จะเปลี่ยนชุดพรีวิว (ชุดจริงในเว็บยังไม่เปลี่ยนจนกว่าจะกดบันทึก)',
+            function () {
+              runPreviewCalculation();
+            }
+          );
+          return;
+        }
+        runPreviewCalculation();
       });
     }
 
@@ -14145,16 +17553,404 @@
     const btnAutoJudgeApplyLocal = document.getElementById('btnAutoJudgeApplyLocal');
     if (btnAutoJudgeApplyLocal) {
       btnAutoJudgeApplyLocal.addEventListener('click', function () {
-        applyAutoJudgePlan(false);
+        if (!state.isAdmin) return;
+        if (getEffectiveSchedulePlan().masterLocked) {
+          showToast('ผังทั้งกระดานถูกล็อกถาวรไว้ กรุณาปลดล็อกก่อนบันทึกทับรายชื่อกรรมการ', 'warning');
+          return;
+        }
+        const existingCount = (state.judges || []).length;
+        if (existingCount > 0) {
+          openJudgeRegenConfirmModal(
+            'ยืนยันการแทนที่รายชื่อกรรมการเดิม (ในเครื่อง)',
+            'ขณะนี้มีรายชื่อกรรมการอยู่แล้ว ' + existingCount + ' ตำแหน่ง ระบบจะบันทึกประวัติชุดเดิมไว้ให้กู้คืนได้ ก่อนแทนที่ด้วยผังใหม่',
+            function (note) {
+              applyAutoJudgePlan(false, note);
+            }
+          );
+          return;
+        }
+        applyAutoJudgePlan(false, 'จัดสรรชุดแรกเข้าในเครื่อง');
       });
     }
 
     const btnAutoJudgeSyncSheets = document.getElementById('btnAutoJudgeSyncSheets');
     if (btnAutoJudgeSyncSheets) {
       btnAutoJudgeSyncSheets.addEventListener('click', function () {
-        applyAutoJudgePlan(true);
+        if (!state.isAdmin) return;
+        if (getEffectiveSchedulePlan().masterLocked) {
+          showToast('ผังทั้งกระดานถูกล็อกถาวรไว้ กรุณาปลดล็อกก่อนส่งทับลง Google Sheets', 'warning');
+          return;
+        }
+        const existingCount = (state.judges || []).length;
+        if (existingCount > 0) {
+          openJudgeRegenConfirmModal(
+            'ยืนยันการแทนที่และบันทึกลง Google Sheets จริง',
+            'ขณะนี้มีรายชื่อกรรมการอยู่แล้ว ' + existingCount + ' ตำแหน่ง ระบบจะเก็บประวัติชุดเดิมไว้ และส่งรายชื่อใหม่ขึ้น Google Sheets',
+            function (note) {
+              applyAutoJudgePlan(true, note);
+            }
+          );
+          return;
+        }
+        applyAutoJudgePlan(true, 'จัดสรรชุดแรกและซิงก์ Google Sheets');
       });
     }
+
+    // 2-Step Judge Regen Confirm Modal Events
+    const judgeRegenNoteInput = document.getElementById('judgeRegenNoteInput');
+    const judgeRegenCodeInput = document.getElementById('judgeRegenCodeInput');
+    const btnSubmitJudgeRegenModal = document.getElementById('btnSubmitJudgeRegenModal');
+    const syncRegenSubmitState = function () {
+      if (!judgeRegenNoteInput || !judgeRegenCodeInput || !btnSubmitJudgeRegenModal) return;
+      const okNote = judgeRegenNoteInput.value.trim().length > 0;
+      const okCode = judgeRegenCodeInput.value.trim() === 'ยืนยันจัดใหม่';
+      btnSubmitJudgeRegenModal.disabled = !(okNote && okCode);
+    };
+    if (judgeRegenNoteInput) judgeRegenNoteInput.addEventListener('input', syncRegenSubmitState);
+    if (judgeRegenCodeInput) judgeRegenCodeInput.addEventListener('input', syncRegenSubmitState);
+    const btnCloseJudgeRegenModal = document.getElementById('btnCloseJudgeRegenModal');
+    const btnCancelJudgeRegenModal = document.getElementById('btnCancelJudgeRegenModal');
+    if (btnCloseJudgeRegenModal) btnCloseJudgeRegenModal.addEventListener('click', closeJudgeRegenConfirmModal);
+    if (btnCancelJudgeRegenModal) btnCancelJudgeRegenModal.addEventListener('click', closeJudgeRegenConfirmModal);
+    const judgeRegenConfirmForm = document.getElementById('judgeRegenConfirmForm');
+    if (judgeRegenConfirmForm) {
+      judgeRegenConfirmForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const note = judgeRegenNoteInput ? judgeRegenNoteInput.value.trim() : '';
+        const cb = state.pendingJudgeRegenAction;
+        closeJudgeRegenConfirmModal();
+        if (typeof cb === 'function') cb(note);
+      });
+    }
+
+    // On-site Judge Replacement Modal Events
+    const btnCloseJudgeReplaceModal = document.getElementById('btnCloseJudgeReplaceModal');
+    const btnCancelJudgeReplaceModal = document.getElementById('btnCancelJudgeReplaceModal');
+    if (btnCloseJudgeReplaceModal) btnCloseJudgeReplaceModal.addEventListener('click', closeJudgeReplaceModal);
+    if (btnCancelJudgeReplaceModal) btnCancelJudgeReplaceModal.addEventListener('click', closeJudgeReplaceModal);
+
+    const judgeReplacePoolSelect = document.getElementById('judgeReplacePoolSelect');
+    if (judgeReplacePoolSelect) {
+      judgeReplacePoolSelect.addEventListener('change', function () {
+        const opt = judgeReplacePoolSelect.options[judgeReplacePoolSelect.selectedIndex];
+        if (!opt || !opt.value) return;
+        document.getElementById('judgeReplacePrefix').value = opt.getAttribute('data-prefix') || 'นาย';
+        document.getElementById('judgeReplaceName').value = opt.getAttribute('data-name') || '';
+        const sch = opt.getAttribute('data-school') || '';
+        if (sch) document.getElementById('judgeReplaceSchool').value = sch;
+        checkJudgeReplaceConflicts();
+      });
+    }
+    ['judgeReplaceName', 'judgeReplaceSchool'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', checkJudgeReplaceConflicts);
+        el.addEventListener('change', checkJudgeReplaceConflicts);
+      }
+    });
+    const judgeReplaceForm = document.getElementById('judgeReplaceForm');
+    if (judgeReplaceForm) {
+      judgeReplaceForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!state.isAdmin) return;
+        const jId = document.getElementById('judgeReplaceTargetId').value;
+        const idx = (state.judges || []).findIndex((x) => x.judge_id === jId);
+        if (idx === -1) return;
+        const oldJ = state.judges[idx];
+        const newPrefix = document.getElementById('judgeReplacePrefix').value.trim();
+        const newName = document.getElementById('judgeReplaceName').value.trim();
+        const newSchool = document.getElementById('judgeReplaceSchool').value;
+        const newRole = document.getElementById('judgeReplaceRole').value;
+        const note = document.getElementById('judgeReplaceNote').value.trim();
+        if (!newName || !newSchool) return;
+
+        recordJudgeHistorySnapshot(
+          'เปลี่ยนตัวกรรมการหน้างาน',
+          '[' + oldJ.comp_id + '] ' + (oldJ.judge_name || '') + ' -> ' + newName + (note ? ' (' + note + ')' : ''),
+          state.judges || []
+        );
+
+        state.judges[idx] = Object.assign({}, oldJ, {
+          prefix: newPrefix,
+          judge_name: newName,
+          full_name: newName,
+          school_name: newSchool,
+          role: newRole
+        });
+        saveState();
+        closeJudgeReplaceModal();
+        renderAll();
+        showToast('เปลี่ยนตัวกรรมการหน้างานและบันทึกประวัติเรียบร้อยแล้ว', 'success');
+      });
+    }
+
+    const flattenPreviewPlanJudges = function () {
+      const plan = state.autoJudgePreviewPlan;
+      if (!plan || !plan.rows) return [];
+      const out = [];
+      plan.rows.forEach((r) => {
+        (r.judges || []).forEach((j) => out.push(j));
+      });
+      return out;
+    };
+
+    const btnAutoJudgePreviewPdf = document.getElementById('btnAutoJudgePreviewPdf');
+    if (btnAutoJudgePreviewPdf) {
+      btnAutoJudgePreviewPdf.addEventListener('click', function () {
+        const list = flattenPreviewPlanJudges();
+        openJudgesOfficialOrderPrintWindow(
+          list,
+          'ฉบับร่างจากพรีวิว (โหมด ' + ((state.autoJudgePreviewPlan && state.autoJudgePreviewPlan.mode) || 'B') + ')'
+        );
+      });
+    }
+
+    const btnAutoJudgePreviewExcel = document.getElementById('btnAutoJudgePreviewExcel');
+    if (btnAutoJudgePreviewExcel) {
+      btnAutoJudgePreviewExcel.addEventListener('click', function () {
+        exportJudgesOfficialOrderExcel(flattenPreviewPlanJudges());
+      });
+    }
+
+    document.querySelectorAll('.judge-subview-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.judgeSubview = btn.getAttribute('data-judge-subview') || 'by-comp';
+        renderJudgesTab();
+      });
+    });
+
+    const getSourceForJudgeExport = function () {
+      const filtered = getFilteredJudgesList(state.judges || []);
+      return filtered.length > 0 ? filtered : flattenPreviewPlanJudges();
+    };
+
+    const btnExportJudgesOrderPdf = document.getElementById('btnExportJudgesOrderPdf');
+    if (btnExportJudgesOrderPdf) {
+      btnExportJudgesOrderPdf.addEventListener('click', function () {
+        openJudgesOfficialOrderPrintWindow(getSourceForJudgeExport(), '');
+      });
+    }
+
+    const btnExportJudgesOrderExcel = document.getElementById('btnExportJudgesOrderExcel');
+    if (btnExportJudgesOrderExcel) {
+      btnExportJudgesOrderExcel.addEventListener('click', function () {
+        exportJudgesOfficialOrderExcel(getSourceForJudgeExport());
+      });
+    }
+
+    // Schedule & Venue Tab Events + Admin Category Organizer Events
+    document.querySelectorAll('.admin-cat-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyAdminSettingsCategoryFilter(btn.getAttribute('data-admin-cat-btn') || 'ALL');
+      });
+    });
+
+    document.querySelectorAll('[data-schedule-mode]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        setFeatureVisibility('schedule', btn.getAttribute('data-schedule-mode'));
+      });
+    });
+
+    const toggleBlurVenue = function (checked) {
+      if (!state.isAdmin) return;
+      const plan = getEffectiveSchedulePlan();
+      plan.blurVenue = Boolean(checked);
+      saveState();
+      renderAll();
+      showToast(
+        plan.blurVenue
+          ? 'ซ่อน/เบลอชื่อห้องและสถานที่ไว้ก่อน (ใช้กำหนดวัน-เวลาจัดกรรมการต่อได้)'
+          : 'เปิดแสดงชื่อห้องและสถานที่แข่งขันชัดเจนแล้ว',
+        'info'
+      );
+    };
+    const schedBlurCbEv = document.getElementById('schedBlurVenueCheckbox');
+    const settingsBlurCbEv = document.getElementById('settingsBlurVenueCheckbox');
+    if (schedBlurCbEv) schedBlurCbEv.addEventListener('change', function () { toggleBlurVenue(schedBlurCbEv.checked); });
+    if (settingsBlurCbEv) settingsBlurCbEv.addEventListener('change', function () { toggleBlurVenue(settingsBlurCbEv.checked); });
+
+    const btnToggleScheduleMasterLock = document.getElementById('btnToggleScheduleMasterLock');
+    if (btnToggleScheduleMasterLock) {
+      btnToggleScheduleMasterLock.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const plan = getEffectiveSchedulePlan();
+        if (plan.masterLocked) {
+          if (!window.confirm('ต้องการปลดล็อกผังทั้งกระดาน (เพื่อแก้ไขตาราง/จัดกรรมการใหม่) ใช่หรือไม่?')) return;
+          plan.masterLocked = false;
+          showToast('ปลดล็อกผังทั้งกระดานแล้ว', 'info');
+        } else {
+          plan.masterLocked = true;
+          showToast('ล็อกผังทั้งกระดานถาวรแล้ว (ป้องกันการกดคำนวณทับทั้งตารางและกรรมการ)', 'success');
+        }
+        saveState();
+        renderScheduleTab();
+      });
+    }
+
+    const btnAddSchedDay = document.getElementById('btnAddSchedDay');
+    if (btnAddSchedDay) {
+      btnAddSchedDay.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const plan = getEffectiveSchedulePlan();
+        if (plan.masterLocked) return;
+        const nextNum = plan.days.length + 1;
+        let nextIdNum = nextNum;
+        while (plan.days.some((d) => d.id === 'D' + nextIdNum)) nextIdNum++;
+        plan.days.push({ id: 'D' + nextIdNum, label: 'วันที่ ' + nextNum + ' (กำหนดวันที่)' });
+        saveState();
+        renderScheduleTab();
+      });
+    }
+
+    const btnPullSchedDaysFromTimeline = document.getElementById('btnPullSchedDaysFromTimeline');
+    if (btnPullSchedDaysFromTimeline) {
+      btnPullSchedDaysFromTimeline.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const plan = getEffectiveSchedulePlan();
+        if (plan.masterLocked) return;
+        const tlItems = getEffectiveTimelineItems();
+        const compStep =
+          tlItems.find((it) => String(it.title || '').includes('แข่งขัน')) ||
+          tlItems[tlItems.length - 1];
+        if (!compStep || !/^\d{4}-\d{2}-\d{2}$/.test(compStep.startDate || '')) {
+          showToast('ไม่พบวันที่แข่งขันใน Timeline (สามารถพิมพ์วันที่เองหรือกด "+ เพิ่มวัน" ได้เลย)', 'warning');
+          return;
+        }
+        const sDate = new Date(compStep.startDate + 'T00:00:00');
+        const eDate = new Date((/^\d{4}-\d{2}-\d{2}$/.test(compStep.endDate || '') ? compStep.endDate : compStep.startDate) + 'T00:00:00');
+        const extractedDays = [];
+        for (let dt = new Date(sDate), guard = 0; dt <= eDate && guard < 14; dt.setDate(dt.getDate() + 1), guard++) {
+          const iso =
+            dt.getFullYear() +
+            '-' +
+            String(dt.getMonth() + 1).padStart(2, '0') +
+            '-' +
+            String(dt.getDate()).padStart(2, '0');
+          extractedDays.push({
+            id: 'D' + (extractedDays.length + 1),
+            label: formatThaiTimelinePeriod(iso, iso) || iso
+          });
+        }
+        if (extractedDays.length > 0) {
+          plan.days = extractedDays;
+          saveState();
+          renderScheduleTab();
+          showToast('ดึงวันแข่งขันจาก Timeline สำเร็จ (' + extractedDays.length + ' วัน)', 'success');
+        }
+      });
+    }
+
+    const btnClearSchedRooms = document.getElementById('btnClearSchedRooms');
+    if (btnClearSchedRooms) {
+      btnClearSchedRooms.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const plan = getEffectiveSchedulePlan();
+        if (plan.masterLocked) return;
+        plan.rooms = [];
+        const rIn = document.getElementById('schedRoomsInput');
+        if (rIn) rIn.value = '';
+        Object.values(plan.allocations || {}).forEach(function (a) {
+          if (a && !a.locked) a.room = '';
+        });
+        syncSchedulePlanToCompetitions();
+        saveState();
+        renderScheduleTab();
+        showToast('ล้างรายชื่อห้องสอบออกแล้ว (ใช้จัดวันและเวลาได้โดยไม่ผูกห้อง)', 'info');
+      });
+    }
+
+    const schedTimeProfileSel = document.getElementById('schedTimeProfileSelect');
+    if (schedTimeProfileSel) {
+      schedTimeProfileSel.addEventListener('change', function () {
+        if (!state.isAdmin) return;
+        const plan = getEffectiveSchedulePlan();
+        if (plan.masterLocked) return;
+        plan.timeProfile = schedTimeProfileSel.value || 'auto_rules';
+        saveState();
+      });
+    }
+
+    const schedStrategySel = document.getElementById('schedStrategySelect');
+    if (schedStrategySel) {
+      schedStrategySel.addEventListener('change', function () {
+        if (!state.isAdmin) return;
+        const plan = getEffectiveSchedulePlan();
+        if (plan.masterLocked) return;
+        plan.strategy = schedStrategySel.value || 'same-area-day';
+        saveState();
+      });
+    }
+
+    const btnRunAutoSchedule = document.getElementById('btnRunAutoSchedule');
+    if (btnRunAutoSchedule) {
+      btnRunAutoSchedule.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const plan = getEffectiveSchedulePlan();
+        if (plan.masterLocked) {
+          showToast('ผังทั้งกระดานถูกล็อกถาวรไว้ กรุณาปลดล็อกด้านบนก่อนคำนวณใหม่', 'warning');
+          return;
+        }
+        const hasExistingSched = Object.keys(plan.allocations || {}).length > 0;
+        const hasJudges = (state.judges || []).length > 0;
+        if (hasExistingSched || hasJudges) {
+          openScheduleRegenConfirmModal(
+            hasJudges ? 'ปรับตารางใหม่และตรวจชนกับกรรมการที่มีอยู่' : 'คำนวณตารางแข่งขันรอบใหม่'
+          );
+          return;
+        }
+        computeAutoScheduleAllocation('คำนวณจัดตารางแข่งขันชุดแรก');
+      });
+    }
+
+    const scheduleRegenNoteInput = document.getElementById('scheduleRegenNoteInput');
+    const scheduleRegenCodeInput = document.getElementById('scheduleRegenCodeInput');
+    const btnSubmitScheduleRegenModal = document.getElementById('btnSubmitScheduleRegenModal');
+    const syncSchedRegenState = function () {
+      if (!scheduleRegenNoteInput || !scheduleRegenCodeInput || !btnSubmitScheduleRegenModal) return;
+      btnSubmitScheduleRegenModal.disabled = !(
+        scheduleRegenNoteInput.value.trim().length > 0 && scheduleRegenCodeInput.value.trim() === 'ยืนยันจัดตาราง'
+      );
+    };
+    if (scheduleRegenNoteInput) scheduleRegenNoteInput.addEventListener('input', syncSchedRegenState);
+    if (scheduleRegenCodeInput) scheduleRegenCodeInput.addEventListener('input', syncSchedRegenState);
+    const btnCloseScheduleRegenModal = document.getElementById('btnCloseScheduleRegenModal');
+    const btnCancelScheduleRegenModal = document.getElementById('btnCancelScheduleRegenModal');
+    if (btnCloseScheduleRegenModal) btnCloseScheduleRegenModal.addEventListener('click', closeScheduleRegenConfirmModal);
+    if (btnCancelScheduleRegenModal) btnCancelScheduleRegenModal.addEventListener('click', closeScheduleRegenConfirmModal);
+    const scheduleRegenConfirmForm = document.getElementById('scheduleRegenConfirmForm');
+    if (scheduleRegenConfirmForm) {
+      scheduleRegenConfirmForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const note = scheduleRegenNoteInput ? scheduleRegenNoteInput.value.trim() : '';
+        closeScheduleRegenConfirmModal();
+        computeAutoScheduleAllocation(note || 'ปรับตารางแข่งขัน');
+      });
+    }
+
+    const btnJumpScheduleToJudges = document.getElementById('btnJumpScheduleToJudges');
+    if (btnJumpScheduleToJudges) {
+      btnJumpScheduleToJudges.addEventListener('click', function () {
+        switchTab('judges');
+      });
+    }
+
+    document.querySelectorAll('.sched-subview-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.scheduleSubview = btn.getAttribute('data-schedule-subview') || 'timeline';
+        renderScheduleTab();
+      });
+    });
+    ['schedViewDayFilter', 'schedViewAreaFilter', 'schedViewLevelFilter', 'schedViewSchoolFilter', 'schedViewActiveOnly'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', renderScheduleTab);
+    });
+    const schedSearchIn = document.getElementById('schedViewSearchInput');
+    if (schedSearchIn) schedSearchIn.addEventListener('input', renderScheduleTab);
+    const btnExportSchedPdf = document.getElementById('btnExportSchedulePdf');
+    if (btnExportSchedPdf) btnExportSchedPdf.addEventListener('click', exportSchedulePdfWindow);
+    const btnExportSchedExcel = document.getElementById('btnExportScheduleExcel');
+    if (btnExportSchedExcel) btnExportSchedExcel.addEventListener('click', exportScheduleExcel);
 
     // Phase 2 Results Subviews & Filters
     document.querySelectorAll('.result-subview-btn').forEach(function (btn) {
@@ -14869,7 +18665,7 @@
             comp_name: 'การแข่งขันคิดเลขเร็ว',
             level: 'ป.1–ป.3',
             medal: 'คณะกรรมการตัดสิน',
-            award_title: 'ได้ปฏิบัติหน้าที่คณะกรรมการตัดสินการแข่งขัน'
+            award_title: 'ได้ปฏิบัติหน้าที่ประธานกรรมการตัดสินการแข่งขัน'
           }
         ];
         printCertificatesWindow(sampleEntries);

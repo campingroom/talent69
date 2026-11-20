@@ -111,6 +111,16 @@
           จัดการแข่งขัน
         </div>
 
+        <button type="button" id="navTabSchedule" data-tab="schedule" class="nav-tab-btn hidden w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span class="truncate">สถานที่และกำหนดการ</span>
+          </div>
+          <span id="navBadgeSchedule" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-normal shrink-0">แอดมิน</span>
+        </button>
+
         <button type="button" id="navTabJudges" data-tab="judges" class="nav-tab-btn phase2-only w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
           <div class="flex items-center gap-2.5 min-w-0">
             <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -187,8 +197,8 @@
   <!-- Right Canvas Area (Main Content) -->
   <div id="notionMainArea" class="flex-1 flex flex-col min-w-0 min-h-screen">
     <!-- Minimalist Notion Topbar -->
-    <header id="notionTopbar" class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E9E9E7] px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2 no-print shadow-2xs">
-      <div class="flex items-center gap-2.5 min-w-0">
+    <header id="notionTopbar" class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-[#E9E9E7] px-3 sm:px-6 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 no-print shadow-2xs">
+      <div class="flex items-center gap-2 sm:gap-2.5 min-w-0">
         <!-- Toggle Sidebar Button -->
         <button type="button" id="btnToggleSidebar" class="p-1.5 rounded-lg hover:bg-[#EBEBEA] text-[#37352F] transition cursor-pointer" title="เปิด/ปิดแถบข้าง (Toggle Sidebar)">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -210,9 +220,9 @@
       </div>
 
       <!-- Right Action Icons (Notion Minimalist) -->
-      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div class="flex items-center flex-wrap justify-end gap-1.5 sm:gap-2 min-w-0 max-w-full">
         <!-- Registration Open/Closed Status Pill -->
-        <div id="regOpenStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] sm:text-xs font-heading font-medium">
+        <div id="regOpenStatusBadge" class="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] sm:text-xs font-heading font-medium">
           <span id="regOpenStatusDot" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
           <span id="regOpenStatusText">เปิดรับสมัคร</span>
         </div>
@@ -222,7 +232,7 @@
            href="https://docs.google.com/spreadsheets/d/1AQup-qqjD8U7GpyE2r2pO9G7vBKMGSfaEs_rl-kMdnQ/edit"
            target="_blank"
            rel="noopener noreferrer"
-           class="hidden items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-heading font-medium transition shadow-2xs">
+           class="hidden items-center gap-1 px-2 sm:px-2.5 py-1 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-heading font-medium transition shadow-2xs">
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
@@ -232,17 +242,29 @@
         <!-- Refresh Data Button -->
         <button id="btnSyncNow"
                 type="button"
-                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white hover:bg-slate-50 text-[#37352F] border border-[#E9E9E7] text-xs font-heading font-medium transition cursor-pointer">
+                class="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-md bg-white hover:bg-slate-50 text-[#37352F] border border-[#E9E9E7] text-xs font-heading font-medium transition cursor-pointer">
           <svg class="w-3.5 h-3.5 text-[#787774]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           <span class="hidden sm:inline">รีเฟรช</span>
         </button>
 
+        <!-- Preview as Public Toggle (ADMIN ONLY) -->
+        <button id="btnTogglePublicPreview"
+                type="button"
+                class="hidden items-center gap-1 px-2 sm:px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-heading font-medium transition cursor-pointer"
+                title="สลับจำลองมุมมองคนทั่วไป (ครู/ผู้ปกครอง) โดยไม่ต้องออกจากระบบแอดมิน">
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          <span id="publicPreviewBtnText" class="hidden sm:inline">ดูแบบคนทั่วไป</span>
+        </button>
+
         <!-- Admin Login / Logout Button -->
         <button id="btnAdminToggle"
                 type="button"
-                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#37352F] hover:bg-[#201F1D] text-white text-xs font-heading font-medium transition shadow-2xs cursor-pointer">
+                class="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-md bg-[#37352F] hover:bg-[#201F1D] text-white text-xs font-heading font-medium transition shadow-2xs cursor-pointer">
           <svg id="adminBtnIcon" class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
@@ -250,6 +272,16 @@
         </button>
       </div>
     </header>
+
+  <!-- Admin Simulated Public View Banner -->
+  <div id="adminPublicPreviewBanner" class="hidden bg-slate-900 text-white py-2 px-4 sm:px-6 text-xs font-heading no-print">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <span><strong>กำลังจำลองมุมมองคนทั่วไป (ครู / ผู้ปกครอง)</strong> — ส่วนตั้งค่าเฉพาะแอดมินทั้งหมดถูกซ่อนไว้ชั่วคราวเพื่อให้ตรวจหน้าจอจริงได้</span>
+      <button type="button" id="btnExitPublicPreview" class="px-3 py-1 rounded-md bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs transition cursor-pointer">
+        กลับเข้าโหมดแอดมินทันที
+      </button>
+    </div>
+  </div>
 
   <!-- Top Milestones Announcement Bar (Modern Pill Strip, Natural Horizontal Swipe on Mobile) -->
   <div id="topMilestonesBar" class="bg-amber-50/90 border-b border-amber-200/80 py-1.5 px-4 sm:px-6">
@@ -870,6 +902,132 @@
           <button type="submit" id="btnAdminDeleteConfirmSubmit" disabled class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-rose-200 disabled:text-rose-400 disabled:cursor-not-allowed text-white font-heading text-xs font-semibold transition cursor-pointer">
             ยืนยันลบรายการนี้
           </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 7: 2-STEP JUDGE REGEN/OVERWRITE CONFIRM MODAL (ADMIN ONLY)
+       ========================================== -->
+  <div id="judgeRegenConfirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-2xl border border-amber-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <span class="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-heading text-[11px] font-semibold mb-1">ป้องกันการเผลอจัดทับรายชื่อเดิม</span>
+          <h3 id="judgeRegenModalTitle" class="text-base font-bold font-heading text-slate-900">ยืนยันการจัดสรรกรรมการใหม่</h3>
+          <p id="judgeRegenModalDesc" class="text-xs text-slate-600 mt-0.5">ขณะนี้มีรายชื่อกรรมการอยู่ในระบบแล้ว การจัดสรรใหม่จะบันทึกประวัติเป็นหมุดหมายไว้ให้ย้อนดูและกู้คืนได้</p>
+        </div>
+        <button type="button" id="btnCloseJudgeRegenModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <form id="judgeRegenConfirmForm" class="space-y-3">
+        <div class="space-y-1">
+          <label for="judgeRegenNoteInput" class="block text-xs font-medium text-slate-700">บันทึกหมายเหตุการเปลี่ยนแปลง (เก็บเป็นหมุดหมายประวัติ) *</label>
+          <input type="text" id="judgeRegenNoteInput" required placeholder="เช่น ปรับหลังได้รายชื่อครูเอกจริงจาก รร.ต่างๆ" class="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm focus:border-slate-900 focus:outline-none" />
+        </div>
+        <div class="space-y-1">
+          <label for="judgeRegenCodeInput" class="block text-xs font-medium text-slate-700">
+            พิมพ์คำว่า <code class="px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-mono font-semibold">ยืนยันจัดใหม่</code> เพื่อปลดล็อก
+          </label>
+          <input type="text" id="judgeRegenCodeInput" autocomplete="off" placeholder="ยืนยันจัดใหม่" class="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm focus:border-amber-600 focus:outline-none" />
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" id="btnCancelJudgeRegenModal" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-heading text-xs font-medium hover:bg-slate-50 cursor-pointer">ยกเลิก</button>
+          <button type="submit" id="btnSubmitJudgeRegenModal" disabled class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:bg-amber-200 disabled:text-amber-400 disabled:cursor-not-allowed text-white font-heading text-xs font-semibold transition cursor-pointer">ยืนยันดำเนินการ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 8: ON-SITE JUDGE REPLACEMENT MODAL (เปลี่ยนตัวกรรมการหน้างาน + เช็กเวลาชน)
+       ========================================== -->
+  <div id="judgeReplaceModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <span class="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-heading text-[11px] font-semibold mb-1">เปลี่ยนตัวกรรมการหน้างาน</span>
+          <h3 class="text-base font-bold font-heading text-slate-900">เปลี่ยนรายชื่อกรรมการตัดสิน</h3>
+          <p id="judgeReplaceOldInfo" class="text-xs text-slate-500 mt-0.5">-</p>
+        </div>
+        <button type="button" id="btnCloseJudgeReplaceModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <form id="judgeReplaceForm" class="space-y-3">
+        <input type="hidden" id="judgeReplaceTargetId" value="" />
+        <div>
+          <label for="judgeReplacePoolSelect" class="block text-xs font-medium text-slate-700 mb-1">เลือกด่วนจากคลังครู (หรือกรอกชื่อใหม่ด้านล่าง)</label>
+          <select id="judgeReplacePoolSelect" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm"></select>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+          <div class="sm:col-span-4">
+            <label for="judgeReplacePrefix" class="block text-xs font-medium text-slate-700 mb-1">คำนำหน้า</label>
+            <input type="text" id="judgeReplacePrefix" required placeholder="นาย/นาง/นางสาว" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div class="sm:col-span-8">
+            <label for="judgeReplaceName" class="block text-xs font-medium text-slate-700 mb-1">ชื่อ - นามสกุลคนใหม่ *</label>
+            <input type="text" id="judgeReplaceName" required placeholder="ชื่อ - นามสกุล" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div>
+            <label for="judgeReplaceSchool" class="block text-xs font-medium text-slate-700 mb-1">โรงเรียนสังกัด *</label>
+            <select id="judgeReplaceSchool" required class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"></select>
+          </div>
+          <div>
+            <label for="judgeReplaceRole" class="block text-xs font-medium text-slate-700 mb-1">ตำแหน่ง *</label>
+            <select id="judgeReplaceRole" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm">
+              <option value="ประธานกรรมการ">ประธานกรรมการ</option>
+              <option value="กรรมการ">กรรมการ</option>
+              <option value="กรรมการและเลขานุการ">กรรมการและเลขานุการ</option>
+            </select>
+          </div>
+        </div>
+        <div id="judgeReplaceConflictBox" class="hidden rounded-xl border p-3 text-xs space-y-1"></div>
+        <div>
+          <label for="judgeReplaceNote" class="block text-xs font-medium text-slate-700 mb-1">หมายเหตุการเปลี่ยนตัว</label>
+          <input type="text" id="judgeReplaceNote" placeholder="เช่น ครูติดภารกิจราชการ เปลี่ยนตัวหน้างาน" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs" />
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" id="btnCancelJudgeReplaceModal" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-heading text-xs font-medium hover:bg-slate-50 cursor-pointer">ยกเลิก</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold cursor-pointer">บันทึกการเปลี่ยนตัว (ในเครื่อง)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 9: 2-STEP SCHEDULE REGEN CONFIRM MODAL (ADMIN ONLY)
+       ========================================== -->
+  <div id="scheduleRegenConfirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-2xl border border-amber-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <span class="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-heading text-[11px] font-semibold mb-1">ป้องกันการเผลอจัดตารางใหม่ทับของเดิม</span>
+          <h3 class="text-base font-bold font-heading text-slate-900">ยืนยันการประมวลผลวัน-เวลา-ห้องใหม่</h3>
+          <p id="scheduleRegenModalDesc" class="text-xs text-slate-600 mt-0.5">การคำนวณตารางใหม่จะเปลี่ยนวัน/ช่วงเวลาของรายการแข่งขันและบันทึกประวัติไว้ให้ย้อนคืนได้ (หากมีกรรมการจัดไว้แล้ว ระบบจะตรวจจุดที่เวลาชนให้ทันที)</p>
+        </div>
+        <button type="button" id="btnCloseScheduleRegenModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <form id="scheduleRegenConfirmForm" class="space-y-3">
+        <div class="space-y-1">
+          <label for="scheduleRegenNoteInput" class="block text-xs font-medium text-slate-700">บันทึกหมายเหตุการปรับตาราง (เก็บเป็นหมุดหมายประวัติ) *</label>
+          <input type="text" id="scheduleRegenNoteInput" required placeholder="เช่น ปรับเหลือ 1 วัน หรือเพิ่มห้องสอบอาคาร 2" class="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm focus:border-slate-900 focus:outline-none" />
+        </div>
+        <div class="space-y-1">
+          <label for="scheduleRegenCodeInput" class="block text-xs font-medium text-slate-700">
+            พิมพ์คำว่า <code class="px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-mono font-semibold">ยืนยันจัดตาราง</code> เพื่อปลดล็อก
+          </label>
+          <input type="text" id="scheduleRegenCodeInput" autocomplete="off" placeholder="ยืนยันจัดตาราง" class="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm focus:border-amber-600 focus:outline-none" />
+        </div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" id="btnCancelScheduleRegenModal" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-heading text-xs font-medium hover:bg-slate-50 cursor-pointer">ยกเลิก</button>
+          <button type="submit" id="btnSubmitScheduleRegenModal" disabled class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:bg-amber-200 disabled:text-amber-400 disabled:cursor-not-allowed text-white font-heading text-xs font-semibold transition cursor-pointer">ยืนยันจัดตารางใหม่</button>
         </div>
       </form>
     </div>
@@ -1853,6 +2011,236 @@
     </section>
 
     <!-- ==========================================
+         TAB 4B: SCHEDULE & VENUE (สถานที่และกำหนดการ)
+         ========================================== -->
+    <section id="tab-schedule" class="tab-panel hidden space-y-5">
+      <div id="featureBannerSchedule" class="no-print"></div>
+      <div id="lockedNoticeSchedule" class="hidden"></div>
+
+      <!-- Admin Only: Schedule Planner & Mode Controls -->
+      <div id="adminSchedulePlannerCard" class="hidden bg-white rounded-xl border border-slate-200 border-l-4 border-l-amber-500 p-5 space-y-4 no-print">
+        <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <div class="flex flex-wrap items-center gap-1.5 mb-1">
+              <span class="inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-heading text-[11px] font-semibold">เฉพาะแอดมินเห็น (คนทั่วไปไม่เห็นส่วนนี้)</span>
+              <span id="schedMasterLockBadge" class="hidden px-2 py-0.5 rounded bg-slate-900 text-white font-heading text-[11px] font-semibold">ล็อกผังถาวรอยู่</span>
+            </div>
+            <h3 class="text-base font-bold font-heading text-slate-900">ประมวลผลจัดวัน-เวลา-ห้องแข่งขัน (จบภายในวัน • ยืดหยุ่นทุกเกณฑ์)</h3>
+            <p class="text-xs text-slate-500 mt-0.5">จัดหมวดเดียวกันและระดับชั้นเดียวกันในวันเดียว (จบในวัน ไม่ข้ามวัน) รองรับหลายวัน-ช่วงเวลายืดหยุ่น และหลบกรรมการเดิมอัตโนมัติ</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+            <span class="text-[11px] text-slate-500 font-heading mr-1">โหมดการแสดงผล:</span>
+            <button type="button" data-schedule-mode="disabled" class="btn-sched-mode-opt px-2.5 py-1.5 rounded-lg border text-xs font-heading transition cursor-pointer" title="ซ่อนระบบตารางเวลาและจัดกรรมการแบบไม่ผูกเวลา (เหมาะกับงานขนาดเล็ก)">
+              ปิดโหมด (งานเล็ก)
+            </button>
+            <button type="button" data-schedule-mode="hidden" class="btn-sched-mode-opt px-2.5 py-1.5 rounded-lg border text-xs font-heading transition cursor-pointer" title="แอดมินกำหนดวัน-เวลาเพื่อจัดกรรมการกันชน แต่ยังไม่เปิดให้คนทั่วไปเห็นเวลา">
+              เฉพาะแอดมิน (ซ่อนเวลา)
+            </button>
+            <button type="button" data-schedule-mode="open" class="btn-sched-mode-opt px-2.5 py-1.5 rounded-lg border text-xs font-heading transition cursor-pointer" title="เปิดแสดงตารางแข่งขันให้ครูและคนทั่วไปเข้าดูได้">
+              เปิดสาธารณะ
+            </button>
+          </div>
+        </div>
+
+        <!-- Blur Venue Toggle Strip + Master Board Lock -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 text-xs">
+          <div class="lg:col-span-8 p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <label class="inline-flex items-start sm:items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" id="schedBlurVenueCheckbox" class="mt-0.5 sm:mt-0 rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
+              <span>
+                <strong class="font-heading text-slate-900">เบลอ/ซ่อนสถานที่และห้องสอบไว้ก่อน (ยังไม่ชัวร์ห้องสอบจริง)</strong>
+                <span class="block text-[11px] text-slate-500">ยังคงใช้วันและช่วงเวลาเพื่อกันกรรมการชนได้ 100% โดยหน้าสาธารณะจะแสดงเป็น "รอประกาศสถานที่ / ห้องสอบ"</span>
+              </span>
+            </label>
+            <span id="schedBlurVenueBadge" class="px-2.5 py-1 rounded-md bg-amber-100 text-amber-800 font-heading text-[11px] font-semibold shrink-0">
+              กำลังเบลอสถานที่
+            </span>
+          </div>
+          <div class="lg:col-span-4 p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-heading font-semibold text-slate-900">ล็อกผังเวลา &amp; กรรมการทั้งหมด</div>
+              <div class="text-[11px] text-slate-500">กันมือลั่นแก้/คำนวณใหม่</div>
+            </div>
+            <button type="button" id="btnToggleScheduleMasterLock" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-heading text-xs font-semibold shrink-0 transition cursor-pointer">
+              ล็อกผังทั้งหมด
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Days Builder (1..N Days, Not Hardcoded) -->
+        <div class="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200 space-y-2.5 text-xs">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span class="font-heading font-semibold text-slate-900">1. กำหนดวันแข่งขัน (เพิ่ม/ลดได้ตามจริงทุกปีการศึกษา)</span>
+              <span id="schedDaysCountBadge" class="ml-1.5 px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-heading text-[11px] font-semibold">2 วัน</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button type="button" id="btnPullSchedDaysFromTimeline" class="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-heading text-[11px] font-medium transition cursor-pointer">
+                ดึงวันจาก Timeline หลัก
+              </button>
+              <button type="button" id="btnAddSchedDay" class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-[11px] font-medium transition cursor-pointer">
+                + เพิ่มวันแข่งขัน
+              </button>
+            </div>
+          </div>
+          <div id="schedDaysList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2"></div>
+        </div>
+
+        <!-- Flexible Time Profile, Strategy & Optional Rooms -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+          <div>
+            <label for="schedTimeProfileSelect" class="block font-medium text-slate-700 mb-1">2. รูปแบบเวลาตามเกณฑ์การแข่งขัน</label>
+            <select id="schedTimeProfileSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm">
+              <option value="auto_rules">ยืดหยุ่นตามเกณฑ์ (1.5 ชม. / 3 ชม. / ทั้งวัน 09:00–16:00 พัก 12:00–13:00)</option>
+              <option value="half_day">แบ่งครึ่งวัน 3 ชม. (เช้า 09:00–12:00 / บ่าย 13:00–16:00 น.)</option>
+              <option value="short_slots">แบ่งสั้น 1.5 ชม. (4 ช่วง/วัน: 09:00, 10:30, 13:00, 14:30)</option>
+              <option value="full_day">แข่งทั้งวัน 09:00–16:00 น. (มีพักเบรก 12:00–13:00 น.)</option>
+            </select>
+          </div>
+          <div>
+            <label for="schedStrategySelect" class="block font-medium text-slate-700 mb-1">3. หลักการจัดหมวด/ระดับชั้น</label>
+            <select id="schedStrategySelect" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm">
+              <option value="same-area-day">หมวดเดียวกันอยู่วันเดียวกัน + เรียงระดับชั้น (แนะนำ)</option>
+              <option value="same-level-day">ช่วงชั้นเดียวกันอยู่วันเดียวกัน + จัดกลุ่มหมวด</option>
+            </select>
+          </div>
+          <div>
+            <label for="schedBuildingInput" class="block font-medium text-slate-700 mb-1">4. สนามแข่งขันหลัก (เว้นว่างได้)</label>
+            <input type="text" id="schedBuildingInput" placeholder="เช่น โรงเรียนบ้านวังยาววิทยายน" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs sm:text-sm" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 text-xs items-end">
+          <div class="lg:col-span-9">
+            <label for="schedRoomsInput" class="block font-medium text-slate-700 mb-1">รายชื่อห้องสอบ (ไม่บังคับ — คั่นด้วยจุลภาค , หรือปล่อยว่างไว้จัดทีหลังได้สำหรับงานเล็ก)</label>
+            <input type="text" id="schedRoomsInput" placeholder="ปล่อยว่างไว้ได้ หรือใส่ชื่อห้อง เช่น ห้อง 101, ห้อง 102, หอประชุม..." class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs sm:text-sm" />
+          </div>
+          <div class="lg:col-span-3 flex gap-2">
+            <button type="button" id="btnClearSchedRooms" class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer">
+              ปล่อยว่างห้องสอบไว้ก่อน
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+          <div id="scheduleConflictBanner" class="flex flex-wrap items-center gap-2 text-xs">
+            <span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-heading font-medium">ยังไม่ได้คำนวณตาราง</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="btnJumpScheduleToJudges" class="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium transition cursor-pointer">
+              ไปหน้าจัดกรรมการ →
+            </button>
+            <button type="button" id="btnRunAutoSchedule" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-heading text-xs font-semibold transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span>ประมวลผลจัดวัน-เวลา-ห้องอัตโนมัติ</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Explicit 1-Click Clash Resolver (Never Silent-Overwrites) -->
+        <div id="scheduleResolveClashesBox" class="hidden rounded-xl border border-rose-200 bg-rose-50/50 p-3.5 space-y-2.5 text-xs"></div>
+
+        <!-- Schedule History Snapshots -->
+        <div id="adminScheduleHistoryWrap" class="border-t border-slate-200 pt-3 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 class="text-xs font-bold font-heading text-slate-800">ประวัติการปรับตารางแข่งขัน (กู้คืนย้อนหลังได้)</h4>
+              <p class="text-[11px] text-slate-500">เก็บหมุดหมายทุกครั้งที่คำนวณใหม่หรือแก้จุดชน</p>
+            </div>
+            <span id="scheduleHistoryCountBadge" class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-heading text-[11px] font-semibold">0 หมุดหมาย</span>
+          </div>
+          <div id="scheduleHistoryList" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
+        </div>
+      </div>
+
+      <!-- Public / Admin Schedule Explorer Card -->
+      <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-base font-bold font-heading text-slate-900">ตารางกำหนดการแข่งขันและสถานที่สอบ</h2>
+              <span id="schedulePublicScopeTag" class="hidden px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">คนทั่วไปก็เห็นส่วนนี้</span>
+            </div>
+            <p id="schedulePublicSubtitle" class="text-xs text-slate-500">ตรวจสอบวัน เวลา และห้องแข่งขัน (จบภายในวันเดียวตามหมวดกิจกรรม)</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="btnExportSchedulePdf" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>พิมพ์กำหนดการ (PDF)</span>
+            </button>
+            <button type="button" id="btnExportScheduleExcel" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-heading text-xs font-medium transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>ส่งออกกำหนดการ (Excel .xlsx)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- View Mode Switcher & Stats -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-100 w-fit">
+            <button type="button" data-schedule-subview="timeline" class="sched-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-white text-slate-900 shadow-2xs transition cursor-pointer">
+              ดูตามวันและช่วงเวลา
+            </button>
+            <button type="button" data-schedule-subview="by-comp" class="sched-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer">
+              ดูแยกตามหมวดกิจกรรม
+            </button>
+            <button type="button" data-schedule-subview="by-school" class="sched-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer">
+              เช็กคิวแข่งรายโรงเรียน
+            </button>
+          </div>
+          <label class="inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+            <input type="checkbox" id="schedViewActiveOnly" checked class="rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
+            <span>แสดงเฉพาะรายการที่มีการแข่งขันจริง (ตัดรายการบาย)</span>
+          </label>
+        </div>
+
+        <div id="scheduleSummaryStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs"></div>
+
+        <!-- Filters -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 pt-2 border-t border-slate-100 text-xs">
+          <div>
+            <label for="schedViewDayFilter" class="block font-medium text-slate-600 mb-1">วันแข่งขัน</label>
+            <select id="schedViewDayFilter" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs sm:text-sm">
+              <option value="ALL">-- ทุกวัน --</option>
+              <option value="D1">วันที่ 1</option>
+              <option value="D2">วันที่ 2</option>
+            </select>
+          </div>
+          <div>
+            <label for="schedViewAreaFilter" class="block font-medium text-slate-600 mb-1">หมวดกิจกรรม</label>
+            <select id="schedViewAreaFilter" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs sm:text-sm">
+              <option value="ALL">-- ทุกหมวดกิจกรรม --</option>
+            </select>
+          </div>
+          <div>
+            <label for="schedViewLevelFilter" class="block font-medium text-slate-600 mb-1">ระดับช่วงชั้น</label>
+            <select id="schedViewLevelFilter" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs sm:text-sm">
+              <option value="ALL">-- ทุกระดับชั้น --</option>
+            </select>
+          </div>
+          <div>
+            <label for="schedViewSchoolFilter" class="block font-medium text-slate-600 mb-1">คิวของโรงเรียน</label>
+            <select id="schedViewSchoolFilter" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs sm:text-sm">
+              <option value="ALL">-- ทุกโรงเรียน --</option>
+            </select>
+          </div>
+          <div>
+            <label for="schedViewSearchInput" class="block font-medium text-slate-600 mb-1">ค้นหารายการ / ห้อง</label>
+            <input type="search" id="schedViewSearchInput" placeholder="พิมพ์ชื่อรายการ, ห้อง..." class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs sm:text-sm" />
+          </div>
+        </div>
+
+        <div id="scheduleContentContainer" class="space-y-4 pt-1"></div>
+      </div>
+    </section>
+
+    <!-- ==========================================
          TAB 5: JUDGES DIRECTORY (คณะกรรมการตัดสิน)
          ========================================== -->
     <section id="tab-judges" class="tab-panel hidden space-y-5">
@@ -1860,12 +2248,12 @@
       <div id="lockedNoticeJudges" class="hidden"></div>
 
       <!-- Admin Only: Auto Judge Allocator (Mode A / Mode B + Excel Import) -->
-      <div id="adminAutoJudgeCard" class="hidden bg-white rounded-xl border border-slate-200 p-5 space-y-4 no-print">
+      <div id="adminAutoJudgeCard" class="hidden bg-white rounded-xl border border-slate-200 border-l-4 border-l-amber-500 p-5 space-y-4 no-print">
         <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div>
-            <span class="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-heading text-[11px] font-medium mb-1">สำหรับแอดมิน · ตัวช่วยจัดสรร</span>
+            <span class="inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-heading text-[11px] font-semibold mb-1">เฉพาะแอดมินเห็น (คนทั่วไปไม่เห็นส่วนนี้) · ตัวช่วยจัดสรร</span>
             <h3 class="text-base font-bold font-heading text-slate-900">จัดสรรคณะกรรมการอัตโนมัติ (โหมด A / โหมด B)</h3>
-            <p class="text-xs text-slate-500 mt-0.5">ดึงครูผู้ฝึกสอนมาช่วยเป็นกรรมการโดยเดาจากวิชาเอกหลักก่อน หรือนำเข้าไฟล์ .xlsx/.csv ที่มีวิชาเอกจริง พร้อมเช็กเวลาชน 2 วัน (24–25 พ.ย.)</p>
+            <p class="text-xs text-slate-500 mt-0.5">ดึงครูผู้ฝึกสอนมาช่วยเป็นกรรมการโดยเดาจากวิชาเอกหลักก่อน หรือนำเข้าไฟล์ .xlsx/.csv ที่มีวิชาเอกจริง พร้อมเช็กเวลาทับซ้อนและข้ามรายการที่ล็อกไว้ให้ 100%</p>
           </div>
           <div id="autoJudgeTeacherPoolBadge" class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-800 font-heading text-xs font-medium shrink-0">
             คลังครู: คำนวณจากผู้ฝึกสอนในระบบ
@@ -1930,19 +2318,33 @@
           <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
             <span class="text-[11px] text-slate-500">ตรวจสอบพรีวิวก่อนกดบันทึก (ปุ่มบันทึกจะแทนที่รายชื่อในรายการที่จัดสรรรอบนี้)</span>
             <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="btnAutoJudgePreviewPdf" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium cursor-pointer">ส่งออกพรีวิว (PDF คำสั่ง)</button>
+              <button type="button" id="btnAutoJudgePreviewExcel" class="px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-heading text-xs font-medium cursor-pointer">ส่งออกพรีวิว (Excel)</button>
               <button type="button" id="btnAutoJudgeClosePreview" class="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 font-heading text-xs hover:bg-slate-50 cursor-pointer">ปิดพรีวิว</button>
               <button type="button" id="btnAutoJudgeApplyLocal" class="px-3.5 py-1.5 rounded-lg border border-slate-900 bg-white hover:bg-slate-50 text-slate-900 font-heading text-xs font-semibold cursor-pointer">ใช้ในเครื่องนี้ก่อน (ยังไม่ส่ง Sheets)</button>
               <button type="button" id="btnAutoJudgeSyncSheets" class="px-4 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-heading text-xs font-semibold cursor-pointer">บันทึกลง Google Sheets จริง</button>
             </div>
           </div>
         </div>
+
+        <!-- Timestamped Snapshot History & Restore -->
+        <div id="adminJudgeHistoryWrap" class="border-t border-slate-200 pt-3 space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 class="text-xs font-bold font-heading text-slate-800">หมุดหมายประวัติการจัดสรร &amp; เปลี่ยนตัวกรรมการ (กู้คืนย้อนหลังได้)</h4>
+              <p class="text-[11px] text-slate-500">ระบบเก็บภาพจำลอง (Snapshot) ทุกครั้งที่มีการจัดสรรใหม่หรือเปลี่ยนตัว เพื่อให้เห็นช่วงเวลาที่แก้และย้อนกลับได้</p>
+            </div>
+            <span id="judgeHistoryCountBadge" class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-heading text-[11px] font-semibold">0 หมุดหมาย</span>
+          </div>
+          <div id="judgeHistoryList" class="space-y-1.5 max-h-48 overflow-y-auto"></div>
+        </div>
       </div>
 
       <!-- Admin Only: Add Judge Form -->
-      <div id="adminAddJudgeCard" class="hidden bg-white rounded-xl border border-slate-200 p-5 space-y-3 no-print">
+      <div id="adminAddJudgeCard" class="hidden bg-white rounded-xl border border-slate-200 border-l-4 border-l-amber-500 p-5 space-y-3 no-print">
         <div class="flex items-center justify-between">
           <div>
-            <span class="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-heading text-[11px] font-medium mb-1">สำหรับแอดมิน</span>
+            <span class="inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-heading text-[11px] font-semibold mb-1">เฉพาะแอดมินเห็น (คนทั่วไปไม่เห็นส่วนนี้)</span>
             <h3 class="text-base font-bold font-heading text-slate-900">เพิ่มรายชื่อคณะกรรมการตัดสิน</h3>
           </div>
         </div>
@@ -1991,16 +2393,44 @@
 
       <!-- Filter & Summary Bar -->
       <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
             <h2 class="text-base font-bold font-heading text-slate-900">ทำเนียบคณะกรรมการตัดสินการแข่งขัน</h2>
-            <p class="text-xs text-slate-500">รายชื่อประธานกรรมการ กรรมการ และเลขานุการประจำรายการแข่งขัน พร้อมพิมพ์บัตรประจำตัวและเกียรติบัตรกรรมการ</p>
+            <p class="text-xs text-slate-500">ดูได้ทั้งแบบแยกตามรายการ เช็กคิวรายบุคคล และภาพรวมภาระงาน พร้อมส่งออกคำสั่งราชการ PDF / Excel</p>
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="btnExportJudgesOrderPdf" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>ส่งออกคำสั่ง (PDF)</span>
+            </button>
+            <button type="button" id="btnExportJudgesOrderExcel" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-heading text-xs font-medium transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>ส่งออกคำสั่ง (Excel .xlsx)</span>
+            </button>
             <span class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-800 font-heading text-xs font-semibold">
-              กรรมการทั้งหมด <span id="judgeTotalCountBadge">0</span> คน
+              ทั้งหมด <span id="judgeTotalCountBadge">0</span> ตำแหน่ง
             </span>
           </div>
+        </div>
+
+        <!-- 4-View Switcher -->
+        <div class="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-100 w-fit">
+          <button type="button" data-judge-subview="by-comp" class="judge-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-white text-slate-900 shadow-2xs transition cursor-pointer">
+            ดูตามรายการแข่งขัน
+          </button>
+          <button type="button" data-judge-subview="by-person" class="judge-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer">
+            เช็กคิวรายบุคคล (ฉันตัดสินอะไรบ้าง)
+          </button>
+          <button type="button" data-judge-subview="executive" class="judge-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer">
+            ภาพรวม (เฉพาะภาระงาน)
+          </button>
+          <button type="button" data-judge-subview="table" class="judge-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer">
+            ตารางทั้งหมด
+          </button>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
@@ -2018,11 +2448,21 @@
           </div>
           <div>
             <label for="judgeSearchInput" class="block text-xs font-medium text-slate-600 mb-1">ค้นหาชื่อกรรมการ / รายการแข่งขัน</label>
-            <input type="search" id="judgeSearchInput" placeholder="พิมพ์ชื่อกรรมการ หรือชื่อรายการ..." class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+            <input type="search" id="judgeSearchInput" placeholder="พิมพ์ชื่อตนเอง หรือชื่อรายการ..." class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
           </div>
         </div>
 
-        <div class="overflow-x-auto pt-2">
+        <!-- View 1: Grouped By Competition Cards -->
+        <div id="judgesByCompView" class="grid grid-cols-1 lg:grid-cols-2 gap-3.5 pt-1"></div>
+
+        <!-- View 2: Personal Judge Schedule Lookup -->
+        <div id="judgesByPersonView" class="hidden space-y-4 pt-1"></div>
+
+        <!-- View 3: Executive Workload Overview -->
+        <div id="judgesExecutiveView" class="hidden space-y-4 pt-1"></div>
+
+        <!-- View 4: Flat Table -->
+        <div id="judgesFlatTableView" class="hidden overflow-x-auto pt-2">
           <table class="w-full text-sm text-left">
             <thead class="text-xs font-heading text-slate-500 bg-slate-50 border-y border-slate-200">
               <tr>
@@ -2257,28 +2697,57 @@
     <!-- ==========================================
          TAB 8: ADMIN SETTINGS & TOOLS (แสดงเฉพาะแอดมิน)
          ========================================== -->
-    <section id="tab-settings" class="tab-panel hidden space-y-6">
+    <section id="tab-settings" class="tab-panel hidden space-y-5">
+      <!-- Admin Quick Category Switcher Bar (ทำให้ทุกปุ่มในหมวดแอดมินหาง่าย ไม่เลื่อนยาว) -->
+      <div id="adminSettingsCatBar" class="sticky top-12 z-20 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-2.5 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" data-admin-cat-btn="ALL" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white transition cursor-pointer">
+            ทั้งหมด (ทุกหมวด)
+          </button>
+          <button type="button" data-admin-cat-btn="control" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer">
+            1. ควบคุมระบบ &amp; เปิด-ปิดฟีเจอร์
+          </button>
+          <button type="button" data-admin-cat-btn="schedule_ops" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer">
+            2. กำหนดการ, ไทม์ไลน์ &amp; ห้องสอบ
+          </button>
+          <button type="button" data-admin-cat-btn="docs" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer">
+            3. เกียรติบัตร &amp; ตัวแทนเขตฯ
+          </button>
+          <button type="button" data-admin-cat-btn="data" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer">
+            4. ฐานข้อมูล &amp; เพิ่มรายการ
+          </button>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button type="button" data-hero-tab="schedule" class="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 font-heading text-xs font-medium transition cursor-pointer">
+            จัดสถานที่ &amp; เวลา →
+          </button>
+          <button type="button" data-hero-tab="judges" class="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium transition cursor-pointer">
+            จัดกรรมการ →
+          </button>
+        </div>
+      </div>
+
       <!-- Top Row: Admin Control Center -->
-      <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
-          <div>
-            <span class="inline-block px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-heading text-xs font-medium mb-1">
-              โหมดผู้ดูแลระบบ (Admin Mode)
+      <div data-admin-cat="control" class="admin-setting-card bg-white rounded-xl border border-slate-200 border-l-4 border-l-amber-500 p-5 space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 pb-4">
+          <div class="min-w-0">
+            <span class="inline-block px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-heading text-xs font-semibold mb-1">
+              โหมดผู้ดูแลระบบ (เฉพาะแอดมินเห็น)
             </span>
             <h2 class="text-lg font-bold font-heading text-slate-900">แผงควบคุมแอดมินกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</h2>
-            <p class="text-xs text-slate-500">จัดการสถานะการเปิด-ปิดรับสมัคร ส่งออกรายชื่อทำเกียรติบัตร และตั้งค่าฐานข้อมูล Google Sheets</p>
+            <p class="text-xs text-slate-500 mt-0.5">จัดระเบียบปุ่มลัดงานหลัก: สถานะรับสมัคร การส่งออก/ซิงก์ข้อมูล และความปลอดภัยบัญชีแอดมิน</p>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <button type="button" id="btnToggleRegistrationOpen" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 shrink-0 w-full lg:w-[460px]">
+            <button type="button" id="btnToggleRegistrationOpen" class="w-full px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer text-center">
               สลับสถานะเปิด/ปิดรับสมัคร
             </button>
-            <button type="button" id="btnExportCertCsv" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-medium transition">
-              ดาวน์โหลด CSV ทำเกียรติบัตร (1 คน 1 แถว)
+            <button type="button" id="btnExportCertCsv" class="w-full px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-medium transition cursor-pointer text-center">
+              ส่งออก CSV เกียรติบัตร (1 คน/แถว)
             </button>
-            <button type="button" id="btnFixSheetTimestamps" class="px-3.5 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-heading text-xs font-medium transition">
-              ปรับปรุงเวลาใน Google Sheets เป็นเวลาจริงกรุงเทพฯ
+            <button type="button" id="btnFixSheetTimestamps" class="w-full px-3.5 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-heading text-xs font-medium transition cursor-pointer text-center">
+              ปรับเวลา Sheets (เวลาไทย)
             </button>
-            <button type="button" id="btnClearSamplesAdmin" class="px-3.5 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-heading text-xs font-medium transition">
+            <button type="button" id="btnClearSamplesAdmin" class="w-full px-3.5 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-heading text-xs font-medium transition cursor-pointer text-center">
               ล้างข้อมูลตัวอย่าง
             </button>
           </div>
@@ -2313,7 +2782,7 @@
       </div>
 
       <!-- Card: Feature Visibility Controls (Public vs Admin) (Full Width) -->
-      <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-2xs">
+      <div data-admin-cat="control" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-2xs">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
             <div class="flex items-center gap-2">
@@ -2321,7 +2790,7 @@
               <h3 class="text-base font-bold font-heading text-slate-900">การเปิดเผยฟีเจอร์จัดการแข่งขันต่อสาธารณะ</h3>
             </div>
             <p class="text-xs text-slate-500 mt-1">
-              คนทั่วไปจะเห็นอัตโนมัติตามกำหนดการแข่งขัน • แอดมินมองเห็นและจัดการได้ตลอดเวลา และสามารถกด <strong>เปิดทันที</strong> ได้ทุกเมื่อ
+              คนทั่วไปจะเห็นอัตโนมัติตามกำหนดการแข่งขัน • แอดมินมองเห็นและจัดการได้ตลอดเวลา และสามารถกด <strong>เปิดทันที</strong> หรือ <strong>ปิดโหมด</strong> ได้ทุกเมื่อ
             </p>
           </div>
           <div class="flex flex-wrap gap-2 shrink-0">
@@ -2334,8 +2803,40 @@
           </div>
         </div>
 
-        <!-- 4 Rows: Venue Map/Rooms, Judges, Results, Certificates -->
         <div class="space-y-3 text-xs">
+          <!-- Item 0A: Schedule & Venue Mode -->
+          <div class="p-3.5 rounded-lg border border-blue-200 bg-blue-50/40 space-y-2.5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-heading font-semibold text-slate-900 text-sm">0A. เมนูสถานที่และกำหนดการ (ตารางวัน-เวลา-ห้องแข่ง)</span>
+                  <span id="badgeVisibilitySchedule" class="px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-amber-100 text-amber-800">เฉพาะแอดมิน</span>
+                </div>
+                <p class="text-slate-500 text-[11px]">เลือกได้ตามขนาดงาน: <strong>ปิดโหมด</strong> สำหรับงานเล็กที่ไม่ต้องลงเวลา • <strong>เฉพาะแอดมิน</strong> เพื่อใช้วัน-เวลาจัดกรรมการไม่ให้ชนแต่ซ่อนจากคนทั่วไป • <strong>เปิดสาธารณะ</strong> เมื่อพร้อมประกาศตาราง</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                <button type="button" data-feature-toggle="schedule" data-action="disabled" class="btn-vis-toggle-schedule px-2.5 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer" title="ปิดเมนูและระบบเวลา (เหมาะกับงานขนาดเล็ก)">
+                  ปิดโหมด (งานเล็ก)
+                </button>
+                <button type="button" data-feature-toggle="schedule" data-action="hidden" class="btn-vis-toggle-schedule px-2.5 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer" title="เปิดเฉพาะแอดมินเพื่อกำหนดวัน-เวลาจัดกรรมการ (ซ่อนเวลาและสถานที่จากคนทั่วไป)">
+                  เฉพาะแอดมิน
+                </button>
+                <button type="button" data-feature-toggle="schedule" data-action="open" class="btn-vis-toggle-schedule px-2.5 py-1.5 rounded-lg font-heading text-xs font-medium transition border cursor-pointer" title="เปิดเมนูสถานที่และกำหนดการให้ครูและคนทั่วไปเข้าชมได้">
+                  เปิดสาธารณะ
+                </button>
+              </div>
+            </div>
+            <div class="pt-2 border-t border-blue-200/70 flex flex-wrap items-center justify-between gap-2">
+              <label class="inline-flex items-center gap-2 text-[11px] text-slate-700 cursor-pointer">
+                <input type="checkbox" id="settingsBlurVenueCheckbox" class="rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
+                <span>เบลอ/ซ่อนชื่อห้องและสถานที่ชั่วคราว (กำหนดเฉพาะวัน-เวลาไว้จัดกรรมการก่อนได้)</span>
+              </label>
+              <button type="button" data-hero-tab="schedule" class="text-blue-700 hover:underline font-heading font-semibold text-[11px] cursor-pointer">
+                ไปตั้งค่าตาราง &amp; ห้องสอบ →
+              </button>
+            </div>
+          </div>
+
           <!-- Item 0: Venue Map & Rooms -->
           <div class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div class="space-y-1">
@@ -2486,12 +2987,31 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div id="adminSettingsColumnsGrid" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <!-- Left 6 cols: Schedule, Reports & Connection -->
-        <div class="lg:col-span-6 space-y-6">
+        <div id="adminSettingsLeftCol" class="lg:col-span-6 space-y-6">
+
+          <!-- Shortcut Card: Schedule & Bulk Room Manager -->
+          <div data-admin-cat="schedule_ops" class="admin-setting-card bg-white rounded-xl border border-blue-200 p-5 space-y-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <span class="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-heading text-[11px] font-semibold mb-1">ศูนย์จัดวัน-เวลา-สถานที่</span>
+                <h3 class="text-base font-bold font-heading text-slate-900">จัดการตารางแข่งขัน ห้องสอบ และแผนผัง</h3>
+                <p class="text-xs text-slate-500 mt-0.5">จัดวันแข่งขันจบใน 1 วันตามหมวด/ระดับชั้น เชื่อมกันชนกับกรรมการอัตโนมัติ และเบลอสถานที่ไว้ก่อนได้</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2 pt-1">
+              <button type="button" data-hero-tab="schedule" class="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer">
+                เปิดเมนูสถานที่และกำหนดการ →
+              </button>
+              <button type="button" data-hero-tab="judges" class="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer">
+                เปิดเมนูกรรมการตัดสิน →
+              </button>
+            </div>
+          </div>
 
           <!-- Card 1: Auto-Lock Registration Schedule -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div data-admin-cat="schedule_ops" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
               <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
@@ -2539,7 +3059,7 @@
           </div>
 
           <!-- Card 1B: Admin Timeline Roadmap Customizer -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div data-admin-cat="schedule_ops" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
@@ -2573,7 +3093,7 @@
           </div>
 
           <!-- Card 2: Official District Reports & Forms -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div data-admin-cat="docs" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
               <div class="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center shrink-0">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -2684,7 +3204,7 @@
 
 
           <!-- Card 2.5: Admin Deletion Audit Log Report -->
-          <div id="adminDeletionReportCard" class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div id="adminDeletionReportCard" data-admin-cat="data" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div class="space-y-3 border-b border-slate-100 pb-3">
               <div class="flex items-start gap-2.5">
                 <div class="w-8 h-8 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
@@ -2728,7 +3248,7 @@
           </div>
 
           <!-- Card 3: Google Sheets Connection & 1-Click Code.gs Copy -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div data-admin-cat="data" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div>
               <h3 class="text-base font-bold font-heading text-slate-900">เชื่อมต่อฐานข้อมูล Google Sheets</h3>
               <p class="text-xs text-slate-500 mt-0.5">
@@ -2793,10 +3313,10 @@
         </div>
 
         <!-- Right 6 cols: Certificate Customizer, Official Documents & Add Items -->
-        <div class="lg:col-span-6 space-y-6">
+        <div id="adminSettingsRightCol" class="lg:col-span-6 space-y-6">
 
           <!-- Card 4: Certificate & Canva Template Customizer -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div data-admin-cat="docs" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
               <div class="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -2934,7 +3454,7 @@
           </div>
 
           <!-- Card 5: Official Download Center & Resources -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+          <div data-admin-cat="docs" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-3">
             <div class="flex items-center gap-2 border-b border-slate-100 pb-2.5">
               <div class="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -2965,7 +3485,7 @@
           </div>
 
           <!-- Card 6: Add New Competition -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div data-admin-cat="data" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div>
               <h3 class="text-base font-bold font-heading text-slate-900">เพิ่มรายการแข่งขันใหม่ (เฉพาะแอดมิน)</h3>
               <p class="text-xs text-slate-500">เพิ่มรายการแข่งขันเพิ่มเติมลงในระบบและแผ่นงาน <code>Competitions</code></p>
@@ -3022,7 +3542,7 @@
           </div>
 
           <!-- Card 7: Add New School -->
-          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+          <div data-admin-cat="data" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-3">
             <h3 class="text-base font-bold font-heading text-slate-900">เพิ่มรายชื่อโรงเรียนเพิ่มเติม (เฉพาะแอดมิน)</h3>
             <form id="addSchoolForm" class="flex flex-col sm:flex-row gap-2">
               <input type="text" id="newSchoolName" required placeholder="พิมพ์ชื่อโรงเรียน" class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
