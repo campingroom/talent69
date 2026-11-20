@@ -57,6 +57,17 @@ function isRegistrationOpen_() {
   return val === null ? true : val === 'true';
 }
 
+function getStoredOperationTimeline_() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty('OPERATION_TIMELINE_JSON');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function verifyAdminPin_(pin) {
   if (!pin) return false;
   const cleanPin = String(pin).trim();
@@ -104,7 +115,8 @@ function doGet(e) {
       ok: true,
       updatedAt: new Date().toISOString(),
       config: {
-        registrationOpen: isRegistrationOpen_()
+        registrationOpen: isRegistrationOpen_(),
+        operationTimeline: getStoredOperationTimeline_()
       },
       schools: schools,
       competitions: competitions,
@@ -186,6 +198,8 @@ function doPost(e) {
       }
       PropertiesService.getScriptProperties().setProperty('ADMIN_PIN', newPin);
       return jsonResponse_({ ok: true });
+    } else if (action === 'save_timeline_config') {
+      return handleSaveTimelineConfig_(body);
     }
 
     return jsonResponse_({ ok: false, error: 'ไม่รู้จักคำสั่ง: ' + action });
@@ -894,4 +908,36 @@ function handleFixTimestamps_(ss) {
     updatedCount: updatedCount,
     message: 'ปรับปรุงเวลาใน Google Sheets เป็นเวลาจริงของกรุงเทพฯ สำเร็จ ' + updatedCount + ' รายการ'
   });
+}
+
+/**
+ * บันทึกกำหนดการดำเนินงาน (Timeline Roadmap) ของแอดมินไว้ใน ScriptProperties (ไม่แตะข้อมูลในชีต)
+ */
+function handleSaveTimelineConfig_(body) {
+  const props = PropertiesService.getScriptProperties();
+  if (body.reset === true || body.timeline === null) {
+    props.deleteProperty('OPERATION_TIMELINE_JSON');
+    return jsonResponse_({ ok: true, operationTimeline: null });
+  }
+  const items = Array.isArray(body.timeline) ? body.timeline : [];
+  if (!items.length) {
+    return jsonResponse_({ ok: false, error: 'กรุณาระบุขั้นตอนกำหนดการอย่างน้อย 1 ขั้นตอน' });
+  }
+  const cleanList = items.map(function(it, idx) {
+    return {
+      step: String(idx + 1),
+      title: String((it && it.title) || '').trim(),
+      period: String((it && it.period) || '').trim(),
+      startDate: String((it && it.startDate) || '').trim(),
+      endDate: String((it && it.endDate) || '').trim(),
+      useRegCloseTime: Boolean(it && it.useRegCloseTime)
+    };
+  }).filter(function(it) {
+    return Boolean(it.title);
+  });
+  if (!cleanList.length) {
+    return jsonResponse_({ ok: false, error: 'กรุณาระบุชื่อขั้นตอนอย่างน้อย 1 รายการ' });
+  }
+  props.setProperty('OPERATION_TIMELINE_JSON', JSON.stringify(cleanList));
+  return jsonResponse_({ ok: true, operationTimeline: cleanList });
 }
