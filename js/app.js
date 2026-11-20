@@ -252,7 +252,7 @@
     venueMapExpanded: true,
     dashboardMatrixOpen: false,
     expandedMatrixGroups: {},
-    cardPhotosMap: {},
+    cardPhotosLoaded: false,
     cardPhotosDataUrlMap: {},
     activeCardPhotoContext: null,
     resultSubview: 'by-comp',
@@ -9730,95 +9730,113 @@
     }
   }
 
-  async function fetchCardPhotosMap(refsList) {
-    if (!state.gasWebAppUrl) return state.cardPhotosMap;
-    const cleanRefs = Array.isArray(refsList) ? refsList.filter(Boolean) : [];
-    const queryRefs = cleanRefs.length > 0 && cleanRefs.length <= 45 ? '&refs=' + encodeURIComponent(cleanRefs.join(',')) : '';
-    try {
-      const res = await fetch(state.gasWebAppUrl + '?action=get_card_photos' + queryRefs, { method: 'GET' });
-      const data = await res.json();
-      if (data && data.ok && data.photos && typeof data.photos === 'object') {
-        Object.keys(data.photos).forEach(function (k) {
-          state.cardPhotosMap[k] = data.photos[k];
-        });
+  const CARD_PHOTO_IDB_NAME = 'talent69_card_photos_db';
+  const CARD_PHOTO_IDB_STORE = 'photos';
+
+  function openCardPhotosDb() {
+    return new Promise(function (resolve) {
+      if (typeof indexedDB === 'undefined') {
+        resolve(null);
+        return;
       }
-    } catch (e) {
-      // Keep existing local/cache entries cleanly
-    }
-    return state.cardPhotosMap;
+      try {
+        const req = indexedDB.open(CARD_PHOTO_IDB_NAME, 1);
+        req.onupgradeneeded = function (ev) {
+          const db = ev.target.result;
+          if (!db.objectStoreNames.contains(CARD_PHOTO_IDB_STORE)) {
+            db.createObjectStore(CARD_PHOTO_IDB_STORE, { keyPath: 'ref_code' });
+          }
+        };
+        req.onsuccess = function (ev) { resolve(ev.target.result); };
+        req.onerror = function () { resolve(null); };
+      } catch (e) {
+        resolve(null);
+      }
+    });
   }
 
-  async function uploadCardPhotoEntry(cardItem, imageBase64, verifyPhone) {
-    if (!cardItem || !cardItem.ref_code) throw new Error('ไม่พบรหัสบัตร');
-    if (state.gasWebAppUrl) {
-      const payload = {
-        action: 'upload_card_photo',
-        ref_code: cardItem.ref_code,
-        reg_id: cardItem.reg_id || '',
-        role_type: cardItem.role_code || 'COMPETITOR',
-        person_name: cardItem.person_name || '',
-        school_name: cardItem.school_name || '',
-        image_base64: imageBase64,
-        verify_phone: verifyPhone || '',
-        admin_pin: state.isAdmin ? state.adminPin : ''
-      };
-      const res = await fetch(state.gasWebAppUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      });
-      const result = await res.json();
-      if (!result || !result.ok) {
-        throw new Error((result && result.error) || 'อัปโหลดรูปภาพไม่สำเร็จ');
-      }
-      state.cardPhotosMap[cardItem.ref_code] = {
-        ref_code: cardItem.ref_code,
-        file_id: result.file_id || '',
-        url: result.url || imageBase64,
-        updated_at: result.updated_at || new Date().toISOString()
-      };
-      state.cardPhotosDataUrlMap[cardItem.ref_code] = imageBase64;
-      return state.cardPhotosMap[cardItem.ref_code];
+  async function ensureLocalCardPhotosLoaded() {
+    if (state.cardPhotosLoaded) return state.cardPhotosDataUrlMap;
+    const db = await openCardPhotosDb();
+    if (!db) {
+      state.cardPhotosLoaded = true;
+      return state.cardPhotosDataUrlMap;
     }
-
-    if (!state.isAdmin && cardItem.reg_id) {
-      const reg = state.registrations.find((x) => x.reg_id === cardItem.reg_id);
-      const isSample = reg && String(reg.status || '').indexOf('ตัวอย่าง') !== -1;
-      if (reg && !isSample && !verifyPhoneMatchClient(reg.coordinator_phone, verifyPhone)) {
-        throw new Error('เบอร์โทรศัพท์ผู้ประสานงานไม่ตรงกับรายการที่ลงทะเบียนไว้');
+    return await new Promise(function (resolve) {
+      try {
+        const tx = db.transaction(CARD_PHOTO_IDB_STORE, 'readonly');
+        const store = tx.objectStore(CARD_PHOTO_IDB_STORE);
+        const req = store.getAll();
+        req.onsuccess = function () {
+          (req.result || []).forEach(function (item) {
+            if (item && item.ref_code && item.dataUrl) {
+              state.cardPhotosDataUrlMap[item.ref_code] = item.dataUrl;
+            }
+          });
+          state.cardPhotosLoaded = true;
+          db.close();
+          resolve(state.cardPhotosDataUrlMap);
+        };
+        req.onerror = function () {
+          state.cardPhotosLoaded = true;
+          db.close();
+          resolve(state.cardPhotosDataUrlMap);
+        };
+      } catch (e) {
+        state.cardPhotosLoaded = true;
+        resolve(state.cardPhotosDataUrlMap);
       }
-    }
-    state.cardPhotosMap[cardItem.ref_code] = {
-      ref_code: cardItem.ref_code,
-      file_id: 'LOCAL',
-      url: imageBase64,
-      updated_at: new Date().toISOString()
-    };
-    state.cardPhotosDataUrlMap[cardItem.ref_code] = imageBase64;
-    return state.cardPhotosMap[cardItem.ref_code];
+    });
   }
 
-  async function deleteCardPhotoEntry(cardItem, verifyPhone) {
-    if (!cardItem || !cardItem.ref_code) return;
-    if (state.gasWebAppUrl) {
-      const res = await fetch(state.gasWebAppUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'delete_card_photo',
-          ref_code: cardItem.ref_code,
-          reg_id: cardItem.reg_id || '',
-          verify_phone: verifyPhone || '',
-          admin_pin: state.isAdmin ? state.adminPin : ''
-        })
-      });
-      const result = await res.json();
-      if (!result || !result.ok) {
-        throw new Error((result && result.error) || 'ลบรูปภาพไม่สำเร็จ');
+  async function saveLocalCardPhoto(refCode, imageBase64) {
+    if (!refCode) throw new Error('ไม่พบรหัสบัตร');
+    state.cardPhotosDataUrlMap[refCode] = imageBase64;
+    const db = await openCardPhotosDb();
+    if (!db) return;
+    await new Promise(function (resolve) {
+      try {
+        const tx = db.transaction(CARD_PHOTO_IDB_STORE, 'readwrite');
+        tx.objectStore(CARD_PHOTO_IDB_STORE).put({ ref_code: refCode, dataUrl: imageBase64 });
+        tx.oncomplete = function () { db.close(); resolve(); };
+        tx.onerror = function () { db.close(); resolve(); };
+      } catch (e) {
+        resolve();
       }
-    }
-    delete state.cardPhotosMap[cardItem.ref_code];
-    delete state.cardPhotosDataUrlMap[cardItem.ref_code];
+    });
+  }
+
+  async function deleteLocalCardPhoto(refCode) {
+    if (!refCode) return;
+    delete state.cardPhotosDataUrlMap[refCode];
+    const db = await openCardPhotosDb();
+    if (!db) return;
+    await new Promise(function (resolve) {
+      try {
+        const tx = db.transaction(CARD_PHOTO_IDB_STORE, 'readwrite');
+        tx.objectStore(CARD_PHOTO_IDB_STORE).delete(refCode);
+        tx.oncomplete = function () { db.close(); resolve(); };
+        tx.onerror = function () { db.close(); resolve(); };
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+
+  async function clearAllLocalCardPhotos() {
+    state.cardPhotosDataUrlMap = {};
+    const db = await openCardPhotosDb();
+    if (!db) return;
+    await new Promise(function (resolve) {
+      try {
+        const tx = db.transaction(CARD_PHOTO_IDB_STORE, 'readwrite');
+        tx.objectStore(CARD_PHOTO_IDB_STORE).clear();
+        tx.oncomplete = function () { db.close(); resolve(); };
+        tx.onerror = function () { db.close(); resolve(); };
+      } catch (e) {
+        resolve();
+      }
+    });
   }
 
   function renderCardPhotoModalList() {
@@ -9836,9 +9854,7 @@
     let uploadedCount = 0;
     listEl.innerHTML = cards
       .map(function (c, idx) {
-        const localUrl = state.cardPhotosDataUrlMap[c.ref_code];
-        const remoteRec = state.cardPhotosMap[c.ref_code];
-        const previewSrc = localUrl || (remoteRec && remoteRec.url) || '';
+        const previewSrc = state.cardPhotosDataUrlMap[c.ref_code] || '';
         if (previewSrc) uploadedCount += 1;
 
         const roleCls =
@@ -9905,7 +9921,7 @@
       .join('');
 
     if (statusEl) {
-      statusEl.textContent = 'อัปโหลดรูปแล้ว ' + uploadedCount + ' / ' + cards.length + ' คน (ระบบครอปตรงกลางอัตโนมัติ)';
+      statusEl.textContent = 'แนบรูปแล้ว ' + uploadedCount + ' / ' + cards.length + ' คน (เก็บเฉพาะในเครื่องนี้ • ครอป 26:31 อัตโนมัติ)';
     }
 
     listEl.querySelectorAll('[data-upload-photo-idx]').forEach(function (input) {
@@ -9916,27 +9932,15 @@
         const cardItem = cards[Number(input.getAttribute('data-upload-photo-idx'))];
         if (!cardItem) return;
 
-        const verifyPhone = ((document.getElementById('cardPhotoVerifyPhone') || {}).value || '').trim();
-        if (!state.isAdmin && cardItem.reg_id) {
-          const reg = state.registrations.find((x) => x.reg_id === cardItem.reg_id);
-          const isSample = reg && String(reg.status || '').indexOf('ตัวอย่าง') !== -1;
-          if (!isSample && verifyPhone.replace(/\D/g, '').length < 4) {
-            showToast('กรุณากรอกเบอร์โทรผู้ประสานงาน 4 ตัวท้ายหรือเบอร์เต็มก่อนอัปโหลดรูป', 'warning');
-            const phoneEl = document.getElementById('cardPhotoVerifyPhone');
-            if (phoneEl) phoneEl.focus();
-            return;
-          }
-        }
-
-        if (statusEl) statusEl.textContent = 'กำลังครอปและอัปโหลดรูปของ ' + cardItem.person_name + '...';
+        if (statusEl) statusEl.textContent = 'กำลังครอปและจัดเก็บรูปของ ' + cardItem.person_name + '...';
         try {
           const cropped = await cropAndCompressIdPhoto(file);
-          await uploadCardPhotoEntry(cardItem, cropped.dataUrl, verifyPhone);
+          await saveLocalCardPhoto(cardItem.ref_code, cropped.dataUrl);
           renderCardPhotoModalList();
-          showToast('บันทึกรูปติดบัตรของ ' + cardItem.person_name + ' เรียบร้อยแล้ว', 'success');
+          showToast('บันทึกรูปติดบัตรของ ' + cardItem.person_name + ' ในเครื่องเรียบร้อยแล้ว', 'success');
         } catch (err) {
           renderCardPhotoModalList();
-          showToast(err.message || 'ไม่สามารถอัปโหลดรูปได้', 'error');
+          showToast(err.message || 'ไม่สามารถอ่านรูปภาพได้', 'error');
         }
       });
     });
@@ -9945,15 +9949,12 @@
       btn.addEventListener('click', async function () {
         const cardItem = cards[Number(btn.getAttribute('data-del-photo-idx'))];
         if (!cardItem) return;
-        const verifyPhone = ((document.getElementById('cardPhotoVerifyPhone') || {}).value || '').trim();
-        if (statusEl) statusEl.textContent = 'กำลังลบรูปของ ' + cardItem.person_name + '...';
         try {
-          await deleteCardPhotoEntry(cardItem, verifyPhone);
+          await deleteLocalCardPhoto(cardItem.ref_code);
           renderCardPhotoModalList();
-          showToast('ลบรูปติดบัตรเรียบร้อยแล้ว', 'info');
+          showToast('ลบรูปติดบัตรออกจากเครื่องนี้แล้ว', 'info');
         } catch (err) {
-          renderCardPhotoModalList();
-          showToast(err.message || 'ไม่สามารถลบรูปได้', 'error');
+          showToast('ไม่สามารถลบรูปได้', 'error');
         }
       });
     });
@@ -9967,6 +9968,8 @@
       return;
     }
 
+    await ensureLocalCardPhotosLoaded();
+
     state.activeCardPhotoContext = {
       title: title || 'แนบรูปถ่ายติดบัตรประจำตัว',
       cards: cards,
@@ -9975,23 +9978,15 @@
 
     const titleEl = document.getElementById('cardPhotoModalTitle');
     const subEl = document.getElementById('cardPhotoModalSub');
-    const verifyBox = document.getElementById('cardPhotoVerifyBox');
-    const verifyInput = document.getElementById('cardPhotoVerifyPhone');
     if (titleEl) titleEl.textContent = state.activeCardPhotoContext.title;
     if (subEl) {
-      subEl.textContent = (opts && opts.sub) || 'แยกเก็บเฉพาะรูปภาพลง Google Drive ไม่แตะข้อมูลลงทะเบียนและผลคะแนน';
+      subEl.textContent =
+        (opts && opts.sub) || 'รูปภาพเก็บเฉพาะในเบราว์เซอร์เครื่องนี้เพื่อจัดทำไฟล์ PDF ไม่ส่งขึ้นเซิร์ฟเวอร์ (PDPA)';
     }
-    if (verifyBox) verifyBox.classList.toggle('hidden', state.isAdmin);
-    if (verifyInput && !state.isAdmin) verifyInput.value = '';
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     renderCardPhotoModalList();
-
-    await fetchCardPhotosMap(cards.map((c) => c.ref_code));
-    if (state.activeCardPhotoContext && !modal.classList.contains('hidden')) {
-      renderCardPhotoModalList();
-    }
   }
 
   // Print ID Cards for a single registered team
@@ -10119,10 +10114,7 @@
     }
 
     const obecPngUrl = await getObecLogoSvgAsset();
-    const cardRefList = cards.map(function (c) { return c && c.ref_code; }).filter(Boolean);
-    if (cardRefList.length > 0) {
-      await fetchCardPhotosMap(cardRefList);
-    }
+    await ensureLocalCardPhotosLoaded();
     const cfg = state.config || DEFAULT_CONFIG;
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
     const logoObecUrl = obecPngUrl || (baseDir + 'assets/logo-obec.svg');
@@ -10224,9 +10216,7 @@
                 <div class="front-photo-right">
                   <div class="front-photo-frame">
                     ${(function () {
-                      const localPhoto = state.cardPhotosDataUrlMap && state.cardPhotosDataUrlMap[c.ref_code];
-                      const remotePhoto = state.cardPhotosMap && state.cardPhotosMap[c.ref_code] && state.cardPhotosMap[c.ref_code].url;
-                      const photoSrc = localPhoto || remotePhoto || '';
+                      const photoSrc = (state.cardPhotosDataUrlMap && state.cardPhotosDataUrlMap[c.ref_code]) || '';
                       if (photoSrc) {
                         return `<img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" />`;
                       }
@@ -11827,6 +11817,19 @@
     if (btnCloseCardPhotoModal) btnCloseCardPhotoModal.addEventListener('click', closeCardPhotoModal);
     const btnDismissCardPhotoModal = document.getElementById('btnDismissCardPhotoModal');
     if (btnDismissCardPhotoModal) btnDismissCardPhotoModal.addEventListener('click', closeCardPhotoModal);
+
+    const btnClearLocalCardPhotos = document.getElementById('btnClearLocalCardPhotos');
+    if (btnClearLocalCardPhotos) {
+      btnClearLocalCardPhotos.addEventListener('click', async function () {
+        if (Object.keys(state.cardPhotosDataUrlMap).length === 0) {
+          showToast('ยังไม่มีรูปถ่ายที่บันทึกไว้ในเครื่องนี้', 'info');
+          return;
+        }
+        await clearAllLocalCardPhotos();
+        renderCardPhotoModalList();
+        showToast('ล้างรูปถ่ายติดบัตรทั้งหมดในเครื่องนี้เรียบร้อยแล้ว', 'success');
+      });
+    }
 
     const btnPrintCardsFromPhotoModal = document.getElementById('btnPrintCardsFromPhotoModal');
     if (btnPrintCardsFromPhotoModal) {

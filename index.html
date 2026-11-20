@@ -685,31 +685,28 @@
     </div>
   </div>
 
-  <!-- Card Photo Upload Modal (Isolated from Registrations & Scores) -->
+  <!-- Card Photo Local Modal (Option 1: Client-Side Only - Zero Server Photo Storage / PDPA Safe) -->
   <div id="cardPhotoModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-3xl w-full p-5 sm:p-6 space-y-4 my-auto">
       <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
         <div>
-          <span class="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-heading text-[11px] font-semibold mb-1">รูปถ่ายติดบัตรประจำตัว (ครอปอัตโนมัติ 26:31)</span>
+          <span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-heading text-[11px] font-semibold mb-1">ทำในเครื่อง 100% • ครอปอัตโนมัติ 26:31 • ปลอดภัย PDPA</span>
           <h3 id="cardPhotoModalTitle" class="text-base sm:text-lg font-bold font-heading text-slate-900">แนบรูปถ่ายติดบัตร</h3>
-          <p id="cardPhotoModalSub" class="text-xs text-slate-500 mt-0.5">แยกเก็บเฉพาะรูปภาพลง Google Drive ไม่แตะข้อมูลลงทะเบียนและผลคะแนน</p>
+          <p id="cardPhotoModalSub" class="text-xs text-slate-500 mt-0.5">รูปภาพทั้งหมดเก็บไว้ชั่วคราวเฉพาะในเบราว์เซอร์เครื่องนี้ ไม่ส่งขึ้นเซิร์ฟเวอร์และไม่แตะข้อมูลสมัคร/คะแนน</p>
         </div>
         <button type="button" id="btnCloseCardPhotoModal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer" aria-label="ปิดหน้าต่าง">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
 
-      <div id="cardPhotoVerifyBox" class="rounded-xl bg-amber-50/70 border border-amber-200 p-3 space-y-1.5">
-        <label for="cardPhotoVerifyPhone" class="block text-xs font-heading font-semibold text-amber-950">ยืนยันสิทธิ์ผู้ประสานงาน (กรอกเบอร์โทรผู้ประสานงานที่ลงทะเบียนไว้ 4 ตัวท้าย หรือเบอร์เต็ม)</label>
-        <input type="tel" id="cardPhotoVerifyPhone" placeholder="เช่น 6789 หรือ 0812345678" class="w-full sm:w-80 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm focus:ring-2 focus:ring-amber-400 focus:border-amber-400" />
-        <p class="text-[11px] text-amber-800">ระบบจะครอปภาพตรงกลางตามอัตราส่วนบัตร (26:31) และย่อขนาดอัตโนมัติ (ราว 300 DPI) เพื่อความรวดเร็วในการพิมพ์ PDF</p>
-      </div>
-
-      <div id="cardPhotoList" class="space-y-2.5 max-h-[55vh] overflow-y-auto pr-1"></div>
+      <div id="cardPhotoList" class="space-y-2.5 max-h-[58vh] overflow-y-auto pr-1"></div>
 
       <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
-        <span id="cardPhotoStatusText" class="text-xs text-slate-500">เลือกไฟล์ JPG / PNG / WEBP เพื่อครอปและบันทึก</span>
+        <span id="cardPhotoStatusText" class="text-xs text-slate-500">เลือกไฟล์ JPG / PNG / WEBP เพื่อครอปและพร้อมพิมพ์ PDF</span>
         <div class="flex flex-wrap items-center gap-2">
+          <button type="button" id="btnClearLocalCardPhotos" class="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-heading text-xs font-medium transition cursor-pointer">
+            ล้างรูปในเครื่องนี้
+          </button>
           <button type="button" id="btnDismissCardPhotoModal" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-heading text-xs font-medium hover:bg-slate-50 transition cursor-pointer">
             ปิดหน้าต่าง
           </button>
