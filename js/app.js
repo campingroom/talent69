@@ -21,7 +21,10 @@
 
   const DEFAULT_CONFIG = {
     regCloseDate: '2026-11-19T23:59',
-    districtRepCriteria: 'rank_1', // 'rank_1', 'rank_1_2', 'rank_1_3', 'gold_only'
+    districtRepCriteria: 'rank_1', // legacy fallback: 'rank_1', 'rank_1_2', 'rank_1_3', 'gold_only'
+    districtRepCriteriaPrimary: 'rank_1',
+    districtRepCriteriaMixed: 'rank_1',
+    districtRepCriteriaSecondary: 'rank_1_2',
     certPrefix: 'WYK74-2569-',
     certSignerName: 'นายกิจภูมิ บุญอบ',
     certSignerPos: 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
@@ -134,6 +137,53 @@
     }
   }
 
+  function getDistrictRepCriteriaShortLabel(criteria) {
+    switch (criteria) {
+      case 'rank_1_2':
+        return 'อันดับ 1–2';
+      case 'rank_1_3':
+        return 'อันดับ 1–3';
+      case 'gold_only':
+        return 'เหรียญทอง อันดับ 1';
+      case 'rank_1':
+      default:
+        return 'อันดับ 1';
+    }
+  }
+
+  function getDistrictRepLevelGroup(levelStr) {
+    const lvl = String(levelStr || '').trim();
+    if (!lvl) return 'primary';
+    if (lvl.indexOf('ป.1–ม.3') !== -1 || lvl.indexOf('ป.1-ม.3') !== -1 || lvl.indexOf('ขยายโอกาส') !== -1) {
+      return 'mixed';
+    }
+    if (lvl.indexOf('ม.') !== -1) {
+      return 'secondary';
+    }
+    return 'primary';
+  }
+
+  function getDistrictRepCriteriaConfig(cfgInput) {
+    const cfg = cfgInput || state.config || DEFAULT_CONFIG;
+    return {
+      primary: cfg.districtRepCriteriaPrimary || cfg.districtRepCriteria || 'rank_1',
+      mixed: cfg.districtRepCriteriaMixed || 'rank_1',
+      secondary: cfg.districtRepCriteriaSecondary || 'rank_1_2'
+    };
+  }
+
+  function getDistrictRepCriteriaSummaryLabel(cfgInput) {
+    const crit = getDistrictRepCriteriaConfig(cfgInput);
+    return (
+      'ประถมฯ: ' +
+      getDistrictRepCriteriaShortLabel(crit.primary) +
+      ' • ป.1–ม.3/ขยายโอกาส: ' +
+      getDistrictRepCriteriaShortLabel(crit.mixed) +
+      ' • มัธยมฯ (ม.1–ม.3): ' +
+      getDistrictRepCriteriaShortLabel(crit.secondary)
+    );
+  }
+
   function isRegistrationAbsent(r) {
     if (!r) return false;
     const m = String(r.medal || '').trim();
@@ -172,23 +222,39 @@
     return { hasTie: hasTie, hasUnresolvedTie: hasUnresolvedTie, tiedScores: tiedScores };
   }
 
-  function isDistrictRepresentative(r) {
-    if (!r || isRegistrationAbsent(r) || !hasValidScore(r)) return false;
+  function matchesDistrictRepCriteria(r, criteria) {
     const rank = Number(r.rank);
-    const award = r.award_title || '';
-    const medal = r.medal || '';
-    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
+    const award = String(r.award_title || '').trim();
+    const medal = String(r.medal || '').trim();
 
     if (criteria === 'rank_1_2') {
-      return (rank >= 1 && rank <= 2) || award.includes('ชนะเลิศ');
+      return (rank >= 1 && rank <= 2) || award === 'ชนะเลิศ' || award === 'รองชนะเลิศอันดับ 1';
     }
     if (criteria === 'rank_1_3') {
-      return (rank >= 1 && rank <= 3) || award.includes('ชนะเลิศ');
+      return (
+        (rank >= 1 && rank <= 3) ||
+        award === 'ชนะเลิศ' ||
+        award === 'รองชนะเลิศอันดับ 1' ||
+        award === 'รองชนะเลิศอันดับ 2'
+      );
     }
     if (criteria === 'gold_only') {
       return (rank === 1 || award === 'ชนะเลิศ') && medal.includes('ทอง');
     }
     return rank === 1 || award === 'ชนะเลิศ';
+  }
+
+  function isDistrictRepresentative(r) {
+    if (!r || isRegistrationAbsent(r) || !hasValidScore(r)) return false;
+    let levelStr = r.level || '';
+    if (!levelStr && r.comp_id) {
+      const comp = state.competitions.find((c) => c.comp_id === r.comp_id);
+      if (comp) levelStr = comp.level || '';
+    }
+    const group = getDistrictRepLevelGroup(levelStr);
+    const critMap = getDistrictRepCriteriaConfig();
+    const criteria = critMap[group] || 'rank_1';
+    return matchesDistrictRepCriteria(r, criteria);
   }
 
   const DEFAULT_DATA = window.TALENT69_DEFAULT_DATA || {
@@ -804,6 +870,9 @@
           ? parsed.judges
           : cloneDeep(DEFAULT_DATA.sampleJudges || []);
         state.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
+        if (parsed.config && parsed.config.districtRepCriteria && !parsed.config.districtRepCriteriaPrimary) {
+          state.config.districtRepCriteriaPrimary = parsed.config.districtRepCriteria;
+        }
         if (!state.config.featureVisibility) {
           state.config.featureVisibility = Object.assign({}, DEFAULT_CONFIG.featureVisibility);
         } else {
@@ -1179,11 +1248,18 @@
       }
     }
 
-    // District Representatives Criteria in Admin
-    const repCriteriaSelect = document.getElementById('cfgDistrictRepCriteriaSelect');
-    if (repCriteriaSelect && document.activeElement !== repCriteriaSelect) {
-      repCriteriaSelect.value = cfg.districtRepCriteria || 'rank_1';
-    }
+    // District Representatives Criteria in Admin (3 Level Tracks)
+    const critMap = getDistrictRepCriteriaConfig(cfg);
+    [
+      ['cfgDistrictRepCriteriaPrimarySelect', critMap.primary],
+      ['cfgDistrictRepCriteriaMixedSelect', critMap.mixed],
+      ['cfgDistrictRepCriteriaSecondarySelect', critMap.secondary]
+    ].forEach(function (pair) {
+      const sel = document.getElementById(pair[0]);
+      if (sel && document.activeElement !== sel) {
+        sel.value = pair[1];
+      }
+    });
   }
 
   function updateFeatureVisibilityUI() {
@@ -7038,8 +7114,7 @@
     // Update district representative criteria badge text
     const criteriaTextEl = document.getElementById('resDistrictCriteriaText');
     if (criteriaTextEl) {
-      const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
-      criteriaTextEl.textContent = getDistrictRepCriteriaLabel(criteria);
+      criteriaTextEl.textContent = getDistrictRepCriteriaSummaryLabel();
     }
 
     // Group registrations by comp_id
@@ -9087,8 +9162,7 @@
 
   // Export District Representatives as .xlsx
   async function exportDistrictRepresentativesExcel() {
-    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
-    const criteriaLabel = getDistrictRepCriteriaLabel(criteria);
+    const criteriaLabel = getDistrictRepCriteriaSummaryLabel();
     const list = state.registrations.filter(isDistrictRepresentative);
     if (list.length === 0) {
       showToast('ยังไม่มีผลการแข่งขันที่ผ่านเกณฑ์ตัวแทนไปแข่งขันระดับเขต (' + criteriaLabel + ')', 'warning');
@@ -9237,8 +9311,7 @@
 
   // Print Official District Representatives Report (A4 Landscape)
   function printDistrictRepresentativesReport() {
-    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
-    const criteriaLabel = getDistrictRepCriteriaLabel(criteria);
+    const criteriaLabel = getDistrictRepCriteriaSummaryLabel();
     const list = state.registrations.filter(isDistrictRepresentative);
     if (list.length === 0) {
       showToast('ยังไม่มีผลการแข่งขันที่ผ่านเกณฑ์ตัวแทนไปแข่งขันระดับเขต (' + criteriaLabel + ')', 'warning');
@@ -12655,24 +12728,44 @@
       btnAdminPrintDistrictRepsReport.addEventListener('click', printDistrictRepresentativesReport);
     }
 
-    const repCriteriaSelect = document.getElementById('cfgDistrictRepCriteriaSelect');
-    const btnSaveDistrictRepCriteria = document.getElementById('btnSaveDistrictRepCriteria');
-    if (btnSaveDistrictRepCriteria && repCriteriaSelect) {
-      btnSaveDistrictRepCriteria.addEventListener('click', function () {
-        if (!state.isAdmin) return;
-        state.config.districtRepCriteria = repCriteriaSelect.value || 'rank_1';
-        saveState();
-        renderAll();
-        showToast('บันทึกเกณฑ์ตัวแทนระดับเขตฯ เรียบร้อยแล้ว: ' + getDistrictRepCriteriaLabel(state.config.districtRepCriteria), 'success');
+    const repCriteriaBindings = [
+      ['cfgDistrictRepCriteriaPrimarySelect', 'districtRepCriteriaPrimary'],
+      ['cfgDistrictRepCriteriaMixedSelect', 'districtRepCriteriaMixed'],
+      ['cfgDistrictRepCriteriaSecondarySelect', 'districtRepCriteriaSecondary']
+    ];
+    function applyDistrictRepCriteriaFromUI(isExplicitSave) {
+      if (!state.isAdmin) return;
+      if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+      repCriteriaBindings.forEach(function (pair) {
+        const sel = document.getElementById(pair[0]);
+        if (sel && sel.value) {
+          state.config[pair[1]] = sel.value;
+        }
       });
-      repCriteriaSelect.addEventListener('change', function () {
-        if (!state.isAdmin) return;
-        state.config.districtRepCriteria = repCriteriaSelect.value || 'rank_1';
-        saveState();
-        renderAll();
-        showToast('ปรับเกณฑ์ตัวแทนระดับเขตฯ เป็น: ' + getDistrictRepCriteriaLabel(state.config.districtRepCriteria), 'info');
+      state.config.districtRepCriteria = state.config.districtRepCriteriaPrimary || 'rank_1';
+      saveState();
+      renderAll();
+      const summary = getDistrictRepCriteriaSummaryLabel(state.config);
+      showToast(
+        (isExplicitSave ? 'บันทึกเกณฑ์ตัวแทนระดับเขตฯ เรียบร้อยแล้ว: ' : 'ปรับเกณฑ์ตัวแทนระดับเขตฯ เป็น: ') + summary,
+        isExplicitSave ? 'success' : 'info'
+      );
+    }
+
+    const btnSaveDistrictRepCriteria = document.getElementById('btnSaveDistrictRepCriteria');
+    if (btnSaveDistrictRepCriteria) {
+      btnSaveDistrictRepCriteria.addEventListener('click', function () {
+        applyDistrictRepCriteriaFromUI(true);
       });
     }
+    repCriteriaBindings.forEach(function (pair) {
+      const sel = document.getElementById(pair[0]);
+      if (sel) {
+        sel.addEventListener('change', function () {
+          applyDistrictRepCriteriaFromUI(false);
+        });
+      }
+    });
 
     // Feature Visibility Toggle Handlers (Admin)
     const btnUnlockAllFeaturesNow = document.getElementById('btnUnlockAllFeaturesNow');

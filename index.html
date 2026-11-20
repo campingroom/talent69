@@ -2380,21 +2380,56 @@
                   รวบรวมรายชื่อทีมตัวแทนกลุ่มโรงเรียนตามเกณฑ์ที่กำหนด พร้อมรายชื่อนักเรียนและครูผู้ฝึกสอน เพื่อนำส่งระดับเขตพื้นที่การศึกษา
                 </p>
 
-                <!-- Representative Criteria Selector -->
-                <div class="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1.5">
-                  <label for="cfgDistrictRepCriteriaSelect" class="block text-xs font-heading font-semibold text-slate-700">
-                    เกณฑ์กำหนดการคัดเลือกตัวแทนกลุ่มโรงเรียนไปแข่งระดับเขตฯ:
-                  </label>
-                  <div class="flex flex-col sm:flex-row gap-2">
-                    <select id="cfgDistrictRepCriteriaSelect" class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
-                      <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1) [มาตรฐาน]</option>
-                      <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1)</option>
-                      <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
-                      <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
-                    </select>
-                    <button type="button" id="btnSaveDistrictRepCriteria" class="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition shrink-0">
+                <!-- Representative Criteria Selector (Split by Level Track) -->
+                <div class="p-3 rounded-lg bg-white border border-slate-200 space-y-2.5">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="block text-xs font-heading font-semibold text-slate-800">
+                      เกณฑ์กำหนดการคัดเลือกตัวแทนกลุ่มโรงเรียนไปแข่งระดับเขตฯ (แยกตามช่วงชั้น):
+                    </span>
+                    <button type="button" id="btnSaveDistrictRepCriteria" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition shrink-0 cursor-pointer">
                       บันทึกเกณฑ์ตัวแทน
                     </button>
+                  </div>
+
+                  <div class="space-y-2">
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-1.5 sm:items-center">
+                      <label for="cfgDistrictRepCriteriaPrimarySelect" class="sm:col-span-5 text-[11px] font-heading font-semibold text-slate-700">
+                        1. ปฐมวัย – ประถมศึกษา
+                        <span class="block font-normal text-[10px] text-slate-500">ปฐมวัย, ป.1–ป.3, ป.4–ป.6, ป.1–ป.6</span>
+                      </label>
+                      <select id="cfgDistrictRepCriteriaPrimarySelect" class="sm:col-span-7 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
+                        <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1) [มาตรฐาน]</option>
+                        <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1)</option>
+                        <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
+                        <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
+                      </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-1.5 sm:items-center pt-1.5 border-t border-slate-100">
+                      <label for="cfgDistrictRepCriteriaMixedSelect" class="sm:col-span-5 text-[11px] font-heading font-semibold text-slate-700">
+                        2. รวมช่วงชั้น / ขยายโอกาส
+                        <span class="block font-normal text-[10px] text-slate-500">ป.1–ม.3, ป.1–ม.3 (ขยายโอกาส)</span>
+                      </label>
+                      <select id="cfgDistrictRepCriteriaMixedSelect" class="sm:col-span-7 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
+                        <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1)</option>
+                        <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1)</option>
+                        <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
+                        <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
+                      </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-1.5 sm:items-center pt-1.5 border-t border-slate-100">
+                      <label for="cfgDistrictRepCriteriaSecondarySelect" class="sm:col-span-5 text-[11px] font-heading font-semibold text-slate-700">
+                        3. มัธยมศึกษาตอนต้น
+                        <span class="block font-normal text-[10px] text-slate-500">ม.1–ม.3</span>
+                      </label>
+                      <select id="cfgDistrictRepCriteriaSecondarySelect" class="sm:col-span-7 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
+                        <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1)</option>
+                        <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1) [แนะนำมัธยม]</option>
+                        <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
+                        <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
