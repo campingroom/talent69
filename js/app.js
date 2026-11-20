@@ -9839,6 +9839,53 @@
     });
   }
 
+  function normalizePersonPhotoToken(val) {
+    return String(val || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function getCardPersonPhotoKey(card) {
+    if (!card) return '';
+    const sch = normalizePersonPhotoToken(card.school_name);
+    const name = normalizePersonPhotoToken(card.person_name);
+    if (!name) return card.ref_code || '';
+    return 'PERSON::' + sch + '::' + name;
+  }
+
+  function getResolvedCardPhotoUrl(card) {
+    if (!card || !state.cardPhotosDataUrlMap) return '';
+    if (card.ref_code && state.cardPhotosDataUrlMap[card.ref_code]) {
+      return state.cardPhotosDataUrlMap[card.ref_code];
+    }
+    const pKey = getCardPersonPhotoKey(card);
+    return (pKey && state.cardPhotosDataUrlMap[pKey]) || '';
+  }
+
+  function groupCardsByPerson(cards) {
+    const groups = [];
+    const byKey = {};
+    (cards || []).forEach(function (c) {
+      if (!c) return;
+      const pKey = getCardPersonPhotoKey(c) || c.ref_code;
+      if (!byKey[pKey]) {
+        byKey[pKey] = {
+          personKey: pKey,
+          primaryCard: c,
+          cards: [],
+          refCodes: [],
+          roles: [],
+          comps: []
+        };
+        groups.push(byKey[pKey]);
+      }
+      const g = byKey[pKey];
+      g.cards.push(c);
+      if (c.ref_code && g.refCodes.indexOf(c.ref_code) === -1) g.refCodes.push(c.ref_code);
+      if (c.spine_title_th && g.roles.indexOf(c.spine_title_th) === -1) g.roles.push(c.spine_title_th);
+      if (c.comp_name_clean && g.comps.indexOf(c.comp_name_clean) === -1) g.comps.push(c.comp_name_clean);
+    });
+    return groups;
+  }
+
   function renderCardPhotoModalList() {
     const listEl = document.getElementById('cardPhotoList');
     const statusEl = document.getElementById('cardPhotoStatusText');
@@ -9851,10 +9898,20 @@
       return;
     }
 
+    const personGroups = groupCardsByPerson(cards);
     let uploadedCount = 0;
-    listEl.innerHTML = cards
-      .map(function (c, idx) {
-        const previewSrc = state.cardPhotosDataUrlMap[c.ref_code] || '';
+    listEl.innerHTML = personGroups
+      .map(function (g, idx) {
+        const c = g.primaryCard;
+        let previewSrc = state.cardPhotosDataUrlMap[g.personKey] || '';
+        if (!previewSrc) {
+          for (let ri = 0; ri < g.refCodes.length; ri++) {
+            if (state.cardPhotosDataUrlMap[g.refCodes[ri]]) {
+              previewSrc = state.cardPhotosDataUrlMap[g.refCodes[ri]];
+              break;
+            }
+          }
+        }
         if (previewSrc) uploadedCount += 1;
 
         const roleCls =
@@ -9872,6 +9929,22 @@
           ? '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-heading font-semibold">มีรูปแล้ว</span>'
           : '<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-heading">ยังไม่แนบรูป</span>';
 
+        const multiBadge =
+          g.cards.length > 1
+            ? '<span class="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-heading font-semibold" title="แนบรูปครั้งเดียว ระบบติดให้ครบทั้ง ' +
+              g.cards.length +
+              ' บัตรอัตโนมัติ">ซ้ำ ' +
+              g.cards.length +
+              ' รายการ (แนบครั้งเดียว)</span>'
+            : '';
+
+        const compsSummary =
+          g.comps.length <= 2
+            ? g.comps.join(', ')
+            : g.comps.slice(0, 2).join(', ') + ' และอีก ' + (g.comps.length - 2) + ' รายการ';
+
+        const refLabel = g.cards.length > 1 ? g.refCodes[0] + ' (+' + (g.cards.length - 1) + ')' : c.ref_code;
+
         const deleteBtnHtml = previewSrc
           ? `<button type="button" data-del-photo-idx="${idx}" class="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-heading text-xs font-medium transition cursor-pointer">ลบรูป</button>`
           : '';
@@ -9884,21 +9957,26 @@
           '</div>' +
           '<div class="min-w-0">' +
           '<div class="flex flex-wrap items-center gap-1.5">' +
-          '<span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">' +
-          escapeHtml(c.ref_code) +
+          '<span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600" title="' +
+          escapeHtml(g.refCodes.join(', ')) +
+          '">' +
+          escapeHtml(refLabel) +
           '</span>' +
           '<span class="px-2 py-0.5 rounded border text-[10px] font-heading font-semibold ' +
           roleCls +
           '">' +
-          escapeHtml(c.spine_title_th) +
+          escapeHtml(g.roles.join(' / ')) +
           '</span>' +
           statusBadge +
+          multiBadge +
           '</div>' +
           '<div class="font-heading font-bold text-sm text-slate-900 mt-0.5 truncate">' +
           escapeHtml(c.person_name) +
           '</div>' +
-          '<div class="text-[11px] text-slate-500 truncate">' +
-          escapeHtml(c.comp_name_clean) +
+          '<div class="text-[11px] text-slate-500 truncate" title="' +
+          escapeHtml(g.comps.join(' • ')) +
+          '">' +
+          escapeHtml(compsSummary) +
           ' • ' +
           escapeHtml(c.sub_role) +
           '</div>' +
@@ -9921,7 +9999,11 @@
       .join('');
 
     if (statusEl) {
-      statusEl.textContent = 'แนบรูปแล้ว ' + uploadedCount + ' / ' + cards.length + ' คน (เก็บเฉพาะในเครื่องนี้ • ครอป 26:31 อัตโนมัติ)';
+      const dedupHint =
+        personGroups.length < cards.length
+          ? ' (รวม ' + cards.length + ' บัตร • คนซ้ำแนบครั้งเดียวใช้ได้ทุกใบ)'
+          : ' (เก็บเฉพาะในเครื่องนี้ • ครอป 26:31 อัตโนมัติ)';
+      statusEl.textContent = 'แนบรูปแล้ว ' + uploadedCount + ' / ' + personGroups.length + ' คน' + dedupHint;
     }
 
     listEl.querySelectorAll('[data-upload-photo-idx]').forEach(function (input) {
@@ -9929,15 +10011,21 @@
         const file = ev.target.files && ev.target.files[0];
         ev.target.value = '';
         if (!file) return;
-        const cardItem = cards[Number(input.getAttribute('data-upload-photo-idx'))];
-        if (!cardItem) return;
+        const group = personGroups[Number(input.getAttribute('data-upload-photo-idx'))];
+        if (!group) return;
 
-        if (statusEl) statusEl.textContent = 'กำลังครอปและจัดเก็บรูปของ ' + cardItem.person_name + '...';
+        if (statusEl) statusEl.textContent = 'กำลังครอปและจัดเก็บรูปของ ' + group.primaryCard.person_name + '...';
         try {
           const cropped = await cropAndCompressIdPhoto(file);
-          await saveLocalCardPhoto(cardItem.ref_code, cropped.dataUrl);
+          await saveLocalCardPhoto(group.personKey, cropped.dataUrl);
           renderCardPhotoModalList();
-          showToast('บันทึกรูปติดบัตรของ ' + cardItem.person_name + ' ในเครื่องเรียบร้อยแล้ว', 'success');
+          showToast(
+            'บันทึกรูปติดบัตรของ ' +
+              group.primaryCard.person_name +
+              (group.cards.length > 1 ? ' (ใช้ครบทั้ง ' + group.cards.length + ' รายการ)' : '') +
+              ' เรียบร้อยแล้ว',
+            'success'
+          );
         } catch (err) {
           renderCardPhotoModalList();
           showToast(err.message || 'ไม่สามารถอ่านรูปภาพได้', 'error');
@@ -9947,10 +10035,13 @@
 
     listEl.querySelectorAll('[data-del-photo-idx]').forEach(function (btn) {
       btn.addEventListener('click', async function () {
-        const cardItem = cards[Number(btn.getAttribute('data-del-photo-idx'))];
-        if (!cardItem) return;
+        const group = personGroups[Number(btn.getAttribute('data-del-photo-idx'))];
+        if (!group) return;
         try {
-          await deleteLocalCardPhoto(cardItem.ref_code);
+          await deleteLocalCardPhoto(group.personKey);
+          for (let ri = 0; ri < group.refCodes.length; ri++) {
+            await deleteLocalCardPhoto(group.refCodes[ri]);
+          }
           renderCardPhotoModalList();
           showToast('ลบรูปติดบัตรออกจากเครื่องนี้แล้ว', 'info');
         } catch (err) {
@@ -10216,7 +10307,7 @@
                 <div class="front-photo-right">
                   <div class="front-photo-frame">
                     ${(function () {
-                      const photoSrc = (state.cardPhotosDataUrlMap && state.cardPhotosDataUrlMap[c.ref_code]) || '';
+                      const photoSrc = getResolvedCardPhotoUrl(c);
                       if (photoSrc) {
                         return `<img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" />`;
                       }
