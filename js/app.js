@@ -258,6 +258,10 @@
     cardPhotosLoaded: false,
     cardPhotosDataUrlMap: {},
     activeCardPhotoContext: null,
+    importedTeacherRoster: null,
+    autoJudgePreviewPlan: null,
+    scoreModalJudgeCount: 3,
+    scoreModalCompJudges: [],
     resultSubview: 'by-comp',
     certNumeralMode: 'both', // 'thai' | 'arabic' | 'both'
     lastAddedRegId: null,
@@ -5859,31 +5863,53 @@
       .slice()
       .sort((a, b) => (roleRank[a.role] || 9) - (roleRank[b.role] || 9));
 
-    const judgeCellsHtml = [0, 1, 2]
-      .map(function (i) {
-        const j = compJudges[i];
-        if (j) {
-          const jName = formatFullNameForPrint(j.prefix, j.judge_name || j.full_name || '');
-          const jRole = j.role || 'กรรมการตัดสิน';
-          return (
-            '<td>ลงชื่อ ............................................................<br/>( ' +
-            escapeHtml(jName) +
-            ' )<br/>' +
-            escapeHtml(jRole) +
-            (j.school_name ? ' • ' + escapeHtml(j.school_name) : '') +
-            '</td>'
-          );
-        }
-        return (
-          '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>' +
-          (i === 0 ? 'ประธานกรรมการ' : i === 2 ? 'กรรมการและเลขานุการ' : 'กรรมการตัดสิน') +
-          '</td>'
-        );
-      })
-      .join('');
+    const judgeSlotCount = Math.max(3, compJudges.length);
+    const judgeSlots = [];
+    for (let ji = 0; ji < judgeSlotCount; ji++) {
+      judgeSlots.push(compJudges[ji] || null);
+    }
+
+    function buildJudgeSignatureRowsHtml(slots) {
+      const rows = [];
+      for (let start = 0; start < slots.length; start += 3) {
+        const chunk = slots.slice(start, start + 3);
+        const cells = chunk
+          .map(function (j, offset) {
+            const globalIdx = start + offset;
+            if (j) {
+              const jName = formatFullNameForPrint(j.prefix, j.judge_name || j.full_name || '');
+              const jRole = j.role || 'กรรมการตัดสิน';
+              return (
+                '<td>ลงชื่อ ............................................................<br/>( ' +
+                escapeHtml(jName) +
+                ' )<br/>' +
+                escapeHtml(jRole) +
+                (j.school_name ? ' • ' + escapeHtml(j.school_name) : '') +
+                '</td>'
+              );
+            }
+            return (
+              '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>' +
+              (globalIdx === 0 ? 'ประธานกรรมการ' : globalIdx === 2 ? 'กรรมการและเลขานุการ' : 'กรรมการตัดสิน') +
+              '</td>'
+            );
+          })
+          .join('');
+        rows.push('<tr>' + cells + '</tr>');
+      }
+      return rows.join('');
+    }
+    const judgeCellsHtml = buildJudgeSignatureRowsHtml(judgeSlots);
 
     let scoreSectionHtml = '';
     if (allowScoreSheet) {
+      const emptyJudgeScoreCols = Array(judgeSlotCount).fill('<td></td>').join('');
+      const judgeScoreHeadersHtml = judgeSlots
+        .map(function (_j, idx) {
+          return '<th style="width:70px;">กรรมการ<br/>คนที่ ' + (idx + 1) + ' (100)</th>';
+        })
+        .join('');
+
       const scoreRowsHtml = regs
         .map(function (r, idx) {
           const students = r.students || [];
@@ -5911,9 +5937,7 @@
             '<td>' +
             (stuHtml || '-') +
             '</td>' +
-            '<td></td>' +
-            '<td></td>' +
-            '<td></td>' +
+            emptyJudgeScoreCols +
             '<td></td>' +
             '<td></td>' +
             '<td></td>' +
@@ -5929,7 +5953,9 @@
           scoreBlankRowsHtml +=
             '<tr><td class="text-center">' +
             b +
-            '</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+            '</td><td></td><td></td>' +
+            emptyJudgeScoreCols +
+            '<td></td><td></td><td></td><td></td></tr>';
         }
       }
 
@@ -5974,13 +6000,13 @@
         '<th style="width:36px;">ที่</th>' +
         '<th style="width:170px;">โรงเรียน</th>' +
         '<th>รายชื่อนักเรียนผู้เข้าแข่งขัน</th>' +
-        '<th style="width:76px;">กรรมการ<br/>คนที่ 1 (100)</th>' +
-        '<th style="width:76px;">กรรมการ<br/>คนที่ 2 (100)</th>' +
-        '<th style="width:76px;">กรรมการ<br/>คนที่ 3 (100)</th>' +
-        '<th style="width:72px;">คะแนนรวม<br/>(300)</th>' +
+        judgeScoreHeadersHtml +
+        '<th style="width:72px;">คะแนนรวม<br/>(' +
+        judgeSlotCount * 100 +
+        ')</th>' +
         '<th style="width:78px;">คะแนนเฉลี่ย<br/>(100)</th>' +
         '<th style="width:105px;">เหรียญ /<br/>อันดับที่ได้</th>' +
-        '<th style="width:105px;">หมายเหตุ<br/>(ขาดสอบ/ชี้ขาด)</th>' +
+        '<th style="width:105px;">หมายเหตุ<br/>(ขาดสอบ/งดคะแนน)</th>' +
         '</tr>' +
         '</thead>' +
         '<tbody>' +
@@ -5990,12 +6016,12 @@
         '</table>' +
         '<div class="criteria-note">' +
         '<strong>เกณฑ์เหรียญรางวัล (คะแนนเต็ม 100):</strong> ร้อยละ 80.00–100.00 = เหรียญทอง • 70.00–79.99 = เหรียญเงิน • 60.00–69.99 = เหรียญทองแดง • ต่ำกว่า 60.00 = เข้าร่วม • ' +
-        '<strong>หมายเหตุ:</strong> กรณีไม่มาแข่งขันให้ระบุคำว่า "ขาดสอบ" ในช่องหมายเหตุ และหากมีทีมคะแนนเท่ากันให้คณะกรรมการพิจารณาชี้ขาดอันดับให้ชัดเจนเพื่อคัดเลือกตัวแทนกลุ่มโรงเรียน' +
+        '<strong>หมายเหตุ:</strong> กรณีกรรมการงดให้คะแนนโรงเรียนตนเอง ให้ขีด "-" และคิดค่าเฉลี่ยเฉพาะกรรมการที่ลงคะแนนจริง (เทียบเป็นเต็ม 100)' +
         '</div>' +
         '<div class="judges-section">' +
-        '<table class="judges-table"><tr>' +
+        '<table class="judges-table">' +
         judgeCellsHtml +
-        '</tr></table>' +
+        '</table>' +
         '</div>' +
         '</div>';
     }
@@ -6201,9 +6227,7 @@
       '<div class="judges-section">' +
       '<div class="judges-title">กรรมการตัดสิน</div>' +
       '<table class="judges-table">' +
-      '<tr>' +
       judgeCellsHtml +
-      '</tr>' +
       '</table>' +
       '<div class="footer-note">นัดหมายประชุมคณะกรรมการตัดสิน: วันจันทร์ที่ 23 พฤศจิกายน 2569 เวลา 13.30 น. ณ โรงเรียนบ้านวังยาววิทยายน • กำหนดการแข่งขัน 24–25 พ.ย. 2569</div>' +
       '</div>' +
@@ -6817,9 +6841,708 @@
   }
 
   // ==========================================
+  // PHASE 2: AUTO JUDGE ALLOCATOR ENGINE & EXCEL/CSV TEACHER IMPORT
+  // ==========================================
+  const AUTO_JUDGE_CORE_MAJORS = {
+    '9': 'ปฐมวัย',
+    '11.1': 'ภาษาไทย',
+    '11.2': 'คณิตศาสตร์',
+    '11.3': 'วิทยาศาสตร์',
+    '11.4': 'ภาษาอังกฤษ',
+    '12.1': 'สังคมศึกษา',
+    '4': 'สุขศึกษาและพลศึกษา',
+    '2': 'คอมพิวเตอร์'
+  };
+  const AUTO_JUDGE_SECONDARY_MAJORS = {
+    '7': 'ดนตรี',
+    '6': 'นาฏศิลป์',
+    '5': 'ทัศนศิลป์/ศิลปะ',
+    '3': 'การงานอาชีพ'
+  };
+  const AUTO_JUDGE_GENERAL_MAJORS = {
+    '10': 'การศึกษาพิเศษ/เรียนรวม',
+    '12.2': 'กิจกรรมพัฒนาผู้เรียน',
+    '13': 'ดนตรีพื้นเมืองอีสาน',
+    '1': 'ภาพยนตร์สั้น/สื่อ',
+    '8': 'หนังสือเล่มเล็ก'
+  };
+  const AUTO_JUDGE_COMPAT = {
+    '1': [['ภาพยนตร์สั้น/สื่อ', 'คอมพิวเตอร์'], ['ภาษาไทย', 'ทัศนศิลป์/ศิลปะ']],
+    '2': [['คอมพิวเตอร์'], ['คณิตศาสตร์', 'วิทยาศาสตร์', 'ทัศนศิลป์/ศิลปะ']],
+    '3': [['การงานอาชีพ'], ['วิทยาศาสตร์', 'ทัศนศิลป์/ศิลปะ', 'ปฐมวัย']],
+    '4': [['สุขศึกษาและพลศึกษา'], ['นาฏศิลป์', 'ดนตรี']],
+    '5': [['ทัศนศิลป์/ศิลปะ'], ['ปฐมวัย', 'การงานอาชีพ', 'คอมพิวเตอร์']],
+    '6': [['นาฏศิลป์'], ['ดนตรี', 'สุขศึกษาและพลศึกษา']],
+    '7': [['ดนตรี', 'ดนตรีพื้นเมืองอีสาน'], ['นาฏศิลป์', 'ภาษาไทย']],
+    '8': [['หนังสือเล่มเล็ก', 'ภาษาไทย'], ['ทัศนศิลป์/ศิลปะ', 'สังคมศึกษา']],
+    '9': [['ปฐมวัย'], ['ทัศนศิลป์/ศิลปะ', 'ภาษาไทย']],
+    '10': [['การศึกษาพิเศษ/เรียนรวม'], ['ทัศนศิลป์/ศิลปะ', 'การงานอาชีพ', 'ปฐมวัย', 'ภาษาไทย']],
+    '11.1': [['ภาษาไทย'], ['สังคมศึกษา', 'ปฐมวัย']],
+    '11.2': [['คณิตศาสตร์'], ['วิทยาศาสตร์', 'คอมพิวเตอร์']],
+    '11.3': [['วิทยาศาสตร์'], ['คณิตศาสตร์', 'คอมพิวเตอร์']],
+    '11.4': [['ภาษาอังกฤษ'], ['ภาษาไทย']],
+    '12.1': [['สังคมศึกษา'], ['ภาษาไทย', 'กิจกรรมพัฒนาผู้เรียน']],
+    '12.2': [['กิจกรรมพัฒนาผู้เรียน'], ['สุขศึกษาและพลศึกษา', 'สังคมศึกษา']],
+    '13': [['ดนตรีพื้นเมืองอีสาน', 'ดนตรี'], ['นาฏศิลป์']]
+  };
+  const AUTO_JUDGE_LIVE_KEYWORDS = [
+    'ขับร้อง', 'เดี่ยว', 'วง', 'มารยาทไทย', 'สวดมนต์', 'พูดภาษาอังกฤษ', 'เล่านิทาน',
+    'ออกกำลังกาย', 'แอโรบิก', 'คีตะมวยไทย', 'คีตศิลป์', 'ผูกเงื่อน', 'เข็มทิศ',
+    'ค่ายพักแรม', 'สภานักเรียน', 'ต่อคำศัพท์', 'ต่อสมการ', 'เอแม็ท', 'ทำอาหาร',
+    'รำและระบำ', 'นาฏศิลป์', 'รำวง', 'เต้นหางเครื่อง', 'โครงงาน'
+  ];
+  const AUTO_JUDGE_SLOT_MAP = {
+    'EC09-01': 'D1-PM1', 'EC09-02': 'D1-PM2', 'EC09-03': 'D1-PM1',
+    'SP02-01': 'D1-PM1', 'SP05-01': 'D1-PM1', 'SP05-04': 'D1-PM2', 'SP05-11': 'D1-PM1',
+    'AC11-TH01': 'D1-AM2', 'AC11-TH06': 'D1-PM1', 'AC11-MA01': 'D1-AM2',
+    'MO12-SO04': 'D1-AM1', 'MO12-AC01': 'D1-AM2', 'SP07-09': 'D1-AM1', 'SP07-11': 'D1-AM2',
+    'SP04-01': 'D1-PM1', 'SE10-04': 'D1-PM1', 'SE10-06': 'D1-PM2', 'SE10-12': 'D1-PM2',
+    'SP02-02': 'D2-PM1', 'SP03-13': 'D2-AM1', 'SP05-02': 'D2-PM1', 'SP05-05': 'D2-PM2',
+    'SP05-08': 'D2-PM1', 'SP05-12': 'D2-PM2', 'SP07-13': 'D2-AM1', 'SP07-15': 'D2-AM2',
+    'LO13-03': 'D2-PM1', 'AC11-TH02': 'D2-AM2', 'AC11-TH07': 'D2-PM1', 'AC11-TH04': 'D2-PM1',
+    'AC11-MA02': 'D2-AM2', 'AC11-MA03': 'D2-PM1', 'AC11-MA04': 'D2-PM1',
+    'AC11-EN01': 'D2-AM1', 'AC11-EN03': 'D2-AM2', 'MO12-SO05': 'D2-AM1', 'MO12-SO07': 'D2-PM1'
+  };
+  const AUTO_JUDGE_SLOT_LABEL = {
+    'D1-AM1': '24 พ.ย. 09:00–10:30',
+    'D1-AM2': '24 พ.ย. 10:30–12:00',
+    'D1-PM1': '24 พ.ย. 13:00–14:30',
+    'D1-PM2': '24 พ.ย. 14:30–16:00',
+    'D2-AM1': '25 พ.ย. 09:00–10:30',
+    'D2-AM2': '25 พ.ย. 10:30–12:00',
+    'D2-PM1': '25 พ.ย. 13:00–14:30',
+    'D2-PM2': '25 พ.ย. 14:30–16:00'
+  };
+
+  function getAreaPrefixNum(area) {
+    const m = String(area || '').trim().match(/^(\d+(?:\.\d+)?)/);
+    return m ? m[1] : '';
+  }
+
+  function inferMajorFromAreas(areas) {
+    if (!areas || areas.length === 0) return 'ทั่วไป/ไม่ระบุเอก';
+    const tier1 = {};
+    const tier2 = {};
+    const tier3 = {};
+    areas.forEach(function (a) {
+      const p = getAreaPrefixNum(a);
+      if (AUTO_JUDGE_CORE_MAJORS[p]) {
+        const m = AUTO_JUDGE_CORE_MAJORS[p];
+        tier1[m] = (tier1[m] || 0) + 1;
+      } else if (AUTO_JUDGE_SECONDARY_MAJORS[p]) {
+        const m = AUTO_JUDGE_SECONDARY_MAJORS[p];
+        tier2[m] = (tier2[m] || 0) + 1;
+      } else {
+        const m = AUTO_JUDGE_GENERAL_MAJORS[p] || 'ทั่วไป/ไม่ระบุเอก';
+        tier3[m] = (tier3[m] || 0) + 1;
+      }
+    });
+    const pickTop = function (obj) {
+      return Object.entries(obj).sort((a, b) => b[1] - a[1])[0][0];
+    };
+    if (Object.keys(tier1).length > 0) return pickTop(tier1);
+    if (Object.keys(tier2).length > 0) return pickTop(tier2);
+    return pickTop(tier3);
+  }
+
+  function getCompetitionScheduleSlot(comp) {
+    if (AUTO_JUDGE_SLOT_MAP[comp.comp_id]) return AUTO_JUDGE_SLOT_MAP[comp.comp_id];
+    const lv = String(comp.level || '');
+    return lv.includes('ป.1–ป.3') || lv.includes('ปฐมวัย') ? 'D1-PM2' : 'D2-PM2';
+  }
+
+  function isCompetitionByeStatus(comp, schoolCount) {
+    if (schoolCount === 0) return 'EMPTY';
+    const lv = String(comp.level || '');
+    const isSecOnly = lv.includes('ม.') && !lv.includes('ป.');
+    if (isSecOnly) return schoolCount >= 3 ? 'ACTIVE' : 'BYE';
+    return schoolCount >= 2 ? 'ACTIVE' : 'BYE';
+  }
+
+  function isCompetitionLiveFormat(comp) {
+    const name = String(comp.comp_name || '');
+    const area = String(comp.learning_area || '');
+    if (AUTO_JUDGE_LIVE_KEYWORDS.some((k) => name.includes(k))) return true;
+    return /^(4\.|6\.|7\.|13\.)/.test(area.trim());
+  }
+
+  function getMajorMatchRank(teacherMajor, learningArea) {
+    const p = getAreaPrefixNum(learningArea);
+    const pair = AUTO_JUDGE_COMPAT[p] || [[], []];
+    if (pair[0].includes(teacherMajor)) return 0;
+    if (pair[1].includes(teacherMajor)) return 1;
+    return 2;
+  }
+
+  function buildAutoJudgeTeacherPool() {
+    const byKey = {};
+    (state.registrations || []).forEach(function (r) {
+      const sch = String(r.school_name || '').trim();
+      const cid = String(r.comp_id || '').trim();
+      const area = String(r.learning_area || '').trim();
+      const teachers = Array.isArray(r.teachers) ? r.teachers : [];
+      teachers.forEach(function (t) {
+        const prefix = String((t && t.prefix) || '').trim();
+        const name = String((t && (t.name || t.full_name)) || (typeof t === 'string' ? t : '')).replace(/\s+/g, ' ').trim();
+        if (!name || !sch) return;
+        const key = sch + '::' + name;
+        if (!byKey[key]) {
+          byKey[key] = {
+            teacher_id: 'TCH-' + (Object.keys(byKey).length + 1),
+            school_name: sch,
+            prefix: prefix,
+            full_name: name,
+            areas: [],
+            coachedCompIds: new Set(),
+            explicitMajor: ''
+          };
+        }
+        if (prefix && !byKey[key].prefix) byKey[key].prefix = prefix;
+        byKey[key].areas.push(area);
+        if (cid) byKey[key].coachedCompIds.add(cid);
+      });
+    });
+
+    const pool = Object.values(byKey).map(function (item) {
+      item.major = inferMajorFromAreas(item.areas);
+      return item;
+    });
+
+    if (Array.isArray(state.importedTeacherRoster)) {
+      const poolByKey = {};
+      pool.forEach(function (p) {
+        poolByKey[p.school_name + '::' + p.full_name] = p;
+      });
+      state.importedTeacherRoster.forEach(function (imp) {
+        const sch = String(imp.school_name || '').trim();
+        const name = String(imp.full_name || '').replace(/\s+/g, ' ').trim();
+        if (!sch || !name) return;
+        const key = sch + '::' + name;
+        if (poolByKey[key]) {
+          if (imp.major) poolByKey[key].major = imp.major;
+          if (imp.prefix && !poolByKey[key].prefix) poolByKey[key].prefix = imp.prefix;
+        } else {
+          const extra = {
+            teacher_id: 'TCH-' + (pool.length + 1),
+            school_name: sch,
+            prefix: String(imp.prefix || '').trim(),
+            full_name: name,
+            areas: [],
+            coachedCompIds: new Set(),
+            major: String(imp.major || '').trim() || 'ทั่วไป/ไม่ระบุเอก'
+          };
+          pool.push(extra);
+          poolByKey[key] = extra;
+        }
+      });
+    }
+    return pool;
+  }
+
+  function updateAutoJudgeTeacherPoolBadge() {
+    const badge = document.getElementById('autoJudgeTeacherPoolBadge');
+    const resetBtn = document.getElementById('btnAutoJudgeResetTeachers');
+    const pool = buildAutoJudgeTeacherPool();
+    if (badge) {
+      badge.textContent = Array.isArray(state.importedTeacherRoster)
+        ? 'คลังครู: นำเข้าจากไฟล์แล้ว (' + pool.length + ' คน)'
+        : 'คลังครู: เดาจากผู้ฝึกสอนในระบบ (' + pool.length + ' คน)';
+    }
+    if (resetBtn) {
+      resetBtn.classList.toggle('hidden', !Array.isArray(state.importedTeacherRoster));
+    }
+  }
+
+  async function parseTeacherRosterFile(file) {
+    if (!file) return;
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const rows = [];
+
+    if (ext === 'csv') {
+      const text = await file.text();
+      const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) throw new Error('ไฟล์ CSV ไม่มีข้อมูลรายชื่อครู');
+      const splitCsvLine = function (line) {
+        const out = [];
+        let cur = '';
+        let inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            if (inQ && line[i + 1] === '"') {
+              cur += '"';
+              i++;
+            } else {
+              inQ = !inQ;
+            }
+          } else if (ch === ',' && !inQ) {
+            out.push(cur.trim());
+            cur = '';
+          } else {
+            cur += ch;
+          }
+        }
+        out.push(cur.trim());
+        return out;
+      };
+      const hdrs = splitCsvLine(lines[0]);
+      for (let r = 1; r < lines.length; r++) {
+        const vals = splitCsvLine(lines[r]);
+        const obj = {};
+        hdrs.forEach((h, idx) => {
+          obj[h] = vals[idx] || '';
+        });
+        rows.push(obj);
+      }
+    } else if (ext === 'xlsx') {
+      const ExcelJS = await loadExcelJs();
+      const buf = await file.arrayBuffer();
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buf);
+      const ws = wb.getWorksheet('2_คลังครูและวิชาเอก') || wb.worksheets[0];
+      if (!ws) throw new Error('ไม่พบแผ่นงานในไฟล์ Excel');
+      let headerIdx = -1;
+      let headers = [];
+      ws.eachRow(function (row, rowNumber) {
+        const vals = (row.values || []).slice(1).map((v) => (v && typeof v === 'object' && v.text ? v.text : String(v || '').trim()));
+        if (headerIdx === -1 && rowNumber <= 10) {
+          const joined = vals.join(' ');
+          if (joined.includes('โรงเรียน') && (joined.includes('ชื่อ') || joined.includes('นามสกุล'))) {
+            headerIdx = rowNumber;
+            headers = vals;
+            return;
+          }
+        }
+        if (headerIdx !== -1 && rowNumber > headerIdx && vals.some((v) => v !== '')) {
+          const obj = {};
+          headers.forEach((h, idx) => {
+            obj[h] = vals[idx] || '';
+          });
+          rows.push(obj);
+        }
+      });
+    } else {
+      throw new Error('รองรับเฉพาะไฟล์ .xlsx หรือ .csv เท่านั้น');
+    }
+
+    const parsed = [];
+    rows.forEach(function (rec) {
+      const sch = rec['โรงเรียน'] || rec['school_name'] || '';
+      const name = rec['ชื่อ-นามสกุล'] || rec['full_name'] || '';
+      const prefix = rec['คำนำหน้า'] || rec['prefix'] || '';
+      const major =
+        rec['วิชาเอก (แก้ไข/กรอกเพิ่มได้)'] || rec['วิชาเอก'] || rec['major'] || '';
+      if (sch && name) {
+        parsed.push({ school_name: sch, prefix: prefix, full_name: name, major: major });
+      }
+    });
+    if (parsed.length === 0) {
+      throw new Error('ไม่พบคอลัมน์ "โรงเรียน" และ "ชื่อ-นามสกุล" ในไฟล์');
+    }
+    state.importedTeacherRoster = parsed;
+    updateAutoJudgeTeacherPoolBadge();
+    showToast('นำเข้าข้อมูลครูและวิชาเอกสำเร็จ (' + parsed.length + ' แถว)', 'success');
+  }
+
+  function computeAutoJudgeAllocation(options) {
+    const mode = options && options.mode === 'A' ? 'A' : 'B';
+    const allowExtra = Boolean(options && options.allowExtraSpecialists);
+    const includeBye = Boolean(options && options.includeBye);
+    const teachers = buildAutoJudgeTeacherPool();
+
+    const compSchoolsMap = {};
+    (state.registrations || []).forEach(function (r) {
+      if (!compSchoolsMap[r.comp_id]) compSchoolsMap[r.comp_id] = [];
+      if (r.school_name && !compSchoolsMap[r.comp_id].includes(r.school_name)) {
+        compSchoolsMap[r.comp_id].push(r.school_name);
+      }
+    });
+
+    const activeComps = [];
+    const byeComps = [];
+    (state.competitions || []).forEach(function (c) {
+      const schs = (compSchoolsMap[c.comp_id] || []).slice().sort();
+      const st = isCompetitionByeStatus(c, schs.length);
+      if (st === 'ACTIVE') {
+        activeComps.push({
+          comp: c,
+          schools: schs,
+          slot: getCompetitionScheduleSlot(c),
+          isLive: isCompetitionLiveFormat(c)
+        });
+      } else if (st === 'BYE') {
+        byeComps.push({
+          comp: c,
+          schools: schs,
+          isLive: isCompetitionLiveFormat(c)
+        });
+      }
+    });
+
+    const teacherSlots = {};
+    const teacherDayCount = {};
+    const teacherTotalCount = {};
+    const teacherLiveCoachSlots = {};
+    const compSlotById = {};
+    activeComps.forEach((a) => {
+      if (a.isLive) compSlotById[a.comp.comp_id] = a.slot;
+    });
+    teachers.forEach(function (t) {
+      teacherSlots[t.teacher_id] = new Set();
+      teacherTotalCount[t.teacher_id] = 0;
+      teacherLiveCoachSlots[t.teacher_id] = new Set();
+      t.coachedCompIds.forEach(function (cid) {
+        if (compSlotById[cid]) teacherLiveCoachSlots[t.teacher_id].add(compSlotById[cid]);
+      });
+    });
+
+    activeComps.sort(function (a, b) {
+      if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+      if (b.schools.length !== a.schools.length) return b.schools.length - a.schools.length;
+      return String(a.comp.comp_id).localeCompare(String(b.comp.comp_id));
+    });
+
+    const previewRows = [];
+    let readyCount = 0;
+    let gt3Count = 0;
+
+    activeComps.forEach(function (item) {
+      const c = item.comp;
+      const competingSet = new Set(item.schools);
+      const dayKey = item.slot.startsWith('D1') ? 'D1' : 'D2';
+
+      const isAvail = function (t) {
+        if (teacherSlots[t.teacher_id].has(item.slot)) return false;
+        if ((teacherDayCount[t.teacher_id + ':' + dayKey] || 0) >= 3) return false;
+        if (mode === 'A' && competingSet.has(t.school_name)) return false;
+        return true;
+      };
+
+      const candTuple = function (t) {
+        return [
+          getMajorMatchRank(t.major, c.learning_area),
+          competingSet.has(t.school_name) ? 1 : 0,
+          t.coachedCompIds.has(c.comp_id) ? 1 : 0,
+          teacherLiveCoachSlots[t.teacher_id].has(item.slot) ? 1 : 0,
+          teacherDayCount[t.teacher_id + ':' + dayKey] || 0,
+          teacherTotalCount[t.teacher_id] || 0
+        ];
+      };
+      const compareCand = function (a, b) {
+        const ta = candTuple(a);
+        const tb = candTuple(b);
+        for (let i = 0; i < ta.length; i++) {
+          if (ta[i] !== tb[i]) return ta[i] - tb[i];
+        }
+        return a.teacher_id.localeCompare(b.teacher_id);
+      };
+
+      const selected = [];
+      const usedSchools = new Set();
+      const pickNext = function (requireDistinctSchool, maxRank) {
+        const cands = teachers
+          .filter(
+            (t) =>
+              !selected.includes(t) &&
+              isAvail(t) &&
+              getMajorMatchRank(t.major, c.learning_area) <= maxRank &&
+              (!requireDistinctSchool || !usedSchools.has(t.school_name))
+          )
+          .sort(compareCand);
+        return cands[0] || null;
+      };
+
+      [0, 1, 2].forEach(function (rankCap) {
+        while (selected.length < 3) {
+          const picked = pickNext(true, rankCap);
+          if (!picked) break;
+          selected.push(picked);
+          usedSchools.add(picked.school_name);
+        }
+      });
+
+      if (selected.length < 3 && mode === 'B') {
+        [0, 1, 2].forEach(function (rankCap) {
+          while (selected.length < 3) {
+            const picked = pickNext(false, rankCap);
+            if (!picked) break;
+            selected.push(picked);
+            usedSchools.add(picked.school_name);
+          }
+        });
+      }
+
+      if (allowExtra && selected.length === 3) {
+        for (let k = 0; k < 2; k++) {
+          const extraCands = teachers
+            .filter(
+              (t) =>
+                !selected.includes(t) &&
+                isAvail(t) &&
+                getMajorMatchRank(t.major, c.learning_area) === 0 &&
+                !usedSchools.has(t.school_name) &&
+                (teacherDayCount[t.teacher_id + ':' + dayKey] || 0) === 0
+            )
+            .sort(compareCand);
+          if (!extraCands[0]) break;
+          selected.push(extraCands[0]);
+          usedSchools.add(extraCands[0].school_name);
+        }
+      }
+
+      selected.sort(function (a, b) {
+        const ra = getMajorMatchRank(a.major, c.learning_area);
+        const rb = getMajorMatchRank(b.major, c.learning_area);
+        if (ra !== rb) return ra - rb;
+        const ca = competingSet.has(a.school_name) ? 1 : 0;
+        const cb = competingSet.has(b.school_name) ? 1 : 0;
+        if (ca !== cb) return ca - cb;
+        return (teacherTotalCount[a.teacher_id] || 0) - (teacherTotalCount[b.teacher_id] || 0);
+      });
+
+      const judgesOut = selected.map(function (t, i) {
+        const role = i === 0 ? 'ประธานกรรมการ' : i === 1 ? 'กรรมการและเลขานุการ' : 'กรรมการ';
+        teacherSlots[t.teacher_id].add(item.slot);
+        teacherDayCount[t.teacher_id + ':' + dayKey] = (teacherDayCount[t.teacher_id + ':' + dayKey] || 0) + 1;
+        teacherTotalCount[t.teacher_id] = (teacherTotalCount[t.teacher_id] || 0) + 1;
+        return {
+          comp_id: c.comp_id,
+          comp_name: c.comp_name,
+          learning_area: c.learning_area,
+          level: c.level,
+          prefix: t.prefix,
+          judge_name: t.full_name,
+          school_name: t.school_name,
+          role: role,
+          major: t.major,
+          sameSchoolFlag: competingSet.has(t.school_name)
+        };
+      });
+
+      const warns = [];
+      if (judgesOut.length < 3) warns.push('ขาดกรรมการ ' + (3 - judgesOut.length) + ' คน');
+      if (judgesOut[0] && getMajorMatchRank(judgesOut[0].major, c.learning_area) === 2) {
+        warns.push('ประธานยังไม่ตรงเอก');
+      }
+      if (warns.length === 0) readyCount++;
+      if (judgesOut.length > 3) gt3Count++;
+
+      previewRows.push({
+        type: 'ACTIVE',
+        comp: c,
+        slotLabel: AUTO_JUDGE_SLOT_LABEL[item.slot] || item.slot,
+        formatLabel: item.isLive ? 'แสดงสด' : 'ส่งชิ้นงาน',
+        schoolCount: item.schools.length,
+        judges: judgesOut,
+        warnings: warns
+      });
+    });
+
+    if (includeBye) {
+      const byeCount = {};
+      byeComps.forEach(function (item) {
+        const c = item.comp;
+        const competingSet = new Set(item.schools);
+        const cands = teachers.slice().sort(function (a, b) {
+          const ra = getMajorMatchRank(a.major, c.learning_area);
+          const rb = getMajorMatchRank(b.major, c.learning_area);
+          if (ra !== rb) return ra - rb;
+          const ca = competingSet.has(a.school_name) ? 1 : 0;
+          const cb = competingSet.has(b.school_name) ? 1 : 0;
+          if (ca !== cb) return ca - cb;
+          return (byeCount[a.teacher_id] || 0) - (byeCount[b.teacher_id] || 0);
+        });
+        const chosen = [];
+        const usedSch = new Set();
+        for (let i = 0; i < cands.length && chosen.length < 3; i++) {
+          if (usedSch.has(cands[i].school_name) && cands.length >= 3) continue;
+          chosen.push(cands[i]);
+          usedSch.add(cands[i].school_name);
+          byeCount[cands[i].teacher_id] = (byeCount[cands[i].teacher_id] || 0) + 1;
+        }
+        const judgesOut = chosen.map(function (t, i) {
+          const role = i === 0 ? 'ประธานกรรมการ' : i === 1 ? 'กรรมการและเลขานุการ' : 'กรรมการ';
+          return {
+            comp_id: c.comp_id,
+            comp_name: c.comp_name,
+            learning_area: c.learning_area,
+            level: c.level,
+            prefix: t.prefix,
+            judge_name: t.full_name,
+            school_name: t.school_name,
+            role: role,
+            major: t.major,
+            sameSchoolFlag: false
+          };
+        });
+        previewRows.push({
+          type: 'BYE',
+          comp: c,
+          slotLabel: 'ใส่ชื่อในคำสั่ง (ไม่นับภาระงาน)',
+          formatLabel: item.isLive ? 'บาย (แสดงสด)' : 'บาย (ส่งชิ้นงาน)',
+          schoolCount: item.schools.length,
+          judges: judgesOut,
+          warnings: []
+        });
+      });
+    }
+
+    return {
+      mode: mode,
+      rows: previewRows,
+      summary: {
+        activeCount: activeComps.length,
+        readyCount: readyCount,
+        gt3Count: gt3Count,
+        byeCount: includeBye ? byeComps.length : 0,
+        teacherPoolCount: teachers.length
+      }
+    };
+  }
+
+  function renderAutoJudgePreview(plan) {
+    const box = document.getElementById('autoJudgePreviewBox');
+    const statsEl = document.getElementById('autoJudgePreviewStats');
+    const tbody = document.getElementById('autoJudgePreviewTableBody');
+    if (!box || !statsEl || !tbody) return;
+    if (!plan) {
+      box.classList.add('hidden');
+      return;
+    }
+
+    const s = plan.summary;
+    statsEl.innerHTML =
+      '<div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200"><div class="text-slate-500">รายการตัดสินจริง</div><div class="text-base font-bold font-heading text-slate-900">' + s.activeCount + ' รายการ</div></div>' +
+      '<div class="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200"><div class="text-emerald-700">จัดครบ 3+ คนพร้อมใช้</div><div class="text-base font-bold font-heading text-emerald-900">' + s.readyCount + ' / ' + s.activeCount + '</div></div>' +
+      '<div class="p-2.5 rounded-lg bg-blue-50 border border-blue-200"><div class="text-blue-700">ได้กรรมการ &gt;3 คน (ตรงเอก)</div><div class="text-base font-bold font-heading text-blue-900">' + s.gt3Count + ' รายการ</div></div>' +
+      '<div class="p-2.5 rounded-lg bg-amber-50 border border-amber-200"><div class="text-amber-700">รายการบาย (ใส่ชื่อคำสั่ง)</div><div class="text-base font-bold font-heading text-amber-900">' + s.byeCount + ' รายการ</div></div>';
+
+    tbody.innerHTML = plan.rows
+      .map(function (row) {
+        const badgeCls =
+          row.type === 'BYE'
+            ? 'bg-blue-50 text-blue-800 border border-blue-200'
+            : row.warnings.length === 0
+            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+            : 'bg-amber-50 text-amber-800 border border-amber-200';
+        const judgesHtml = row.judges
+          .map(function (j) {
+            const fullName = formatFullNameForPrint(j.prefix, j.judge_name);
+            const tag = j.sameSchoolFlag
+              ? '<span class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[10px]">งด/เป็นกลาง รร.ตน</span>'
+              : '';
+            return (
+              '<div class="leading-snug"><span class="font-semibold text-slate-800">' +
+              escapeHtml(j.role) +
+              ':</span> ' +
+              escapeHtml(fullName) +
+              ' <span class="text-slate-500">(' +
+              escapeHtml(j.school_name) +
+              ' · ' +
+              escapeHtml(j.major) +
+              ')</span>' +
+              tag +
+              '</div>'
+            );
+          })
+          .join('');
+        const warnText =
+          row.type === 'BYE'
+            ? 'พร้อม (ใส่ชื่อในคำสั่ง)'
+            : row.warnings.length === 0
+            ? 'พร้อม (' + row.judges.length + ' คน)'
+            : row.warnings.join(', ');
+        return (
+          '<tr class="hover:bg-slate-50">' +
+          '<td class="py-2.5 px-3 align-top">' +
+          '<div class="font-semibold text-slate-900">[' + escapeHtml(row.comp.comp_id) + '] ' + escapeHtml(row.comp.comp_name) + ' (' + escapeHtml(row.comp.level) + ')</div>' +
+          '<div class="text-[11px] text-slate-500">' + escapeHtml(row.slotLabel) + ' • ' + escapeHtml(row.formatLabel) + ' • ' + row.schoolCount + ' รร.</div>' +
+          '</td>' +
+          '<td class="py-2.5 px-2 text-center align-top"><span class="inline-block px-2 py-0.5 rounded text-[11px] font-heading ' + badgeCls + '">' + escapeHtml(row.type === 'BYE' ? 'บาย' : row.judges.length + ' คน') + '</span></td>' +
+          '<td class="py-2.5 px-3 align-top space-y-1">' + (judgesHtml || '-') + '</td>' +
+          '<td class="py-2.5 px-3 align-top text-[11px] font-medium text-slate-700">' + escapeHtml(warnText) + '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    box.classList.remove('hidden');
+  }
+
+  async function applyAutoJudgePlan(syncToSheets) {
+    if (!state.isAdmin) return;
+    const plan = state.autoJudgePreviewPlan;
+    if (!plan || !plan.rows || plan.rows.length === 0) {
+      showToast('กรุณากดคำนวณผังจัดสรรก่อนบันทึก', 'warning');
+      return;
+    }
+
+    const plannedCompIds = new Set(plan.rows.map((r) => r.comp.comp_id));
+    const newJudges = [];
+    let seq = 1;
+    plan.rows.forEach(function (row) {
+      row.judges.forEach(function (j) {
+        newJudges.push({
+          judge_id: 'JDG-74-' + String(seq).padStart(3, '0') + '-' + Date.now().toString().slice(-4),
+          comp_id: j.comp_id,
+          comp_name: j.comp_name,
+          learning_area: j.learning_area,
+          level: j.level,
+          prefix: j.prefix,
+          judge_name: j.judge_name,
+          school_name: j.school_name,
+          role: j.role,
+          phone: ''
+        });
+        seq++;
+      });
+    });
+
+    if (syncToSheets) {
+      const ok = window.confirm(
+        'ยืนยันการส่งรายชื่อกรรมการทั้งหมด ' +
+          newJudges.length +
+          ' ตำแหน่งขึ้น Google Sheets จริงหรือไม่? (รายชื่อเดิมในรายการที่จัดสรรรอบนี้จะถูกแทนที่)'
+      );
+      if (!ok) return;
+    }
+
+    const toDelete = (state.judges || []).filter((j) => plannedCompIds.has(j.comp_id));
+    state.judges = (state.judges || []).filter((j) => !plannedCompIds.has(j.comp_id)).concat(newJudges);
+    saveState();
+    renderAll();
+
+    if (syncToSheets) {
+      showToast('กำลังซิงก์รายชื่อกรรมการ ' + newJudges.length + ' ตำแหน่งขึ้น Google Sheets...', 'info');
+      for (let i = 0; i < toDelete.length; i++) {
+        await postToGoogleSheets({
+          action: 'delete_judge',
+          judge_id: toDelete[i].judge_id,
+          admin_pin: state.adminPin
+        });
+      }
+      for (let k = 0; k < newJudges.length; k++) {
+        await postToGoogleSheets({
+          action: 'add_judge',
+          judge: newJudges[k],
+          admin_pin: state.adminPin
+        });
+      }
+      showToast('บันทึกกรรมการทั้ง ' + newJudges.length + ' ตำแหน่งลง Google Sheets เรียบร้อยแล้ว', 'success');
+    } else {
+      showToast('นำผังกรรมการ ' + newJudges.length + ' ตำแหน่งมาใช้ในหน้าเว็บแล้ว (ยังไม่ส่ง Sheets)', 'success');
+    }
+  }
+
+  // ==========================================
   // PHASE 2: TAB 5 — JUDGES DIRECTORY (ทำเนียบกรรมการตัดสิน)
   // ==========================================
   function renderJudgesTab() {
+    const adminAutoCard = document.getElementById('adminAutoJudgeCard');
+    if (adminAutoCard) {
+      adminAutoCard.classList.toggle('hidden', !state.isAdmin);
+      if (state.isAdmin) updateAutoJudgeTeacherPoolBadge();
+    }
     const adminAddCard = document.getElementById('adminAddJudgeCard');
     if (adminAddCard) {
       adminAddCard.classList.toggle('hidden', !state.isAdmin);
@@ -7417,11 +8140,43 @@
   function applyScoreModal3JudgesVisibility() {
     const toggle = document.getElementById('scoreModal3JudgesToggle');
     const modal = document.getElementById('scoreEntryModal');
+    const countBar = document.getElementById('scoreModalJudgeCountBar');
     if (!modal || !toggle) return;
     const show = Boolean(toggle.checked);
     modal.querySelectorAll('.col-3judges').forEach(function (el) {
       el.classList.toggle('hidden', !show);
     });
+    if (countBar) {
+      countBar.classList.toggle('hidden', !show);
+    }
+    const badge = document.getElementById('scoreModalJudgeColCountBadge');
+    if (badge) badge.textContent = (state.scoreModalJudgeCount || 3) + ' ท่าน';
+  }
+
+  function rebuildScoreModalTableHeader(judgeCount, compJudges) {
+    const headRow = document.getElementById('scoreModalTableHeadRow');
+    if (!headRow) return;
+    const show = Boolean((document.getElementById('scoreModal3JudgesToggle') || {}).checked);
+    let judgeHeadersHtml = '';
+    for (let i = 0; i < judgeCount; i++) {
+      const j = compJudges[i];
+      const jLabel = j
+        ? '<div>กรรมการ ' + (i + 1) + '</div><div class="text-[10px] font-normal text-slate-500 truncate max-w-[96px]" title="' +
+          escapeHtml((j.prefix || '') + (j.judge_name || j.full_name || '') + ' (' + (j.school_name || '') + ')') +
+          '">' +
+          escapeHtml(j.judge_name || j.full_name || '') +
+          '</div>'
+        : 'กรรมการคนที่ ' + (i + 1);
+      judgeHeadersHtml +=
+        '<th class="py-2 px-1.5 w-24 text-center col-3judges' + (show ? '' : ' hidden') + '">' + jLabel + '</th>';
+    }
+    headRow.innerHTML =
+      '<th class="py-2.5 px-3 min-w-[200px]">โรงเรียน / นักเรียนผู้เข้าแข่งขัน</th>' +
+      '<th class="py-2.5 px-2 w-32 text-center">สถานะเข้าแข่ง</th>' +
+      judgeHeadersHtml +
+      '<th class="py-2.5 px-2 w-32 text-center">คะแนน (0–100)</th>' +
+      '<th class="py-2.5 px-2 w-28 text-center">เหรียญรางวัล</th>' +
+      '<th class="py-2.5 px-3 w-44 text-center">อันดับ / รางวัล (ชี้ขาดได้)</th>';
   }
 
   function recalculateScoreModalPreview() {
@@ -7432,12 +8187,15 @@
     const activeScored = [];
     rowEls.forEach(function (tr) {
       const attSel = tr.querySelector('.score-attendance-select');
-      const isAbsent = attSel && attSel.value === 'ABSENT';
+      const attVal = attSel ? attSel.value : 'PRESENT';
+      const isAbsent = attVal === 'ABSENT';
+      const isByeRep = attVal === 'BYE_REP';
       const inp = tr.querySelector('.score-input-field');
-      const jFields = tr.querySelectorAll('.score-j1-field, .score-j2-field, .score-j3-field');
+      const jFields = tr.querySelectorAll('.score-judge-field');
+      const jAbstainBtns = tr.querySelectorAll('.score-abstain-btn');
       const rankSel = tr.querySelector('.score-rank-select');
 
-      if (isAbsent) {
+      if (isAbsent || isByeRep) {
         if (inp) {
           inp.value = '';
           inp.disabled = true;
@@ -7447,8 +8205,11 @@
           jf.disabled = true;
           jf.classList.add('bg-slate-100');
         });
+        jAbstainBtns.forEach((b) => {
+          b.disabled = true;
+        });
         if (rankSel) {
-          rankSel.value = '';
+          rankSel.value = isByeRep ? '1' : '';
           rankSel.disabled = true;
         }
         return;
@@ -7459,8 +8220,13 @@
         inp.classList.remove('bg-slate-100', 'text-slate-400');
       }
       jFields.forEach((jf) => {
-        jf.disabled = false;
-        jf.classList.remove('bg-slate-100');
+        const isAbst = jf.getAttribute('data-abstain') === 'true';
+        jf.disabled = isAbst;
+        jf.classList.toggle('bg-slate-100', isAbst);
+        jf.classList.toggle('text-slate-400', isAbst);
+      });
+      jAbstainBtns.forEach((b) => {
+        b.disabled = false;
       });
 
       const valStr = inp ? inp.value.trim() : '';
@@ -7488,17 +8254,28 @@
 
     rowEls.forEach(function (tr) {
       const attSel = tr.querySelector('.score-attendance-select');
-      const isAbsent = attSel && attSel.value === 'ABSENT';
+      const attVal = attSel ? attSel.value : 'PRESENT';
+      const isAbsent = attVal === 'ABSENT';
+      const isByeRep = attVal === 'BYE_REP';
       const medalCell = tr.querySelector('.score-preview-medal');
       const rankSel = tr.querySelector('.score-rank-select');
       const awardEl = tr.querySelector('.score-award-preview');
 
-      tr.classList.remove('bg-rose-50/40', 'bg-amber-50/50', 'bg-emerald-50/30');
+      tr.classList.remove('bg-rose-50/40', 'bg-amber-50/50', 'bg-emerald-50/30', 'bg-blue-50/40');
 
       if (isAbsent) {
         tr.classList.add('bg-rose-50/40');
         if (medalCell) medalCell.innerHTML = renderMedalBadgeHtml('ไม่มาแข่งขัน');
         if (awardEl) awardEl.textContent = 'ไม่มาแข่งขัน (ตัดสิทธิ์เกียรติบัตร)';
+        return;
+      }
+      if (isByeRep) {
+        tr.classList.add('bg-blue-50/40');
+        if (medalCell) {
+          medalCell.innerHTML =
+            '<span class="inline-block px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-heading text-[11px] font-semibold">ตัวแทนกลุ่ม</span>';
+        }
+        if (awardEl) awardEl.textContent = 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)';
         return;
       }
 
@@ -7530,7 +8307,6 @@
       }
     });
 
-    // Check tie status across tied scores
     let hasUnresolvedTie = false;
     activeScored.forEach(function (item) {
       const key = item.score.toFixed(2);
@@ -7567,68 +8343,7 @@
     }
   }
 
-  function openScoreEntryModal(compId) {
-    if (!state.isAdmin) {
-      showToast('เฉพาะแอดมินเท่านั้นที่สามารถบันทึกคะแนนได้', 'error');
-      return;
-    }
-    const comp = state.competitions.find((c) => c.comp_id === compId);
-    if (!comp) return;
-
-    const regs = state.registrations.filter((r) => r.comp_id === compId);
-    if (regs.length === 0) {
-      showToast('ยังไม่มีโรงเรียนสมัครในรายการนี้', 'warning');
-      return;
-    }
-
-    const queue = getScoreQueueCompetitions();
-    const queueIdx = queue.findIndex((c) => c.comp_id === compId);
-    const queueBadge = document.getElementById('scoreModalCompQueueBadge');
-    if (queueBadge) {
-      queueBadge.textContent =
-        queueIdx !== -1 ? 'รายการที่ ' + (queueIdx + 1) + ' / ' + queue.length + ' (ที่มีทีมแข่ง)' : 'รายการแข่งขัน';
-    }
-    const prevBtn = document.getElementById('btnScoreModalPrevComp');
-    const nextBtn = document.getElementById('btnScoreModalNextComp');
-    if (prevBtn) prevBtn.disabled = queueIdx <= 0;
-    if (nextBtn) nextBtn.disabled = queueIdx === -1 || queueIdx >= queue.length - 1;
-
-    document.getElementById('scoreModalCompId').value = compId;
-    document.getElementById('scoreModalCompTitle').textContent =
-      '[' + comp.comp_id + '] ' + comp.comp_name + ' (' + comp.level + ')';
-    const metaEl = document.getElementById('scoreModalCompMeta');
-    if (metaEl) {
-      metaEl.textContent =
-        (comp.learning_area || '') +
-        ' • ห้องสอบ: ' +
-        (comp.venue_room || 'อาคารเรียนรวม ห้อง 101') +
-        ' (' +
-        regs.length +
-        ' ทีม)';
-    }
-
-    // Determine initial auto-ranks to detect previously saved manual tie-break overrides
-    const initialScored = regs
-      .filter((r) => hasValidScore(r))
-      .map((r) => ({ reg_id: r.reg_id, score: Number(r.score) }))
-      .sort((a, b) => b.score - a.score);
-    let initRank = 1;
-    const autoRankByRegId = {};
-    for (let i = 0; i < initialScored.length; i++) {
-      if (i > 0 && initialScored[i].score < initialScored[i - 1].score) {
-        initRank = i + 1;
-      }
-      autoRankByRegId[initialScored[i].reg_id] = initRank;
-    }
-
-    const hasAnyJudgeScores = regs.some(
-      (r) => Array.isArray(r.judge_scores) && r.judge_scores.some((v) => v !== '' && v !== null && v !== undefined)
-    );
-    const toggle3J = document.getElementById('scoreModal3JudgesToggle');
-    if (toggle3J && hasAnyJudgeScores) {
-      toggle3J.checked = true;
-    }
-
+  function renderScoreModalRows(compId, regs, compJudges, judgeCount, preservedDraftMap) {
     const maxRankOpt = Math.max(regs.length, 6);
     function buildRankOptionsHtml(selectedVal) {
       let opts = '<option value="">-</option>';
@@ -7653,41 +8368,87 @@
       return opts;
     }
 
+    // Initial auto-ranks
+    const initialScored = regs
+      .filter((r) => hasValidScore(r))
+      .map((r) => ({ reg_id: r.reg_id, score: Number(r.score) }))
+      .sort((a, b) => b.score - a.score);
+    let initRank = 1;
+    const autoRankByRegId = {};
+    for (let i = 0; i < initialScored.length; i++) {
+      if (i > 0 && initialScored[i].score < initialScored[i - 1].score) {
+        initRank = i + 1;
+      }
+      autoRankByRegId[initialScored[i].reg_id] = initRank;
+    }
+
     const tbody = document.getElementById('scoreModalTableBody');
     tbody.innerHTML = regs
       .map(function (r) {
+        const draft = preservedDraftMap && preservedDraftMap[r.reg_id];
         const stuText = (r.students || [])
           .map((s, i) => i + 1 + '. ' + formatResponsiveNameHtml(s.prefix, s.name))
           .join('<br>');
-        const isAbs = isRegistrationAbsent(r);
-        const scVal = !isAbs && hasValidScore(r) ? r.score : '';
-        const medal = isAbs ? 'ไม่มาแข่งขัน' : scVal !== '' ? calculateMedalFromScore(scVal) : '';
-        const jArr = Array.isArray(r.judge_scores) ? r.judge_scores : ['', '', ''];
-        const savedRank = !isAbs && Number(r.rank) > 0 ? Number(r.rank) : '';
+        const isAbs = draft ? draft.attVal === 'ABSENT' : isRegistrationAbsent(r);
+        const isByeRep = draft ? draft.attVal === 'BYE_REP' : r.medal === 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)';
+        const scVal = draft ? draft.netScore : !isAbs && !isByeRep && hasValidScore(r) ? r.score : '';
+        const medal = isAbs
+          ? 'ไม่มาแข่งขัน'
+          : isByeRep
+          ? 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)'
+          : scVal !== ''
+          ? calculateMedalFromScore(scVal)
+          : '';
+        const jArr = draft ? draft.judgeScores : Array.isArray(r.judge_scores) ? r.judge_scores : [];
+        const abstArr = draft ? draft.judgeAbstains : Array.isArray(r.judge_abstains) ? r.judge_abstains : null;
+        const hasAnySavedJ = jArr.some((v) => v !== '' && v !== null && v !== undefined);
+        const savedRank = draft ? draft.rankVal : !isAbs && Number(r.rank) > 0 ? Number(r.rank) : '';
         const isOverridden =
           savedRank !== '' && autoRankByRegId[r.reg_id] && Number(savedRank) !== autoRankByRegId[r.reg_id];
 
+        let judgeCellsHtml = '';
+        for (let ji = 0; ji < judgeCount; ji++) {
+          const jMeta = compJudges[ji];
+          const isSameSchool = Boolean(jMeta && jMeta.school_name && jMeta.school_name === r.school_name);
+          const isAbstained = abstArr
+            ? Boolean(abstArr[ji])
+            : isSameSchool && !hasAnySavedJ && scVal === '';
+          const jVal = isAbstained ? '' : jArr[ji] !== undefined && jArr[ji] !== null ? jArr[ji] : '';
+          const btnText = isAbstained
+            ? isSameSchool
+              ? 'งด (รร.ตน)'
+              : 'งดให้คะแนน'
+            : isSameSchool
+            ? 'เป็นกลาง (รร.ตน)'
+            : 'งด';
+          const btnCls = isAbstained
+            ? 'bg-amber-100 text-amber-900 border-amber-300 font-semibold'
+            : isSameSchool
+            ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100';
+
+          judgeCellsHtml += `
+            <td class="py-2 px-1.5 text-center align-top col-3judges hidden">
+              <input type="number" step="0.01" min="0" max="100" data-judge-idx="${ji}" data-abstain="${isAbstained ? 'true' : 'false'}" value="${escapeHtml(jVal)}" placeholder="${isAbstained ? '-' : 'คนที่ ' + (ji + 1)}" title="คะแนนกรรมการคนที่ ${ji + 1} (0-100)" class="score-judge-field w-20 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs text-center font-heading" />
+              <button type="button" data-abstain-idx="${ji}" class="score-abstain-btn mt-1 px-1.5 py-0.5 rounded border text-[10px] font-heading transition cursor-pointer ${btnCls}">${btnText}</button>
+            </td>
+          `;
+        }
+
         return `
-          <tr data-score-reg-id="${escapeHtml(r.reg_id)}" data-rank-overridden="${isOverridden ? 'true' : ''}">
+          <tr data-score-reg-id="${escapeHtml(r.reg_id)}" data-school-name="${escapeHtml(r.school_name)}" data-rank-overridden="${isOverridden ? 'true' : ''}">
             <td class="py-2.5 px-3">
               <div class="font-heading font-semibold text-slate-900 text-xs sm:text-sm">${escapeHtml(r.school_name)}</div>
               <div class="text-[11px] text-slate-500 mt-0.5 leading-snug">${stuText}</div>
             </td>
             <td class="py-2.5 px-2 text-center">
               <select class="score-attendance-select w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-heading font-medium text-slate-800">
-                <option value="PRESENT"${!isAbs ? ' selected' : ''}>เข้าแข่งขัน</option>
+                <option value="PRESENT"${!isAbs && !isByeRep ? ' selected' : ''}>เข้าแข่งขัน</option>
+                <option value="BYE_REP"${isByeRep ? ' selected' : ''}>ตัวแทน (บาย)</option>
                 <option value="ABSENT"${isAbs ? ' selected' : ''}>ขาดสอบ</option>
               </select>
             </td>
-            <td class="py-2.5 px-1.5 text-center col-3judges hidden">
-              <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(jArr[0] !== undefined && jArr[0] !== null ? jArr[0] : '')}" placeholder="คนที่ 1" title="คะแนนกรรมการคนที่ 1 (0-100)" class="score-j1-field w-20 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs text-center font-heading" />
-            </td>
-            <td class="py-2.5 px-1.5 text-center col-3judges hidden">
-              <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(jArr[1] !== undefined && jArr[1] !== null ? jArr[1] : '')}" placeholder="คนที่ 2" title="คะแนนกรรมการคนที่ 2 (0-100)" class="score-j2-field w-20 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs text-center font-heading" />
-            </td>
-            <td class="py-2.5 px-1.5 text-center col-3judges hidden">
-              <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(jArr[2] !== undefined && jArr[2] !== null ? jArr[2] : '')}" placeholder="คนที่ 3" title="คะแนนกรรมการคนที่ 3 (0-100)" class="score-j3-field w-20 rounded-lg border border-slate-300 px-1.5 py-1.5 text-xs text-center font-heading" />
-            </td>
+            ${judgeCellsHtml}
             <td class="py-2.5 px-2 text-center">
               <input type="number" step="0.01" min="0" max="100" value="${escapeHtml(scVal)}" placeholder="0 - 100" class="score-input-field w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-center font-heading font-bold focus:border-slate-900 focus:outline-none" />
             </td>
@@ -7703,14 +8464,12 @@
       })
       .join('');
 
-    // Wire row inputs inside freshly created tbody
-    const allRows = Array.from(tbody.querySelectorAll('tr[data-score-reg-id]'));
-
     function handleJudgeInputChange(tr) {
-      const vals = ['.score-j1-field', '.score-j2-field', '.score-j3-field']
-        .map(function (sel) {
-          const el = tr.querySelector(sel);
-          const raw = el ? el.value.trim() : '';
+      const fields = Array.from(tr.querySelectorAll('.score-judge-field'));
+      const vals = fields
+        .map(function (el) {
+          if (el.getAttribute('data-abstain') === 'true') return null;
+          const raw = el.value.trim();
           return raw !== '' && !Number.isNaN(Number(raw)) ? Math.min(100, Math.max(0, Number(raw))) : null;
         })
         .filter((v) => v !== null);
@@ -7719,6 +8478,8 @@
         if (vals.length > 0) {
           const avg = vals.reduce((sum, v) => sum + v, 0) / vals.length;
           netInput.value = (Math.round(avg * 100) / 100).toFixed(2);
+        } else if (fields.some((el) => el.getAttribute('data-abstain') === 'true')) {
+          netInput.value = '';
         } else {
           netInput.value = '';
         }
@@ -7727,15 +8488,14 @@
       recalculateScoreModalPreview();
     }
 
+    const allRows = Array.from(tbody.querySelectorAll('tr[data-score-reg-id]'));
     allRows.forEach(function (tr, rowIdx) {
       const attSel = tr.querySelector('.score-attendance-select');
       const netInp = tr.querySelector('.score-input-field');
       const rankSel = tr.querySelector('.score-rank-select');
-      const jFields = [
-        tr.querySelector('.score-j1-field'),
-        tr.querySelector('.score-j2-field'),
-        tr.querySelector('.score-j3-field')
-      ];
+      const jFields = Array.from(tr.querySelectorAll('.score-judge-field'));
+      const abstainBtns = Array.from(tr.querySelectorAll('.score-abstain-btn'));
+      const regSchool = tr.getAttribute('data-school-name') || '';
 
       if (attSel) {
         attSel.addEventListener('change', function () {
@@ -7778,24 +8538,56 @@
         });
       }
 
+      abstainBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const idx = Number(btn.getAttribute('data-abstain-idx'));
+          const jf = jFields[idx];
+          if (!jf) return;
+          const nextAbstain = jf.getAttribute('data-abstain') !== 'true';
+          jf.setAttribute('data-abstain', nextAbstain ? 'true' : 'false');
+          const jMeta = compJudges[idx];
+          const isSameSchool = Boolean(jMeta && jMeta.school_name && jMeta.school_name === regSchool);
+          if (nextAbstain) {
+            jf.value = '';
+            jf.placeholder = '-';
+            btn.textContent = isSameSchool ? 'งด (รร.ตน)' : 'งดให้คะแนน';
+            btn.className = 'score-abstain-btn mt-1 px-1.5 py-0.5 rounded border text-[10px] font-heading transition cursor-pointer bg-amber-100 text-amber-900 border-amber-300 font-semibold';
+          } else {
+            jf.placeholder = 'คนที่ ' + (idx + 1);
+            btn.textContent = isSameSchool ? 'เป็นกลาง (รร.ตน)' : 'งด';
+            btn.className =
+              'score-abstain-btn mt-1 px-1.5 py-0.5 rounded border text-[10px] font-heading transition cursor-pointer ' +
+              (isSameSchool
+                ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100');
+          }
+          handleJudgeInputChange(tr);
+        });
+      });
+
       jFields.forEach(function (jf, jIdx) {
-        if (!jf) return;
         jf.addEventListener('input', function () {
           handleJudgeInputChange(tr);
         });
         jf.addEventListener('keydown', function (ev) {
-          const selClass = '.score-j' + (jIdx + 1) + '-field';
+          const selAttr = '.score-judge-field[data-judge-idx="' + jIdx + '"]';
           if (ev.key === 'Enter') {
             ev.preventDefault();
-            if (jIdx < 2 && jFields[jIdx + 1] && !jFields[jIdx + 1].disabled) {
-              jFields[jIdx + 1].focus();
-              jFields[jIdx + 1].select();
-            } else {
+            let moved = false;
+            for (let nj = jIdx + 1; nj < jFields.length; nj++) {
+              if (!jFields[nj].disabled) {
+                jFields[nj].focus();
+                jFields[nj].select();
+                moved = true;
+                break;
+              }
+            }
+            if (!moved) {
               for (let next = rowIdx + 1; next < allRows.length; next++) {
-                const nextJ1 = allRows[next].querySelector('.score-j1-field');
-                if (nextJ1 && !nextJ1.disabled) {
-                  nextJ1.focus();
-                  nextJ1.select();
+                const candidate = Array.from(allRows[next].querySelectorAll('.score-judge-field')).find((el) => !el.disabled);
+                if (candidate) {
+                  candidate.focus();
+                  candidate.select();
                   return;
                 }
               }
@@ -7803,7 +8595,7 @@
           } else if (ev.key === 'ArrowDown') {
             ev.preventDefault();
             for (let next = rowIdx + 1; next < allRows.length; next++) {
-              const target = allRows[next].querySelector(selClass);
+              const target = allRows[next].querySelector(selAttr);
               if (target && !target.disabled) {
                 target.focus();
                 target.select();
@@ -7813,7 +8605,7 @@
           } else if (ev.key === 'ArrowUp') {
             ev.preventDefault();
             for (let prev = rowIdx - 1; prev >= 0; prev--) {
-              const target = allRows[prev].querySelector(selClass);
+              const target = allRows[prev].querySelector(selAttr);
               if (target && !target.disabled) {
                 target.focus();
                 target.select();
@@ -7832,15 +8624,139 @@
       }
     });
 
+    rebuildScoreModalTableHeader(judgeCount, compJudges);
     applyScoreModal3JudgesVisibility();
     recalculateScoreModalPreview();
+  }
+
+  function resizeScoreModalJudgeCount(delta) {
+    const compId = document.getElementById('scoreModalCompId').value;
+    if (!compId) return;
+    const regs = state.registrations.filter((r) => r.comp_id === compId);
+    const nextCount = Math.min(7, Math.max(1, (state.scoreModalJudgeCount || 3) + delta));
+    if (nextCount === state.scoreModalJudgeCount) return;
+
+    const draftMap = {};
+    const tbody = document.getElementById('scoreModalTableBody');
+    if (tbody) {
+      tbody.querySelectorAll('tr[data-score-reg-id]').forEach(function (tr) {
+        const regId = tr.getAttribute('data-score-reg-id');
+        const attSel = tr.querySelector('.score-attendance-select');
+        const netInp = tr.querySelector('.score-input-field');
+        const rankSel = tr.querySelector('.score-rank-select');
+        const fields = Array.from(tr.querySelectorAll('.score-judge-field'));
+        draftMap[regId] = {
+          attVal: attSel ? attSel.value : 'PRESENT',
+          netScore: netInp ? netInp.value : '',
+          rankVal: rankSel ? rankSel.value : '',
+          judgeScores: fields.map((f) => f.value),
+          judgeAbstains: fields.map((f) => f.getAttribute('data-abstain') === 'true')
+        };
+      });
+    }
+    state.scoreModalJudgeCount = nextCount;
+    renderScoreModalRows(compId, regs, state.scoreModalCompJudges || [], nextCount, draftMap);
+  }
+
+  function openScoreEntryModal(compId) {
+    if (!state.isAdmin) {
+      showToast('เฉพาะแอดมินเท่านั้นที่สามารถบันทึกคะแนนได้', 'error');
+      return;
+    }
+    const comp = state.competitions.find((c) => c.comp_id === compId);
+    if (!comp) return;
+
+    const regs = state.registrations.filter((r) => r.comp_id === compId);
+    if (regs.length === 0) {
+      showToast('ยังไม่มีโรงเรียนสมัครในรายการนี้', 'warning');
+      return;
+    }
+
+    const queue = getScoreQueueCompetitions();
+    const queueIdx = queue.findIndex((c) => c.comp_id === compId);
+    const queueBadge = document.getElementById('scoreModalCompQueueBadge');
+    if (queueBadge) {
+      queueBadge.textContent =
+        queueIdx !== -1 ? 'รายการที่ ' + (queueIdx + 1) + ' / ' + queue.length + ' (ที่มีทีมแข่ง)' : 'รายการแข่งขัน';
+    }
+    const prevBtn = document.getElementById('btnScoreModalPrevComp');
+    const nextBtn = document.getElementById('btnScoreModalNextComp');
+    if (prevBtn) prevBtn.disabled = queueIdx <= 0;
+    if (nextBtn) nextBtn.disabled = queueIdx === -1 || queueIdx >= queue.length - 1;
+
+    document.getElementById('scoreModalCompId').value = compId;
+    document.getElementById('scoreModalCompTitle').textContent =
+      '[' + comp.comp_id + '] ' + comp.comp_name + ' (' + comp.level + ')';
+    const metaEl = document.getElementById('scoreModalCompMeta');
+    if (metaEl) {
+      metaEl.textContent =
+        (comp.learning_area || '') +
+        ' • ห้องสอบ: ' +
+        (comp.venue_room || 'อาคารเรียนรวม ห้อง 101') +
+        ' (' +
+        regs.length +
+        ' ทีม)';
+    }
+
+    const roleRank = { 'ประธานกรรมการ': 1, 'กรรมการ': 2, 'กรรมการและเลขานุการ': 3 };
+    const compJudges = (state.judges || [])
+      .filter((j) => j.comp_id === compId)
+      .slice()
+      .sort((a, b) => (roleRank[a.role] || 9) - (roleRank[b.role] || 9));
+    state.scoreModalCompJudges = compJudges;
+
+    const maxSavedJLen = regs.reduce(
+      (mx, r) => Math.max(mx, Array.isArray(r.judge_scores) ? r.judge_scores.length : 0),
+      0
+    );
+    state.scoreModalJudgeCount = Math.min(7, Math.max(3, compJudges.length, maxSavedJLen));
+
+    const hasAnyJudgeScores = regs.some(
+      (r) => Array.isArray(r.judge_scores) && r.judge_scores.some((v) => v !== '' && v !== null && v !== undefined)
+    );
+    const toggle3J = document.getElementById('scoreModal3JudgesToggle');
+    if (toggle3J && (hasAnyJudgeScores || compJudges.length > 3)) {
+      toggle3J.checked = true;
+    }
+
+    // Bye Notice Banner
+    const byeNotice = document.getElementById('scoreModalByeNotice');
+    if (byeNotice) {
+      const uniqueSchools = new Set(regs.map((r) => r.school_name)).size;
+      const byeStatus = isCompetitionByeStatus(comp, uniqueSchools);
+      if (byeStatus === 'BYE') {
+        const isLive = isCompetitionLiveFormat(comp);
+        byeNotice.classList.remove('hidden');
+        byeNotice.innerHTML =
+          '<div><strong>รายการเข้าเกณฑ์ชนะบาย</strong> (' +
+          uniqueSchools +
+          ' รร. • ' +
+          (isLive ? 'แสดงสด: ตั้งเป็นตัวแทนกลุ่มได้ทันทีโดยไม่ต้องตัดสิน' : 'ส่งชิ้นงาน: ให้เด็กทำชิ้นงานและกรอกคะแนนได้ตามปกติ') +
+          ')</div>' +
+          '<button type="button" id="btnScoreModalMarkByeRep" class="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-heading text-xs font-semibold shrink-0 cursor-pointer">ตั้งทุกทีมเป็นตัวแทนกลุ่ม (ไม่มีคู่แข่ง)</button>';
+        const byeBtn = document.getElementById('btnScoreModalMarkByeRep');
+        if (byeBtn) {
+          byeBtn.addEventListener('click', function () {
+            document.querySelectorAll('#scoreModalTableBody .score-attendance-select').forEach(function (sel) {
+              sel.value = 'BYE_REP';
+            });
+            recalculateScoreModalPreview();
+          });
+        }
+      } else {
+        byeNotice.classList.add('hidden');
+        byeNotice.innerHTML = '';
+      }
+    }
+
+    renderScoreModalRows(compId, regs, compJudges, state.scoreModalJudgeCount, null);
 
     const modal = document.getElementById('scoreEntryModal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
 
     setTimeout(function () {
-      const firstInput = tbody.querySelector('.score-input-field:not(:disabled)');
+      const firstInput = document.querySelector('#scoreModalTableBody .score-input-field:not(:disabled)');
       if (firstInput) firstInput.focus();
     }, 60);
   }
@@ -7864,29 +8780,40 @@
     const entries = rowEls.map(function (tr) {
       const regId = tr.getAttribute('data-score-reg-id');
       const attSel = tr.querySelector('.score-attendance-select');
-      const isAbsent = Boolean(attSel && attSel.value === 'ABSENT');
+      const attVal = attSel ? attSel.value : 'PRESENT';
+      const isAbsent = attVal === 'ABSENT';
+      const isByeRep = attVal === 'BYE_REP';
       const valStr = tr.querySelector('.score-input-field').value.trim();
-      const num = !isAbsent && valStr !== '' && !Number.isNaN(Number(valStr)) ? Math.min(100, Math.max(0, Number(valStr))) : '';
+      const num =
+        !isAbsent && !isByeRep && valStr !== '' && !Number.isNaN(Number(valStr))
+          ? Math.min(100, Math.max(0, Number(valStr)))
+          : '';
       const rankSel = tr.querySelector('.score-rank-select');
       const manualRank =
-        !isAbsent && tr.dataset.rankOverridden === 'true' && rankSel && rankSel.value !== ''
+        !isAbsent && !isByeRep && tr.dataset.rankOverridden === 'true' && rankSel && rankSel.value !== ''
           ? Number(rankSel.value)
           : null;
-      const judgeScores = ['.score-j1-field', '.score-j2-field', '.score-j3-field'].map(function (s) {
-        const el = tr.querySelector(s);
-        return el && el.value.trim() !== '' ? Number(el.value.trim()) : '';
+      const fields = Array.from(tr.querySelectorAll('.score-judge-field'));
+      const judgeScores = fields.map(function (el) {
+        if (el.getAttribute('data-abstain') === 'true') return '';
+        return el.value.trim() !== '' ? Number(el.value.trim()) : '';
+      });
+      const judgeAbstains = fields.map(function (el) {
+        return el.getAttribute('data-abstain') === 'true';
       });
       return {
         reg_id: regId,
         isAbsent: isAbsent,
+        isByeRep: isByeRep,
         score: num,
         manualRank: manualRank,
-        judgeScores: judgeScores
+        judgeScores: judgeScores,
+        judgeAbstains: judgeAbstains
       };
     });
 
     // Calculate auto-rank for non-absent scored entries
-    const valid = entries.filter((x) => !x.isAbsent && x.score !== '').sort((a, b) => b.score - a.score);
+    const valid = entries.filter((x) => !x.isAbsent && !x.isByeRep && x.score !== '').sort((a, b) => b.score - a.score);
     let currentRank = 1;
     for (let i = 0; i < valid.length; i++) {
       if (i > 0 && valid[i].score < valid[i - 1].score) {
@@ -7896,16 +8823,24 @@
     }
 
     const batchPayload = [];
-    entries.forEach(function (item) {
+    entries.forEach(function (item, idx) {
       const reg = state.registrations.find((r) => r.reg_id === item.reg_id);
       if (!reg) return;
       reg.judge_scores = item.judgeScores;
+      reg.judge_abstains = item.judgeAbstains;
 
       if (item.isAbsent) {
         reg.score = '';
         reg.medal = 'ไม่มาแข่งขัน';
         reg.rank = '';
         reg.award_title = 'ไม่มาแข่งขัน (ขาดสอบ)';
+      } else if (item.isByeRep) {
+        const rk = idx + 1;
+        reg.score = '';
+        reg.medal = 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)';
+        reg.rank = rk;
+        reg.award_title = 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)';
+        reg.cert_code = reg.cert_code || ('CERT-74-' + compId + '-' + String(rk).padStart(2, '0'));
       } else if (item.score === '') {
         reg.score = '';
         reg.medal = '';
@@ -12458,6 +13393,73 @@
       });
     }
 
+    // Auto Judge Allocator Events
+    const btnAutoJudgeImportTeachers = document.getElementById('btnAutoJudgeImportTeachers');
+    const autoJudgeTeacherFileInput = document.getElementById('autoJudgeTeacherFileInput');
+    if (btnAutoJudgeImportTeachers && autoJudgeTeacherFileInput) {
+      btnAutoJudgeImportTeachers.addEventListener('click', function () {
+        autoJudgeTeacherFileInput.value = '';
+        autoJudgeTeacherFileInput.click();
+      });
+      autoJudgeTeacherFileInput.addEventListener('change', async function () {
+        const f = autoJudgeTeacherFileInput.files && autoJudgeTeacherFileInput.files[0];
+        if (!f) return;
+        try {
+          await parseTeacherRosterFile(f);
+        } catch (err) {
+          showToast('อ่านไฟล์ไม่สำเร็จ: ' + (err.message || err), 'error');
+        }
+      });
+    }
+
+    const btnAutoJudgeResetTeachers = document.getElementById('btnAutoJudgeResetTeachers');
+    if (btnAutoJudgeResetTeachers) {
+      btnAutoJudgeResetTeachers.addEventListener('click', function () {
+        state.importedTeacherRoster = null;
+        updateAutoJudgeTeacherPoolBadge();
+        showToast('ล้างไฟล์นำเข้าแล้ว กลับไปเดาเอกจากผู้ฝึกสอนในระบบ', 'info');
+      });
+    }
+
+    const btnAutoJudgePreview = document.getElementById('btnAutoJudgePreview');
+    if (btnAutoJudgePreview) {
+      btnAutoJudgePreview.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        const mode = (document.getElementById('autoJudgeModeSelect') || {}).value || 'B';
+        const allowExtra = Boolean((document.getElementById('autoJudgeExtraSpecialists') || {}).checked);
+        const includeBye = Boolean((document.getElementById('autoJudgeIncludeBye') || {}).checked);
+        const plan = computeAutoJudgeAllocation({
+          mode: mode,
+          allowExtraSpecialists: allowExtra,
+          includeBye: includeBye
+        });
+        state.autoJudgePreviewPlan = plan;
+        renderAutoJudgePreview(plan);
+      });
+    }
+
+    const btnAutoJudgeClosePreview = document.getElementById('btnAutoJudgeClosePreview');
+    if (btnAutoJudgeClosePreview) {
+      btnAutoJudgeClosePreview.addEventListener('click', function () {
+        state.autoJudgePreviewPlan = null;
+        renderAutoJudgePreview(null);
+      });
+    }
+
+    const btnAutoJudgeApplyLocal = document.getElementById('btnAutoJudgeApplyLocal');
+    if (btnAutoJudgeApplyLocal) {
+      btnAutoJudgeApplyLocal.addEventListener('click', function () {
+        applyAutoJudgePlan(false);
+      });
+    }
+
+    const btnAutoJudgeSyncSheets = document.getElementById('btnAutoJudgeSyncSheets');
+    if (btnAutoJudgeSyncSheets) {
+      btnAutoJudgeSyncSheets.addEventListener('click', function () {
+        applyAutoJudgePlan(true);
+      });
+    }
+
     // Phase 2 Results Subviews & Filters
     document.querySelectorAll('.result-subview-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -12511,6 +13513,18 @@
     const scoreModal3JudgesToggle = document.getElementById('scoreModal3JudgesToggle');
     if (scoreModal3JudgesToggle) {
       scoreModal3JudgesToggle.addEventListener('change', applyScoreModal3JudgesVisibility);
+    }
+    const btnScoreModalAddJudgeCol = document.getElementById('btnScoreModalAddJudgeCol');
+    const btnScoreModalRemoveJudgeCol = document.getElementById('btnScoreModalRemoveJudgeCol');
+    if (btnScoreModalAddJudgeCol) {
+      btnScoreModalAddJudgeCol.addEventListener('click', function () {
+        resizeScoreModalJudgeCount(1);
+      });
+    }
+    if (btnScoreModalRemoveJudgeCol) {
+      btnScoreModalRemoveJudgeCol.addEventListener('click', function () {
+        resizeScoreModalJudgeCount(-1);
+      });
     }
 
     const btnScoreModalPrevComp = document.getElementById('btnScoreModalPrevComp');
