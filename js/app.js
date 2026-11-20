@@ -10627,10 +10627,10 @@
     openIdCardsPrintWindow('บัตรประจำตัวคณะกรรมการตัดสิน', [buildCardForJudge(judge)]);
   }
 
-  let cachedObecLogoAsset = null;
-  function getObecLogoSvgAsset() {
-    if (cachedObecLogoAsset) return Promise.resolve(cachedObecLogoAsset);
-    return fetch('assets/logo-obec.svg')
+  const cachedSvgAssets = {};
+  function renderSvgAssetToPngDataUrl(assetPath, width, height) {
+    if (cachedSvgAssets[assetPath]) return Promise.resolve(cachedSvgAssets[assetPath]);
+    return fetch(assetPath)
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.text();
@@ -10644,13 +10644,13 @@
             img.onload = function () {
               try {
                 const canvas = document.createElement('canvas');
-                canvas.width = 547;
-                canvas.height = 789;
+                canvas.width = width;
+                canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 URL.revokeObjectURL(blobUrl);
-                cachedObecLogoAsset = canvas.toDataURL('image/png');
-                resolve(cachedObecLogoAsset);
+                cachedSvgAssets[assetPath] = canvas.toDataURL('image/png');
+                resolve(cachedSvgAssets[assetPath]);
               } catch (err) {
                 URL.revokeObjectURL(blobUrl);
                 resolve(null);
@@ -10671,8 +10671,17 @@
       });
   }
 
+  function getObecLogoSvgAsset() {
+    return renderSvgAssetToPngDataUrl('assets/logo-obec.svg', 547, 789);
+  }
+
+  function getCardWatermarkAsset() {
+    return renderSvgAssetToPngDataUrl('assets/watermark-hybrid-frameless.svg', 600, 600);
+  }
+
   async function openIdCardsPrintWindow(title, cards, opts) {
     const isAdminPreview = Boolean(opts && opts.previewByAdmin);
+    const initialPrintMode = (opts && opts.printMode) === 'front_only' ? 'front_only' : 'both';
     if (!isIdCardsPrintingEnabled() && !(state.isAdmin && isAdminPreview)) {
       showToast('ขณะนี้ผู้ดูแลระบบปิดการพิมพ์บัตรประจำตัวไว้ชั่วคราว', 'warning');
       return;
@@ -10683,28 +10692,17 @@
       return;
     }
 
-    const obecPngUrl = await getObecLogoSvgAsset();
-    await ensureLocalCardPhotosLoaded();
-    const cfg = state.config || DEFAULT_CONFIG;
+    const assetResults = await Promise.all([
+      getObecLogoSvgAsset(),
+      getCardWatermarkAsset(),
+      ensureLocalCardPhotosLoaded()
+    ]);
+    const obecPngUrl = assetResults[0];
+    const watermarkPngUrl = assetResults[1];
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
     const logoObecUrl = obecPngUrl || (baseDir + 'assets/logo-obec.svg');
-    const cardWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
-    const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
-    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+    const cardWatermarkUrl = watermarkPngUrl || (baseDir + 'assets/watermark-hybrid-frameless.svg');
     const showVenueSchedule = isFeatureOpenToPublic('venue');
-    const rawSigUrl = cfg.certSignatureUrl || '';
-    const sigUrl = rawSigUrl
-      ? (/^(data:|https?:|blob:|\/)/i.test(rawSigUrl) ? rawSigUrl : baseDir + rawSigUrl)
-      : '';
-    const sigOffsetX = Number.isFinite(Number(cfg.certSigOffsetX)) ? Number(cfg.certSigOffsetX) : DEFAULT_CONFIG.certSigOffsetX;
-    const sigOffsetY = Number.isFinite(Number(cfg.certSigOffsetY)) ? Number(cfg.certSigOffsetY) : DEFAULT_CONFIG.certSigOffsetY;
-    const sigScale = Number.isFinite(Number(cfg.certSigScale)) ? Number(cfg.certSigScale) : DEFAULT_CONFIG.certSigScale;
-    const sigScaleFactor = Math.max(0.5, Math.min(2.0, sigScale / 100));
-    const sigTransformCss =
-      'translate(' + (sigOffsetX * 0.45).toFixed(1) + 'px, ' + (sigOffsetY * 0.45).toFixed(1) + 'px) scale(' + sigScaleFactor.toFixed(2) + ')';
-    const sigHtml = sigUrl
-      ? `<div class="back-sign-img-wrap"><img src="${escapeHtml(sigUrl)}" alt="ลายมือชื่อ" class="back-sign-img" style="transform:${sigTransformCss};" /></div>`
-      : `<div class="back-sign-line">..................................................</div>`;
 
     let kanokTilesHtml = '';
     for (let kx = 0; kx < 720; kx += 80) {
@@ -10732,18 +10730,24 @@
       return `<div class="box-kanok-strip ${cls}"><svg class="kanok-svg" viewBox="0 0 720 18" preserveAspectRatio="none" aria-hidden="true"><use href="#kanok-strip-sym"/></svg></div>`;
     }
 
-    function renderCard(c) {
-      if (!c) return '';
-      const qrPayloadUrl = encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (c.ref_code || ''));
-      const rulesItemsHtml = (c.rules || [])
-        .map(function (ruleText) {
-          return `<li>${escapeHtml(ruleText)}</li>`;
-        })
-        .join('');
+    function renderFrontCardBox(c, qrPayloadUrl, showFrontQr) {
+      const photoSrc = getResolvedCardPhotoUrl(c);
+      const photoSlotHtml = photoSrc
+        ? `<div class="front-photo-frame"><img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" /></div>`
+        : `<div class="front-photo-empty-space" aria-hidden="true"></div>`;
+
+      const frontQrHtml = showFrontQr
+        ? `<div class="front-sign-bottom-row">
+                  <div class="front-qr-box">
+                    <div class="front-qr-frame">
+                      <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${qrPayloadUrl}" class="front-qr-img" alt="QR Code ตรวจสิทธิ์" onerror="this.style.opacity='0'" />
+                    </div>
+                    <div class="front-qr-text">สแกนตรวจสิทธิ์</div>
+                  </div>
+                </div>`
+        : '';
 
       return `
-        <div class="foldable-card-wrap">
-          <!-- BOX 1 (LEFT): FRONT CARD - INDEPENDENT BOX WITH NAVY/GOLD KANOK TRIM & ASYMMETRIC HIERARCHY -->
           <div class="card-box card-box-front">
             ${renderKanokStrip('box-kanok-top')}
 
@@ -10763,15 +10767,7 @@
 
               <div class="front-asymmetric-mid">
                 <div class="front-photo-top-row">
-                  <div class="front-photo-frame">
-                    ${(function () {
-                      const photoSrc = getResolvedCardPhotoUrl(c);
-                      if (photoSrc) {
-                        return `<img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" />`;
-                      }
-                      return `<svg class="photo-user-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/></svg><span class="photo-box-label">ติดรูปถ่าย</span><span class="photo-box-hint">1 – 1.5 นิ้ว</span>`;
-                    })()}
-                  </div>
+                  ${photoSlotHtml}
                 </div>
 
                 <div class="front-hero-left">
@@ -10795,12 +10791,7 @@
                   </div>
                 </div>
 
-                <div class="front-sign-bottom-row">
-                  <div class="front-holder-sign">
-                    <div class="front-sign-dots">...........................</div>
-                    <div class="front-sign-cap">ลงชื่อผู้ถือบัตร</div>
-                  </div>
-                </div>
+                ${frontQrHtml}
               </div>
 
               <div class="front-bottom-barcode">
@@ -10811,13 +10802,29 @@
 
             ${renderKanokStrip('box-kanok-bottom')}
           </div>
+      `;
+    }
+
+    function renderCard(c) {
+      if (!c) return '';
+      const qrPayloadUrl = encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (c.ref_code || ''));
+      const rulesItemsHtml = (c.rules || [])
+        .map(function (ruleText) {
+          return `<li>${escapeHtml(ruleText)}</li>`;
+        })
+        .join('');
+
+      return `
+        <div class="foldable-card-wrap">
+          <!-- BOX 1 (LEFT): FRONT CARD -->
+          ${renderFrontCardBox(c, qrPayloadUrl, false)}
 
           <!-- CLEAN FOLD/CUT GAP BETWEEN THE TWO SEPARATE BOXES -->
           <div class="card-gap-divider">
             <div class="fold-guide-label"><span>รอยพับ / แยกแผ่น</span></div>
           </div>
 
-          <!-- BOX 2 (RIGHT): BACK CARD - INDEPENDENT BOX WITH NAVY/GOLD KANOK TRIM -->
+          <!-- BOX 2 (RIGHT): BACK CARD -->
           <div class="card-box card-box-back">
             ${renderKanokStrip('box-kanok-top')}
             <img src="${escapeHtml(cardWatermarkUrl)}" alt="" class="back-watermark-img" />
@@ -10834,28 +10841,22 @@
                 <div class="back-event-pill">${escapeHtml(c.badge_type)}</div>
               </div>
 
-              <div class="back-terms-box">
-                <div class="back-terms-title">${escapeHtml(c.rules_title)}</div>
-                <ol class="back-terms-list">
-                  ${rulesItemsHtml}
-                </ol>
-                <div class="back-schedule-strip">
-                  แข่งขัน 24 – 25 พ.ย. 2569 • ศูนย์แข่งขันกลุ่ม รร.วังยาวเขวาไร่ดอนกลาง
-                </div>
-              </div>
-
-              <div class="back-footer-asym">
-                <div class="back-qr-left">
+              <div class="back-lower-stack">
+                <div class="back-qr-top-left">
                   <div class="back-qr-frame">
                     <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${qrPayloadUrl}" class="back-qr-img" alt="QR Code ตรวจสอบข้อมูล" onerror="this.style.opacity='0'" />
                   </div>
                   <div class="back-qr-label">สแกนตรวจสิทธิ์</div>
                 </div>
 
-                <div class="back-certifier-right">
-                  ${sigHtml}
-                  <div class="back-cert-name">(${escapeHtml(signerName)})</div>
-                  <div class="back-cert-pos">${escapeHtml(signerPos)}</div>
+                <div class="back-terms-box">
+                  <div class="back-terms-title">${escapeHtml(c.rules_title)}</div>
+                  <ol class="back-terms-list">
+                    ${rulesItemsHtml}
+                  </ol>
+                  <div class="back-schedule-strip">
+                    แข่งขัน 24 – 25 พ.ย. 2569 • ศูนย์แข่งขันกลุ่ม รร.วังยาวเขวาไร่ดอนกลาง
+                  </div>
                 </div>
               </div>
             </div>
@@ -10866,7 +10867,24 @@
       `;
     }
 
-    // Chunk cards into pairs (2 two-box cards per A4 page)
+    function renderFrontOnlyPair(cLeft, cRight) {
+      if (!cLeft) return '';
+      const qrLeft = encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (cLeft.ref_code || ''));
+      const rightHtml = cRight
+        ? renderFrontCardBox(cRight, encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (cRight.ref_code || '')), true)
+        : `<div class="card-box card-box-empty-slot" aria-hidden="true"></div>`;
+      return `
+        <div class="foldable-card-wrap">
+          ${renderFrontCardBox(cLeft, qrLeft, true)}
+          <div class="card-gap-divider">
+            <div class="fold-guide-label"><span>รอยตัดแยกบัตร</span></div>
+          </div>
+          ${rightHtml}
+        </div>
+      `;
+    }
+
+    // Chunk Both-Side cards (2 two-box cards per A4 page)
     const sheetsHtml = [];
     for (let i = 0; i < cards.length; i += 2) {
       const card1 = cards[i];
@@ -10879,6 +10897,31 @@
               <span>[-- รอยตัดแยกชุดบัตร (ด้านหน้า และ ด้านหลัง แยกกล่องชัดเจน พับครึ่งประกบกันได้พอดี) --]</span>
             </div>
             ${renderCard(card2)}
+          ` : `
+            <div class="cut-line">
+              <span>[-- รอยตัดแยกแผ่น --]</span>
+            </div>
+            <div class="card-empty-placeholder"></div>
+          `}
+        </div>
+      `);
+    }
+
+    // Chunk Front-Only cards (4 front cards 2x2 per A4 page)
+    const frontOnlySheetsHtml = [];
+    for (let i = 0; i < cards.length; i += 4) {
+      const c1 = cards[i];
+      const c2 = cards[i + 1] || null;
+      const c3 = cards[i + 2] || null;
+      const c4 = cards[i + 3] || null;
+      frontOnlySheetsHtml.push(`
+        <div class="a4-sheet">
+          ${renderFrontOnlyPair(c1, c2)}
+          ${c3 ? `
+            <div class="cut-line">
+              <span>[-- รอยตัดแยกบัตร (พิมพ์เฉพาะด้านหน้า • 4 ใบต่อ 1 แผ่น A4) --]</span>
+            </div>
+            ${renderFrontOnlyPair(c3, c4)}
           ` : `
             <div class="cut-line">
               <span>[-- รอยตัดแยกแผ่น --]</span>
@@ -10911,12 +10954,20 @@
       background: #0B1E47;
       color: #fff;
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
+      gap: 10px;
       font-family: 'Niramit', 'Prompt', sans-serif;
       border-bottom: 2px solid #D4AF37;
     }
-    .no-print button {
+    .no-print-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .no-print button.btn-print-main {
       background: linear-gradient(135deg, #FCE276 0%, #D4AF37 100%);
       color: #0B1E47;
       border: none;
@@ -10925,6 +10976,30 @@
       font-weight: 700;
       cursor: pointer;
       font-family: 'Niramit', 'Prompt', sans-serif;
+    }
+    .no-print button.btn-mode-toggle {
+      background: rgba(255, 255, 255, 0.12);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Niramit', 'Prompt', sans-serif;
+    }
+    .no-print button.btn-mode-toggle.active {
+      background: #ffffff;
+      color: #0B1E47;
+      border-color: #FCE276;
+    }
+    .mode-wrap.is-hidden {
+      display: none !important;
+    }
+    .card-box-empty-slot {
+      border: 1px dashed #cbd5e1 !important;
+      box-shadow: none !important;
+      background: transparent !important;
     }
     .a4-sheet {
       width: 196mm;
@@ -11065,49 +11140,49 @@
       border: 1px solid #D4AF37;
       border-radius: 4px;
       padding: 1px 7px;
-      margin-bottom: 1.8mm;
+      margin-bottom: 1.4mm;
     }
     .front-person-name {
       font-family: 'Prompt', 'Niramit', sans-serif;
-      font-size: 19px;
+      font-size: 21px;
       font-weight: 700;
       color: #0B1E47;
-      line-height: 1.18;
+      line-height: 1.16;
       word-break: break-word;
     }
     .front-sub-role {
       font-size: 10.5px;
       font-weight: 600;
       color: #926815;
-      margin-top: 1.5px;
-      margin-bottom: 2.5mm;
+      margin-top: 1px;
+      margin-bottom: 2mm;
     }
     .front-comp-block {
       background: rgba(11, 30, 71, 0.04);
       border-left: 3.5px solid #D4AF37;
       border-radius: 0 5px 5px 0;
-      padding: 2.2mm 3mm;
-      margin-bottom: 2.2mm;
+      padding: 2mm 2.8mm;
+      margin-bottom: 1.8mm;
     }
     .front-comp-label {
       font-size: 8.5px;
       font-weight: 700;
       color: #475569;
-      margin-bottom: 1.5px;
+      margin-bottom: 1px;
     }
     .front-comp-name {
-      font-size: 12px;
+      font-size: 11.8px;
       font-weight: 700;
       color: #0B1E47;
-      line-height: 1.25;
+      line-height: 1.24;
       word-break: break-word;
     }
     .front-school-row {
       font-size: 11px;
       font-weight: 700;
       color: #1e293b;
-      line-height: 1.24;
-      margin-bottom: 1.8mm;
+      line-height: 1.22;
+      margin-bottom: 1.5mm;
     }
     .front-meta-chip-row {
       display: flex;
@@ -11115,7 +11190,7 @@
       gap: 3px 5px;
     }
     .front-meta-chip {
-      font-size: 8.8px;
+      font-size: 8.6px;
       font-weight: 600;
       color: #334155;
       background: #f1f5f9;
@@ -11128,9 +11203,34 @@
       justify-content: flex-end;
       flex-shrink: 0;
     }
+    .front-qr-box {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+    }
+    .front-qr-text {
+      font-size: 6.8px;
+      font-weight: 700;
+      color: #0B1E47;
+      line-height: 1.15;
+      text-align: center;
+    }
+    .front-qr-frame {
+      padding: 1.5px;
+      background: #ffffff;
+      border: 1.3px solid #D4AF37;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .front-qr-img {
+      width: 11.5mm;
+      height: 11.5mm;
+      display: block;
+    }
     .front-photo-frame {
-      width: 26mm;
-      height: 31mm;
+      width: 30mm;
+      height: 36mm;
       border-radius: 6px;
       background: #ffffff;
       border: 1.8px solid #D4AF37;
@@ -11144,6 +11244,11 @@
       text-align: center;
       color: #64748b;
     }
+    .front-photo-empty-space {
+      width: 30mm;
+      height: 36mm;
+      flex-shrink: 0;
+    }
     .front-photo-img {
       width: 100%;
       height: 100%;
@@ -11151,37 +11256,6 @@
       object-position: center;
       border-radius: 4.2px;
       display: block;
-    }
-    .photo-user-icon {
-      width: 28px;
-      height: 28px;
-      color: #cbd5e1;
-      margin-bottom: 2px;
-    }
-    .photo-box-label {
-      font-size: 8px;
-      font-weight: 700;
-      color: #0B1E47;
-    }
-    .photo-box-hint {
-      font-size: 6.6px;
-      color: #64748b;
-    }
-    .front-holder-sign {
-      width: 27mm;
-      text-align: center;
-      line-height: 1.1;
-      margin-top: 0;
-    }
-    .front-sign-dots {
-      font-size: 7.5px;
-      color: #64748b;
-      letter-spacing: 0.4px;
-    }
-    .front-sign-cap {
-      font-size: 6.6px;
-      color: #334155;
-      font-weight: 600;
     }
 
     .front-bottom-barcode {
@@ -11244,7 +11318,7 @@
       width: 56mm;
       height: 56mm;
       object-fit: contain;
-      opacity: 0.06;
+      opacity: 0.15;
       pointer-events: none;
       z-index: 1;
     }
@@ -11257,6 +11331,19 @@
       min-height: 0;
       position: relative;
       z-index: 2;
+    }
+    .back-lower-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2.2mm;
+      margin-top: auto;
+    }
+    .back-qr-top-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
     }
     .back-top-asym {
       display: flex;
@@ -11339,20 +11426,6 @@
       text-align: center;
     }
 
-    .back-footer-asym {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 3mm;
-      border-top: 1px solid rgba(212, 175, 55, 0.45);
-      padding-top: 2mm;
-    }
-    .back-qr-left {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      flex-shrink: 0;
-    }
     .back-qr-frame {
       padding: 2px;
       background: #ffffff;
@@ -11361,50 +11434,14 @@
       margin-bottom: 1px;
     }
     .back-qr-img {
-      width: 13.5mm;
-      height: 13.5mm;
+      width: 14mm;
+      height: 14mm;
       display: block;
     }
     .back-qr-label {
       font-size: 6.8px;
       font-weight: 700;
       color: #0B1E47;
-    }
-
-    .back-certifier-right {
-      flex: 1;
-      text-align: center;
-      line-height: 1.25;
-      padding-bottom: 1px;
-    }
-    .back-sign-img-wrap {
-      height: 24px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      overflow: visible;
-      margin-bottom: 1px;
-    }
-    .back-sign-img {
-      max-height: 24px;
-      max-width: 96px;
-      object-fit: contain;
-      transform-origin: bottom center;
-    }
-    .back-sign-line {
-      font-size: 8px;
-      color: #64748b;
-      letter-spacing: 0.8px;
-      margin-bottom: 1px;
-    }
-    .back-cert-name {
-      font-size: 8.6px;
-      font-weight: 700;
-      color: #0B1E47;
-    }
-    .back-cert-pos {
-      font-size: 6.9px;
-      color: #475569;
     }
 
     .cut-line {
@@ -11431,7 +11468,7 @@
       .no-print { display: none !important; }
       .a4-sheet { margin: 0; padding: 0; box-shadow: none; height: 284mm; }
       .card-box { box-shadow: none !important; }
-      .card-box, .box-kanok-strip, .front-role-pill, .front-code-tag, .front-comp-block, .back-event-pill, .back-watermark-img {
+      .card-box, .box-kanok-strip, .front-role-pill, .front-code-tag, .front-comp-block, .back-event-pill, .back-watermark-img, .front-qr-frame, .back-qr-frame {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
@@ -11441,16 +11478,46 @@
 <body>
   ${svgDefsBlock}
   <div class="no-print">
-    <div>${escapeHtml(title)} (รวม ${cards.length} บัตร — แยกกล่องหน้าซ้าย / กล่องหลังขวา กรอบลายกนกทอง-น้ำเงิน)</div>
-    <button onclick="window.print()">สั่งพิมพ์บัตรประจำตัว</button>
+    <div>
+      <div style="font-weight:700; font-size:13px;">${escapeHtml(title)} (รวม ${cards.length} บัตร)</div>
+      <div style="font-size:11px; color:#cbd5e1; margin-top:2px;">หมายเหตุ: รายชื่อที่ยังไม่ได้แนบรูป ระบบจะซ่อนกรอบรูปมุมขวาบนและเว้นพื้นที่โล่งให้อัตโนมัติ</div>
+    </div>
+    <div class="no-print-actions">
+      <button type="button" id="btnModeBoth" class="btn-mode-toggle ${initialPrintMode === 'both' ? 'active' : ''}">ทั้งด้านหน้า + ด้านหลัง (2 ชุด/แผ่น)</button>
+      <button type="button" id="btnModeFrontOnly" class="btn-mode-toggle ${initialPrintMode === 'front_only' ? 'active' : ''}">เฉพาะด้านหน้าที่มีชื่อ (4 ใบ/แผ่น)</button>
+      <button type="button" id="btnPopupPrintMain" class="btn-print-main">สั่งพิมพ์ / Save PDF</button>
+    </div>
   </div>
-  ${sheetsHtml.join('')}
+  <div id="sheetsBothWrap" class="mode-wrap ${initialPrintMode === 'both' ? '' : 'is-hidden'}">
+    ${sheetsHtml.join('')}
+  </div>
+  <div id="sheetsFrontOnlyWrap" class="mode-wrap ${initialPrintMode === 'front_only' ? '' : 'is-hidden'}">
+    ${frontOnlySheetsHtml.join('')}
+  </div>
 </body>
 </html>`;
 
     win.document.open();
     win.document.write(html);
     win.document.close();
+
+    function applyPopupPrintMode(mode) {
+      const bothWrap = win.document.getElementById('sheetsBothWrap');
+      const frontWrap = win.document.getElementById('sheetsFrontOnlyWrap');
+      const btnBoth = win.document.getElementById('btnModeBoth');
+      const btnFront = win.document.getElementById('btnModeFrontOnly');
+      const isFrontOnly = mode === 'front_only';
+      if (bothWrap) bothWrap.classList.toggle('is-hidden', isFrontOnly);
+      if (frontWrap) frontWrap.classList.toggle('is-hidden', !isFrontOnly);
+      if (btnBoth) btnBoth.classList.toggle('active', !isFrontOnly);
+      if (btnFront) btnFront.classList.toggle('active', isFrontOnly);
+    }
+    const popupBtnBoth = win.document.getElementById('btnModeBoth');
+    const popupBtnFront = win.document.getElementById('btnModeFrontOnly');
+    const popupBtnPrint = win.document.getElementById('btnPopupPrintMain');
+    if (popupBtnBoth) popupBtnBoth.addEventListener('click', function () { applyPopupPrintMode('both'); });
+    if (popupBtnFront) popupBtnFront.addEventListener('click', function () { applyPopupPrintMode('front_only'); });
+    if (popupBtnPrint) popupBtnPrint.addEventListener('click', function () { win.print(); });
   }
 
   function printCompetitionResultSheet(compId) {
@@ -12464,8 +12531,11 @@
           showToast('ขณะนี้ผู้ดูแลระบบปิดการพิมพ์บัตรประจำตัวไว้ชั่วคราว', 'warning');
           return;
         }
+        const sideSelect = document.getElementById('cardPrintSideSelect');
+        const printMode = sideSelect && sideSelect.value === 'front_only' ? 'front_only' : 'both';
         openIdCardsPrintWindow(ctx.title.replace(/^แนบรูป.*•\s*/, 'บัตรประจำตัว • '), ctx.cards, {
-          previewByAdmin: state.isAdmin && !isIdCardsPrintingEnabled()
+          previewByAdmin: state.isAdmin && !isIdCardsPrintingEnabled(),
+          printMode: printMode
         });
       });
     }

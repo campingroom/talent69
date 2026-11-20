@@ -693,6 +693,9 @@
           <span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-heading text-[11px] font-semibold mb-1">ทำในเครื่อง 100% • ครอปอัตโนมัติ 26:31 • ปลอดภัย PDPA</span>
           <h3 id="cardPhotoModalTitle" class="text-base sm:text-lg font-bold font-heading text-slate-900">แนบรูปถ่ายติดบัตร</h3>
           <p id="cardPhotoModalSub" class="text-xs text-slate-500 mt-0.5">รูปภาพทั้งหมดเก็บไว้ชั่วคราวเฉพาะในเบราว์เซอร์เครื่องนี้ ไม่ส่งขึ้นเซิร์ฟเวอร์และไม่แตะข้อมูลสมัคร/คะแนน</p>
+          <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 mt-1.5 inline-block">
+            หมายเหตุ: รายชื่อใดที่ไม่ได้แนบรูป ระบบจะซ่อนกรอบรูปมุมขวาบนและเว้นพื้นที่โล่งให้อัตโนมัติ (พิมพ์ได้ทั้งแบบหน้า–หลัง หรือเฉพาะด้านหน้า)
+          </p>
         </div>
         <button type="button" id="btnCloseCardPhotoModal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer" aria-label="ปิดหน้าต่าง">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -710,6 +713,10 @@
           <button type="button" id="btnDismissCardPhotoModal" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-heading text-xs font-medium hover:bg-slate-50 transition cursor-pointer">
             ปิดหน้าต่าง
           </button>
+          <select id="cardPrintSideSelect" aria-label="เลือกรูปแบบหน้าบัตรที่ต้องการพิมพ์" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-heading font-medium text-slate-700 focus:border-slate-900 focus:outline-none cursor-pointer">
+            <option value="both">ทั้งด้านหน้า + ด้านหลัง (พับประกบ)</option>
+            <option value="front_only">เฉพาะด้านหน้าที่มีชื่อ (4 ใบ/แผ่น)</option>
+          </select>
           <button type="button" id="btnPrintCardsFromPhotoModal" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
             <span>เปิดหน้าพิมพ์บัตร / Save PDF</span>
