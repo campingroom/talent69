@@ -252,6 +252,9 @@
     venueMapExpanded: true,
     dashboardMatrixOpen: false,
     expandedMatrixGroups: {},
+    cardPhotosMap: {},
+    cardPhotosDataUrlMap: {},
+    activeCardPhotoContext: null,
     resultSubview: 'by-comp',
     certNumeralMode: 'both', // 'thai' | 'arabic' | 'both'
     lastAddedRegId: null,
@@ -1235,6 +1238,10 @@
     const btnPrintSchoolIdCardsEl = document.getElementById('btnPrintSchoolIdCards');
     if (btnPrintSchoolIdCardsEl) {
       btnPrintSchoolIdCardsEl.classList.toggle('hidden', !idCardsEnabled);
+    }
+    const btnManageSchoolCardPhotosEl = document.getElementById('btnManageSchoolCardPhotos');
+    if (btnManageSchoolCardPhotosEl) {
+      btnManageSchoolCardPhotosEl.classList.toggle('hidden', !idCardsEnabled && !state.isAdmin);
     }
     const btnSubSchoolEl = document.getElementById('btnPrintSubstitutionFormSchool');
     if (btnSubSchoolEl) {
@@ -4349,6 +4356,13 @@
             ? '<div class="text-[11px] text-[#787774] mt-0.5">' + escapeHtml(roomInfo) + '</div>'
             : '';
 
+        const photoBtnHtml =
+          isIdCardsPrintingEnabled() || state.isAdmin
+            ? '<button type="button" data-sch-photos="' +
+              escapeHtml(r.reg_id) +
+              '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-heading" title="แนบรูปติดบัตรทีมนี้"><span>รูป</span></button>'
+            : '';
+
         const cardBtnHtml = isIdCardsPrintingEnabled()
           ? '<button type="button" data-sch-cards="' +
             escapeHtml(r.reg_id) +
@@ -4393,6 +4407,7 @@
           resultCellHtml +
           '</td>' +
           '<td class="py-3 px-2 text-right whitespace-nowrap no-print space-x-1">' +
+          photoBtnHtml +
           cardBtnHtml +
           '<button type="button" data-sch-edit="' +
           escapeHtml(r.reg_id) +
@@ -4406,6 +4421,19 @@
       })
       .join('');
 
+    tbody.querySelectorAll('[data-sch-photos]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const regId = btn.getAttribute('data-sch-photos');
+        const reg = state.registrations.find((x) => x.reg_id === regId);
+        if (!reg) return;
+        const cards = buildCardsForRegistration(reg);
+        openCardPhotoModal(
+          'แนบรูปติดบัตร • ' + (reg.comp_name || reg.comp_id),
+          cards,
+          { reg_id: reg.reg_id, sub: reg.school_name + ' • ' + cards.length + ' คน' }
+        );
+      });
+    });
     tbody.querySelectorAll('[data-sch-cards]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         printRegistrationIdCards(btn.getAttribute('data-sch-cards'));
@@ -6470,6 +6498,11 @@
           ? `<button type="button" data-del-judge="${escapeHtml(j.judge_id)}" class="px-2 py-1 rounded text-xs font-heading text-rose-600 hover:bg-rose-50">ลบ</button>`
           : '';
 
+        const judgePhotoBtnHtml =
+          state.isAdmin
+            ? `<button type="button" data-judge-photo="${escapeHtml(j.judge_id)}" class="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 font-heading text-xs font-medium">รูป</button>`
+            : '';
+
         const judgeIdBtnHtml = isIdCardsPrintingEnabled()
           ? `
               <button type="button" data-print-judge-id="${escapeHtml(j.judge_id)}" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-heading text-xs font-medium">
@@ -6492,7 +6525,7 @@
             <td class="py-3 px-2 text-center">
               <span class="px-2.5 py-0.5 rounded-md text-xs font-heading font-medium ${roleBadgeClass}">${escapeHtml(j.role || 'กรรมการ')}</span>
             </td>
-            <td class="py-3 px-2 text-right whitespace-nowrap space-x-1">${judgeIdBtnHtml}
+            <td class="py-3 px-2 text-right whitespace-nowrap space-x-1">${judgePhotoBtnHtml}${judgeIdBtnHtml}
               <button type="button" data-print-judge-cert="${escapeHtml(j.judge_id)}" class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium">
                 เกียรติบัตร
               </button>
@@ -6502,6 +6535,21 @@
         `;
       })
       .join('');
+
+    tbody.querySelectorAll('[data-judge-photo]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const jId = btn.getAttribute('data-judge-photo');
+        const judge = (state.judges || []).find((x) => x.judge_id === jId);
+        if (judge) {
+          const card = buildCardForJudge(judge);
+          openCardPhotoModal(
+            'แนบรูปบัตรคณะกรรมการ • ' + card.person_name,
+            [card],
+            { sub: card.comp_name_clean + ' • ' + card.school_name }
+          );
+        }
+      });
+    });
 
     tbody.querySelectorAll('[data-print-judge-id]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -9543,14 +9591,8 @@
     return '<svg viewBox="0 0 ' + Math.max(x + 2, 160) + ' 22" preserveAspectRatio="none" class="barcode-svg" aria-hidden="true">' + bars.join('') + '</svg>';
   }
 
-  // Print ID Cards for a single registered team
-  function printRegistrationIdCards(regId) {
-    const r = state.registrations.find((item) => item.reg_id === regId);
-    if (!r) {
-      showToast('ไม่พบข้อมูลการลงทะเบียนนี้', 'error');
-      return;
-    }
-
+  function buildCardsForRegistration(r) {
+    if (!r) return [];
     const comp = state.competitions.find((c) => c.comp_id === r.comp_id) || {};
     const cleanCompName = (r.comp_name || comp.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
     const cleanLevel = (r.level || comp.level || '').trim();
@@ -9565,6 +9607,7 @@
     (r.students || []).forEach(function (s, idx) {
       cards.push(
         buildIdCardItem('COMPETITOR', {
+          reg_id: r.reg_id || '',
           person_name: formatFullNameForPrint(s.prefix, s.name),
           sub_role: s.grade ? 'นักเรียนชั้น ' + s.grade : 'นักเรียนผู้เข้าแข่งขัน',
           school_name: r.school_name,
@@ -9582,6 +9625,7 @@
     (r.teachers || []).forEach(function (t, idx) {
       cards.push(
         buildIdCardItem('COACH', {
+          reg_id: r.reg_id || '',
           person_name: formatFullNameForPrint(t.prefix, t.name),
           sub_role: t.position || 'ครูผู้ฝึกสอนนักเรียน',
           school_name: r.school_name,
@@ -9595,12 +9639,376 @@
         })
       );
     });
+    return cards;
+  }
 
+  function buildCardForJudge(judge) {
+    const comp = state.competitions.find((c) => c.comp_id === judge.comp_id) || {};
+    const jName = judge.judge_name || judge.full_name || '';
+    const cleanCompName = (judge.comp_name || comp.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
+    const cleanLevel = (judge.level || comp.level || '').trim();
+    const levelAndType = [cleanLevel, judge.role || 'กรรมการตัดสิน'].filter(Boolean).join(' • ');
+
+    return buildIdCardItem('JUDGE', {
+      reg_id: '',
+      person_name: formatFullNameForPrint(judge.prefix, jName),
+      sub_role: judge.role || 'กรรมการตัดสิน',
+      school_name: judge.school_name || 'กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
+      learning_area: formatShortLearningArea(judge.learning_area || comp.learning_area),
+      comp_name_clean: cleanCompName,
+      level_and_type: levelAndType,
+      comp_date: comp.comp_date || '24–25 พ.ย. 2569',
+      comp_time: (comp.comp_time || '09.00–12.00 น.') + ' (ประชุม 23 พ.ย. 13.30 น.)',
+      venue_room: comp.venue_room || comp.room || 'อาคารเรียนหลัก',
+      ref_code: judge.judge_id || ('JDG-' + (judge.comp_id || 'WYK'))
+    });
+  }
+
+  /**
+   * Auto center-crop uploaded image to exact 26:31 ID frame ratio (~300 DPI: 312x372 JPEG)
+   */
+  async function cropAndCompressIdPhoto(file) {
+    if (!file || !/^image\/(jpeg|jpg|png|webp)$/i.test(file.type || '')) {
+      throw new Error('กรุณาเลือกไฟล์รูปภาพ JPG, PNG หรือ WEBP เท่านั้น');
+    }
+    const targetW = 312;
+    const targetH = 372;
+    const targetRatio = targetW / targetH;
+    let source = null;
+    let cleanup = null;
+
+    if (typeof createImageBitmap === 'function') {
+      source = await createImageBitmap(file);
+      cleanup = function () {
+        if (source && typeof source.close === 'function') source.close();
+      };
+    } else {
+      const objUrl = URL.createObjectURL(file);
+      source = await new Promise(function (resolve, reject) {
+        const img = new Image();
+        img.onload = function () { resolve(img); };
+        img.onerror = function () { reject(new Error('ไม่สามารถอ่านไฟล์รูปภาพได้')); };
+        img.src = objUrl;
+      });
+      cleanup = function () { URL.revokeObjectURL(objUrl); };
+    }
+
+    try {
+      const srcW = source.width || source.naturalWidth;
+      const srcH = source.height || source.naturalHeight;
+      if (!srcW || !srcH) throw new Error('ไม่สามารถอ่านขนาดรูปภาพได้');
+
+      const srcRatio = srcW / srcH;
+      let sx = 0;
+      let sy = 0;
+      let sw = srcW;
+      let sh = srcH;
+      if (srcRatio > targetRatio) {
+        sw = srcH * targetRatio;
+        sx = (srcW - sw) / 2;
+      } else {
+        sh = srcW / targetRatio;
+        sy = (srcH - sh) / 2;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, targetW, targetH);
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      canvas.width = 0;
+      canvas.height = 0;
+      return { dataUrl: dataUrl, width: targetW, height: targetH };
+    } finally {
+      if (cleanup) cleanup();
+    }
+  }
+
+  async function fetchCardPhotosMap(refsList) {
+    if (!state.gasWebAppUrl) return state.cardPhotosMap;
+    const cleanRefs = Array.isArray(refsList) ? refsList.filter(Boolean) : [];
+    const queryRefs = cleanRefs.length > 0 && cleanRefs.length <= 45 ? '&refs=' + encodeURIComponent(cleanRefs.join(',')) : '';
+    try {
+      const res = await fetch(state.gasWebAppUrl + '?action=get_card_photos' + queryRefs, { method: 'GET' });
+      const data = await res.json();
+      if (data && data.ok && data.photos && typeof data.photos === 'object') {
+        Object.keys(data.photos).forEach(function (k) {
+          state.cardPhotosMap[k] = data.photos[k];
+        });
+      }
+    } catch (e) {
+      // Keep existing local/cache entries cleanly
+    }
+    return state.cardPhotosMap;
+  }
+
+  async function uploadCardPhotoEntry(cardItem, imageBase64, verifyPhone) {
+    if (!cardItem || !cardItem.ref_code) throw new Error('ไม่พบรหัสบัตร');
+    if (state.gasWebAppUrl) {
+      const payload = {
+        action: 'upload_card_photo',
+        ref_code: cardItem.ref_code,
+        reg_id: cardItem.reg_id || '',
+        role_type: cardItem.role_code || 'COMPETITOR',
+        person_name: cardItem.person_name || '',
+        school_name: cardItem.school_name || '',
+        image_base64: imageBase64,
+        verify_phone: verifyPhone || '',
+        admin_pin: state.isAdmin ? state.adminPin : ''
+      };
+      const res = await fetch(state.gasWebAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      if (!result || !result.ok) {
+        throw new Error((result && result.error) || 'อัปโหลดรูปภาพไม่สำเร็จ');
+      }
+      state.cardPhotosMap[cardItem.ref_code] = {
+        ref_code: cardItem.ref_code,
+        file_id: result.file_id || '',
+        url: result.url || imageBase64,
+        updated_at: result.updated_at || new Date().toISOString()
+      };
+      state.cardPhotosDataUrlMap[cardItem.ref_code] = imageBase64;
+      return state.cardPhotosMap[cardItem.ref_code];
+    }
+
+    if (!state.isAdmin && cardItem.reg_id) {
+      const reg = state.registrations.find((x) => x.reg_id === cardItem.reg_id);
+      const isSample = reg && String(reg.status || '').indexOf('ตัวอย่าง') !== -1;
+      if (reg && !isSample && !verifyPhoneMatchClient(reg.coordinator_phone, verifyPhone)) {
+        throw new Error('เบอร์โทรศัพท์ผู้ประสานงานไม่ตรงกับรายการที่ลงทะเบียนไว้');
+      }
+    }
+    state.cardPhotosMap[cardItem.ref_code] = {
+      ref_code: cardItem.ref_code,
+      file_id: 'LOCAL',
+      url: imageBase64,
+      updated_at: new Date().toISOString()
+    };
+    state.cardPhotosDataUrlMap[cardItem.ref_code] = imageBase64;
+    return state.cardPhotosMap[cardItem.ref_code];
+  }
+
+  async function deleteCardPhotoEntry(cardItem, verifyPhone) {
+    if (!cardItem || !cardItem.ref_code) return;
+    if (state.gasWebAppUrl) {
+      const res = await fetch(state.gasWebAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'delete_card_photo',
+          ref_code: cardItem.ref_code,
+          reg_id: cardItem.reg_id || '',
+          verify_phone: verifyPhone || '',
+          admin_pin: state.isAdmin ? state.adminPin : ''
+        })
+      });
+      const result = await res.json();
+      if (!result || !result.ok) {
+        throw new Error((result && result.error) || 'ลบรูปภาพไม่สำเร็จ');
+      }
+    }
+    delete state.cardPhotosMap[cardItem.ref_code];
+    delete state.cardPhotosDataUrlMap[cardItem.ref_code];
+  }
+
+  function renderCardPhotoModalList() {
+    const listEl = document.getElementById('cardPhotoList');
+    const statusEl = document.getElementById('cardPhotoStatusText');
+    const ctx = state.activeCardPhotoContext;
+    if (!listEl || !ctx) return;
+
+    const cards = ctx.cards || [];
+    if (cards.length === 0) {
+      listEl.innerHTML = '<div class="py-6 text-center text-sm text-slate-400">ไม่พบรายชื่อผู้ถือบัตรในชุดนี้</div>';
+      return;
+    }
+
+    let uploadedCount = 0;
+    listEl.innerHTML = cards
+      .map(function (c, idx) {
+        const localUrl = state.cardPhotosDataUrlMap[c.ref_code];
+        const remoteRec = state.cardPhotosMap[c.ref_code];
+        const previewSrc = localUrl || (remoteRec && remoteRec.url) || '';
+        if (previewSrc) uploadedCount += 1;
+
+        const roleCls =
+          c.role_code === 'JUDGE'
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            : c.role_code === 'COACH'
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : 'bg-blue-50 text-blue-800 border-blue-200';
+
+        const thumbHtml = previewSrc
+          ? `<img src="${escapeHtml(previewSrc)}" alt="รูปถ่าย" class="w-full h-full object-cover" />`
+          : `<svg class="w-7 h-7 text-slate-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/></svg>`;
+
+        const statusBadge = previewSrc
+          ? '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-heading font-semibold">มีรูปแล้ว</span>'
+          : '<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-heading">ยังไม่แนบรูป</span>';
+
+        const deleteBtnHtml = previewSrc
+          ? `<button type="button" data-del-photo-idx="${idx}" class="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-heading text-xs font-medium transition cursor-pointer">ลบรูป</button>`
+          : '';
+
+        return (
+          '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50/40">' +
+          '<div class="flex items-center gap-3 min-w-0">' +
+          '<div class="w-[52px] h-[62px] shrink-0 rounded-lg border-2 border-amber-400 bg-white overflow-hidden flex items-center justify-center">' +
+          thumbHtml +
+          '</div>' +
+          '<div class="min-w-0">' +
+          '<div class="flex flex-wrap items-center gap-1.5">' +
+          '<span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">' +
+          escapeHtml(c.ref_code) +
+          '</span>' +
+          '<span class="px-2 py-0.5 rounded border text-[10px] font-heading font-semibold ' +
+          roleCls +
+          '">' +
+          escapeHtml(c.spine_title_th) +
+          '</span>' +
+          statusBadge +
+          '</div>' +
+          '<div class="font-heading font-bold text-sm text-slate-900 mt-0.5 truncate">' +
+          escapeHtml(c.person_name) +
+          '</div>' +
+          '<div class="text-[11px] text-slate-500 truncate">' +
+          escapeHtml(c.comp_name_clean) +
+          ' • ' +
+          escapeHtml(c.sub_role) +
+          '</div>' +
+          '</div>' +
+          '</div>' +
+          '<div class="flex items-center gap-2 shrink-0">' +
+          '<label class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer">' +
+          '<input type="file" accept="image/jpeg,image/png,image/webp" class="hidden" data-upload-photo-idx="' +
+          idx +
+          '" />' +
+          '<span>' +
+          (previewSrc ? 'เปลี่ยนรูป' : 'เลือกรูปถ่าย') +
+          '</span>' +
+          '</label>' +
+          deleteBtnHtml +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+
+    if (statusEl) {
+      statusEl.textContent = 'อัปโหลดรูปแล้ว ' + uploadedCount + ' / ' + cards.length + ' คน (ระบบครอปตรงกลางอัตโนมัติ)';
+    }
+
+    listEl.querySelectorAll('[data-upload-photo-idx]').forEach(function (input) {
+      input.addEventListener('change', async function (ev) {
+        const file = ev.target.files && ev.target.files[0];
+        ev.target.value = '';
+        if (!file) return;
+        const cardItem = cards[Number(input.getAttribute('data-upload-photo-idx'))];
+        if (!cardItem) return;
+
+        const verifyPhone = ((document.getElementById('cardPhotoVerifyPhone') || {}).value || '').trim();
+        if (!state.isAdmin && cardItem.reg_id) {
+          const reg = state.registrations.find((x) => x.reg_id === cardItem.reg_id);
+          const isSample = reg && String(reg.status || '').indexOf('ตัวอย่าง') !== -1;
+          if (!isSample && verifyPhone.replace(/\D/g, '').length < 4) {
+            showToast('กรุณากรอกเบอร์โทรผู้ประสานงาน 4 ตัวท้ายหรือเบอร์เต็มก่อนอัปโหลดรูป', 'warning');
+            const phoneEl = document.getElementById('cardPhotoVerifyPhone');
+            if (phoneEl) phoneEl.focus();
+            return;
+          }
+        }
+
+        if (statusEl) statusEl.textContent = 'กำลังครอปและอัปโหลดรูปของ ' + cardItem.person_name + '...';
+        try {
+          const cropped = await cropAndCompressIdPhoto(file);
+          await uploadCardPhotoEntry(cardItem, cropped.dataUrl, verifyPhone);
+          renderCardPhotoModalList();
+          showToast('บันทึกรูปติดบัตรของ ' + cardItem.person_name + ' เรียบร้อยแล้ว', 'success');
+        } catch (err) {
+          renderCardPhotoModalList();
+          showToast(err.message || 'ไม่สามารถอัปโหลดรูปได้', 'error');
+        }
+      });
+    });
+
+    listEl.querySelectorAll('[data-del-photo-idx]').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        const cardItem = cards[Number(btn.getAttribute('data-del-photo-idx'))];
+        if (!cardItem) return;
+        const verifyPhone = ((document.getElementById('cardPhotoVerifyPhone') || {}).value || '').trim();
+        if (statusEl) statusEl.textContent = 'กำลังลบรูปของ ' + cardItem.person_name + '...';
+        try {
+          await deleteCardPhotoEntry(cardItem, verifyPhone);
+          renderCardPhotoModalList();
+          showToast('ลบรูปติดบัตรเรียบร้อยแล้ว', 'info');
+        } catch (err) {
+          renderCardPhotoModalList();
+          showToast(err.message || 'ไม่สามารถลบรูปได้', 'error');
+        }
+      });
+    });
+  }
+
+  async function openCardPhotoModal(title, cards, opts) {
+    const modal = document.getElementById('cardPhotoModal');
+    if (!modal) return;
+    if (!cards || cards.length === 0) {
+      showToast('ไม่พบรายชื่อผู้ถือบัตรสำหรับแนบรูป', 'warning');
+      return;
+    }
+
+    state.activeCardPhotoContext = {
+      title: title || 'แนบรูปถ่ายติดบัตรประจำตัว',
+      cards: cards,
+      opts: opts || {}
+    };
+
+    const titleEl = document.getElementById('cardPhotoModalTitle');
+    const subEl = document.getElementById('cardPhotoModalSub');
+    const verifyBox = document.getElementById('cardPhotoVerifyBox');
+    const verifyInput = document.getElementById('cardPhotoVerifyPhone');
+    if (titleEl) titleEl.textContent = state.activeCardPhotoContext.title;
+    if (subEl) {
+      subEl.textContent = (opts && opts.sub) || 'แยกเก็บเฉพาะรูปภาพลง Google Drive ไม่แตะข้อมูลลงทะเบียนและผลคะแนน';
+    }
+    if (verifyBox) verifyBox.classList.toggle('hidden', state.isAdmin);
+    if (verifyInput && !state.isAdmin) verifyInput.value = '';
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    renderCardPhotoModalList();
+
+    await fetchCardPhotosMap(cards.map((c) => c.ref_code));
+    if (state.activeCardPhotoContext && !modal.classList.contains('hidden')) {
+      renderCardPhotoModalList();
+    }
+  }
+
+  // Print ID Cards for a single registered team
+  function printRegistrationIdCards(regId) {
+    const r = state.registrations.find((item) => item.reg_id === regId);
+    if (!r) {
+      showToast('ไม่พบข้อมูลการลงทะเบียนนี้', 'error');
+      return;
+    }
+
+    const cards = buildCardsForRegistration(r);
     if (cards.length === 0) {
       showToast('ไม่พบรายชื่อนักเรียนหรือครูในรายการนี้', 'warning');
       return;
     }
 
+    const cleanCompName = (r.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
     openIdCardsPrintWindow(`บัตรประจำตัวผู้เข้าแข่งขัน - ${cleanCompName} (${r.school_name})`, cards);
   }
 
@@ -9642,47 +10050,8 @@
 
     const cards = [];
     regs.forEach(function (r) {
-      const comp = state.competitions.find((c) => c.comp_id === r.comp_id) || {};
-      const cleanCompName = (r.comp_name || comp.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
-      const cleanLevel = (r.level || comp.level || '').trim();
-      const teamType = (r.team_type || comp.team_type || '').trim();
-      const levelAndType = [cleanLevel, teamType ? 'ประเภท' + teamType : ''].filter(Boolean).join(' • ') || '-';
-      const learningArea = formatShortLearningArea(r.learning_area || comp.learning_area);
-      const compDate = comp.comp_date || '24–25 พ.ย. 2569';
-      const compTime = comp.comp_time || '09.00–12.00 น.';
-      const venueRoom = comp.venue_room || comp.room || 'อาคารเรียนหลัก';
-
-      (r.students || []).forEach(function (s, idx) {
-        cards.push(
-          buildIdCardItem('COMPETITOR', {
-            person_name: formatFullNameForPrint(s.prefix, s.name),
-            sub_role: s.grade ? 'นักเรียนชั้น ' + s.grade : 'นักเรียนผู้เข้าแข่งขัน',
-            school_name: r.school_name,
-            learning_area: learningArea,
-            comp_name_clean: cleanCompName,
-            level_and_type: levelAndType,
-            comp_date: compDate,
-            comp_time: compTime,
-            venue_room: venueRoom,
-            ref_code: r.reg_id + '-S' + (idx + 1)
-          })
-        );
-      });
-      (r.teachers || []).forEach(function (t, idx) {
-        cards.push(
-          buildIdCardItem('COACH', {
-            person_name: formatFullNameForPrint(t.prefix, t.name),
-            sub_role: t.position || 'ครูผู้ฝึกสอนนักเรียน',
-            school_name: r.school_name,
-            learning_area: learningArea,
-            comp_name_clean: cleanCompName,
-            level_and_type: levelAndType,
-            comp_date: compDate,
-            comp_time: compTime,
-            venue_room: venueRoom,
-            ref_code: r.reg_id + '-T' + (idx + 1)
-          })
-        );
+      buildCardsForRegistration(r).forEach(function (cardItem) {
+        cards.push(cardItem);
       });
     });
 
@@ -9690,26 +10059,7 @@
   }
 
   function printJudgeIdCard(judge) {
-    const comp = state.competitions.find((c) => c.comp_id === judge.comp_id) || {};
-    const jName = judge.judge_name || judge.full_name || '';
-    const cleanCompName = (judge.comp_name || comp.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
-    const cleanLevel = (judge.level || comp.level || '').trim();
-    const levelAndType = [cleanLevel, judge.role || 'กรรมการตัดสิน'].filter(Boolean).join(' • ');
-
-    openIdCardsPrintWindow('บัตรประจำตัวคณะกรรมการตัดสิน', [
-      buildIdCardItem('JUDGE', {
-        person_name: formatFullNameForPrint(judge.prefix, jName),
-        sub_role: judge.role || 'กรรมการตัดสิน',
-        school_name: judge.school_name || 'กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
-        learning_area: formatShortLearningArea(judge.learning_area || comp.learning_area),
-        comp_name_clean: cleanCompName,
-        level_and_type: levelAndType,
-        comp_date: comp.comp_date || '24–25 พ.ย. 2569',
-        comp_time: (comp.comp_time || '09.00–12.00 น.') + ' (ประชุม 23 พ.ย. 13.30 น.)',
-        venue_room: comp.venue_room || comp.room || 'อาคารเรียนหลัก',
-        ref_code: judge.judge_id || ('JDG-' + (judge.comp_id || 'WYK'))
-      })
-    ]);
+    openIdCardsPrintWindow('บัตรประจำตัวคณะกรรมการตัดสิน', [buildCardForJudge(judge)]);
   }
 
   let cachedObecLogoAsset = null;
@@ -9769,6 +10119,10 @@
     }
 
     const obecPngUrl = await getObecLogoSvgAsset();
+    const cardRefList = cards.map(function (c) { return c && c.ref_code; }).filter(Boolean);
+    if (cardRefList.length > 0) {
+      await fetchCardPhotosMap(cardRefList);
+    }
     const cfg = state.config || DEFAULT_CONFIG;
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
     const logoObecUrl = obecPngUrl || (baseDir + 'assets/logo-obec.svg');
@@ -9869,11 +10223,15 @@
 
                 <div class="front-photo-right">
                   <div class="front-photo-frame">
-                    <svg class="photo-user-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/>
-                    </svg>
-                    <span class="photo-box-label">ติดรูปถ่าย</span>
-                    <span class="photo-box-hint">1 – 1.5 นิ้ว</span>
+                    ${(function () {
+                      const localPhoto = state.cardPhotosDataUrlMap && state.cardPhotosDataUrlMap[c.ref_code];
+                      const remotePhoto = state.cardPhotosMap && state.cardPhotosMap[c.ref_code] && state.cardPhotosMap[c.ref_code].url;
+                      const photoSrc = localPhoto || remotePhoto || '';
+                      if (photoSrc) {
+                        return `<img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" />`;
+                      }
+                      return `<svg class="photo-user-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/></svg><span class="photo-box-label">ติดรูปถ่าย</span><span class="photo-box-hint">1 – 1.5 นิ้ว</span>`;
+                    })()}
                   </div>
                   <div class="front-holder-sign">
                     <div class="front-sign-dots">...........................</div>
@@ -10212,12 +10570,22 @@
       background: #ffffff;
       border: 1.8px solid #D4AF37;
       box-shadow: 0 0 0 1.5px #0B1E47 inset;
+      padding: 1.5px;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
       color: #64748b;
+    }
+    .front-photo-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      border-radius: 4.2px;
+      display: block;
     }
     .photo-user-icon {
       width: 28px;
@@ -11407,7 +11775,7 @@
       });
     }
 
-    // Phase 2 School ID Cards Print Button
+    // Phase 2 School ID Cards Print & Photo Upload Buttons
     const btnPrintSchoolIdCards = document.getElementById('btnPrintSchoolIdCards');
     if (btnPrintSchoolIdCards) {
       btnPrintSchoolIdCards.addEventListener('click', function () {
@@ -11417,6 +11785,61 @@
         }
         const schoolName = document.getElementById('schoolViewSelect').value;
         printSchoolIdCards(schoolName);
+      });
+    }
+
+    const btnManageSchoolCardPhotos = document.getElementById('btnManageSchoolCardPhotos');
+    if (btnManageSchoolCardPhotos) {
+      btnManageSchoolCardPhotos.addEventListener('click', function () {
+        if (!isIdCardsPrintingEnabled() && !state.isAdmin) {
+          showToast('ขณะนี้ผู้ดูแลระบบปิดฟีเจอร์บัตรประจำตัวไว้ชั่วคราว', 'warning');
+          return;
+        }
+        const schoolName = (document.getElementById('schoolViewSelect') || {}).value || '';
+        const regs = state.registrations.filter((r) => r.school_name === schoolName);
+        if (regs.length === 0) {
+          showToast('โรงเรียนนี้ยังไม่มีรายการลงทะเบียนสำหรับแนบรูปติดบัตร', 'warning');
+          return;
+        }
+        const cards = [];
+        regs.forEach(function (r) {
+          buildCardsForRegistration(r).forEach(function (item) {
+            cards.push(item);
+          });
+        });
+        openCardPhotoModal(
+          'แนบรูปถ่ายติดบัตร • ' + schoolName,
+          cards,
+          { sub: 'พบผู้เข้าแข่งขันและครูทั้งหมด ' + cards.length + ' คน (ครอป 26:31 อัตโนมัติ)' }
+        );
+      });
+    }
+
+    const closeCardPhotoModal = function () {
+      const m = document.getElementById('cardPhotoModal');
+      if (m) {
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+      }
+      state.activeCardPhotoContext = null;
+    };
+    const btnCloseCardPhotoModal = document.getElementById('btnCloseCardPhotoModal');
+    if (btnCloseCardPhotoModal) btnCloseCardPhotoModal.addEventListener('click', closeCardPhotoModal);
+    const btnDismissCardPhotoModal = document.getElementById('btnDismissCardPhotoModal');
+    if (btnDismissCardPhotoModal) btnDismissCardPhotoModal.addEventListener('click', closeCardPhotoModal);
+
+    const btnPrintCardsFromPhotoModal = document.getElementById('btnPrintCardsFromPhotoModal');
+    if (btnPrintCardsFromPhotoModal) {
+      btnPrintCardsFromPhotoModal.addEventListener('click', function () {
+        const ctx = state.activeCardPhotoContext;
+        if (!ctx || !ctx.cards || ctx.cards.length === 0) return;
+        if (!isIdCardsPrintingEnabled() && !state.isAdmin) {
+          showToast('ขณะนี้ผู้ดูแลระบบปิดการพิมพ์บัตรประจำตัวไว้ชั่วคราว', 'warning');
+          return;
+        }
+        openIdCardsPrintWindow(ctx.title.replace(/^แนบรูป.*•\s*/, 'บัตรประจำตัว • '), ctx.cards, {
+          previewByAdmin: state.isAdmin && !isIdCardsPrintingEnabled()
+        });
       });
     }
 
