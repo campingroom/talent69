@@ -719,6 +719,85 @@
     </div>
   </div>
 
+  <!-- ==========================================
+       MODAL 8: ADMIN 2-STEP DELETE CONFIRMATION MODAL (ป้องกันแอดมินกดลบพลาด)
+       ========================================== -->
+  <div id="adminDeleteConfirmModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-5 sm:p-6 space-y-4 my-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold font-heading text-slate-900">ยืนยันการลบข้อมูลลงทะเบียน (แอดมิน)</h3>
+            <p class="text-xs text-slate-500 mt-0.5">ตรวจสอบข้อมูลทีมให้ถูกต้องก่อนลบ (สามารถกดเลิกทำ/กู้คืนได้ในเครื่องนี้)</p>
+          </div>
+        </div>
+        <button type="button" id="btnCloseAdminDeleteModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer" aria-label="ปิดหน้าต่าง">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <form id="adminDeleteConfirmForm" class="space-y-3.5">
+        <input type="hidden" id="adminDeleteTargetRegId" value="" />
+
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-2 text-xs">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span id="adminDeleteSchoolName" class="font-heading font-bold text-slate-900 text-sm">-</span>
+            <span id="adminDeleteRegIdBadge" class="font-mono text-[11px] px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-600">-</span>
+          </div>
+          <div id="adminDeleteCompSummary" class="font-heading font-medium text-blue-900">-</div>
+          <div class="pt-1 border-t border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-700">
+            <div>
+              <div class="font-heading font-semibold text-slate-500 mb-0.5">รายชื่อนักเรียน</div>
+              <div id="adminDeleteStudentsList" class="whitespace-pre-line leading-relaxed">-</div>
+            </div>
+            <div>
+              <div class="font-heading font-semibold text-slate-500 mb-0.5">ครูผู้ฝึกซ้อม</div>
+              <div id="adminDeleteTeachersList" class="whitespace-pre-line leading-relaxed">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="adminDeleteScoreWarning" class="hidden rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900 space-y-1">
+          <div class="font-heading font-bold text-rose-800">คำเตือนสำคัญ: รายการนี้มีผลคะแนน / รางวัลบันทึกไว้แล้ว</div>
+          <p id="adminDeleteScoreSummary" class="text-[11px] text-rose-800">-</p>
+        </div>
+
+        <div class="space-y-1">
+          <label for="adminDeleteReasonSelect" class="block text-xs font-medium text-slate-700">เหตุผลในการลบ (บันทึกใน Deletion_Logs)</label>
+          <select id="adminDeleteReasonSelect" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm focus:border-slate-900 focus:outline-none">
+            <option value="แอดมินลบข้อมูลซ้ำ / สมัครผิดรายการ">แอดมินลบข้อมูลซ้ำ / สมัครผิดรายการ</option>
+            <option value="โรงเรียนแจ้งขอยกเลิก / ถอนตัว">โรงเรียนแจ้งขอยกเลิก / ถอนตัว</option>
+            <option value="ลบข้อมูลทดสอบระบบ">ลบข้อมูลทดสอบระบบ</option>
+            <option value="ลบโดยแอดมิน (อื่นๆ)">ลบโดยแอดมิน (อื่นๆ)</option>
+          </select>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="adminDeleteConfirmInput" class="block text-xs font-medium text-slate-700">
+            พิมพ์รหัสรายการ <code id="adminDeleteExpectedCodeChip" class="px-1.5 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-800 font-mono font-semibold">-</code> หรือคำว่า <code class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800 font-mono font-semibold">ยืนยันลบ</code> เพื่อปลดล็อกปุ่มลบ
+          </label>
+          <input type="text" id="adminDeleteConfirmInput" autocomplete="off" placeholder="พิมพ์รหัสรายการ หรือ ยืนยันลบ" class="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-sm focus:border-rose-600 focus:outline-none" />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" id="btnCancelAdminDeleteModal" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-heading text-xs font-medium hover:bg-slate-50 cursor-pointer">
+            ยกเลิก
+          </button>
+          <button type="submit" id="btnAdminDeleteConfirmSubmit" disabled class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-rose-200 disabled:text-rose-400 disabled:cursor-not-allowed text-white font-heading text-xs font-semibold transition cursor-pointer">
+            ยืนยันลบรายการนี้
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Main Content Container -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
@@ -2032,6 +2111,22 @@
             บันทึกรหัสแอดมินใหม่
           </button>
         </form>
+
+        <!-- Admin Quick Table Delete Safeguard -->
+        <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-heading font-semibold text-slate-900 text-xs sm:text-sm">ป้องกันแอดมินกดลบพลาดในตาราง</span>
+              <span id="adminQuickDeleteBadge" class="px-2 py-0.5 rounded text-[11px] font-heading font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">ซ่อนปุ่มลบในตาราง (ปลอดภัย)</span>
+            </div>
+            <p class="text-[11px] text-slate-500 mt-0.5">
+              ค่าเริ่มต้นจะซ่อนปุ่ม <strong>ลบ</strong> ออกจากตารางหน้ารวม (แอดมินยังลบได้เมื่อกด <strong>แก้ไข</strong> แล้วกดลบในฟอร์ม หรือเปิดสวิตช์นี้ชั่วคราว และจะปิดอัตโนมัติเมื่อรีเฟรช/ออกจากระบบ)
+            </p>
+          </div>
+          <button type="button" id="btnToggleAdminQuickDelete" class="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium shrink-0 transition cursor-pointer">
+            ปลดล็อกปุ่มลบในตารางชั่วคราว
+          </button>
+        </div>
       </div>
 
       <!-- Card: Feature Visibility Controls (Public vs Admin) (Full Width) -->
@@ -2350,7 +2445,7 @@
                     <h3 class="text-base font-bold font-heading text-slate-900">รายงานประวัติการลบข้อมูลผู้สมัคร</h3>
                     <span id="adminDeletionLogsCount" class="px-2 py-0.5 rounded-full text-[11px] font-heading font-semibold bg-rose-100 text-rose-800 whitespace-nowrap">0 รายการ</span>
                   </div>
-                  <p class="text-xs text-slate-500 mt-0.5">บันทึกอัตโนมัติในแผ่นงาน Deletion_Logs ทุกครั้งที่ผู้สมัครหรือแอดมินลบรายการ</p>
+                  <p class="text-xs text-slate-500 mt-0.5">บันทึกอัตโนมัติในแผ่นงาน Deletion_Logs ทุกครั้งที่ผู้สมัครหรือแอดมินลบรายการ (กู้คืนรายการที่เพิ่งลบในเครื่องนี้ได้สูงสุด 30 รายการล่าสุด)</p>
                 </div>
               </div>
               <div class="flex flex-wrap items-center gap-2">
@@ -2372,6 +2467,7 @@
                     <th class="py-2 px-3">โรงเรียน / รายการแข่งขัน</th>
                     <th class="py-2 px-3">รายชื่อนักเรียนเดิม</th>
                     <th class="py-2 px-3">เหตุผล / เบอร์อ้างอิง</th>
+                    <th class="py-2 px-3 text-right whitespace-nowrap">กู้คืนข้อมูล</th>
                   </tr>
                 </thead>
                 <tbody id="adminDeletionLogsTableBody" class="divide-y divide-slate-100"></tbody>

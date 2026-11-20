@@ -8,6 +8,8 @@
   const ADMIN_SESSION_PIN_KEY = 'talent69_wangyao_admin_session_pin_v1';
   const REG_OPEN_KEY = 'talent69_wangyao_reg_open_v1';
   const DELETION_LOGS_KEY = 'talent69_wangyao_deletion_logs_v1';
+  const DELETION_SNAPSHOTS_KEY = 'talent69_wangyao_deletion_snapshots_v1';
+  const MAX_DELETION_SNAPSHOTS = 30;
   const ADMIN_SEEN_DELETIONS_KEY = 'talent69_wangyao_seen_deletions_v1';
   const DEFAULT_ADMIN_PIN_HASH = 'cf66a6b6499f8f04366edb73ea50dac507b0fc013ba6b5fd7e3a8856226bbcd0';
   const ENABLE_PHASE_2 = true;
@@ -246,6 +248,7 @@
     registrations: [],
     judges: [],
     deletionLogs: [],
+    deletionSnapshots: [],
     activeTab: 'dashboard',
     compStatusFilter: 'ALL',
     compRoomFilter: 'ALL',
@@ -260,6 +263,7 @@
     lastAddedRegId: null,
     gasWebAppUrl: '',
     isAdmin: false,
+    adminQuickDeleteEnabled: false,
     adminShowScoresInLists: false,
     adminPin: '',
     registrationOpen: true,
@@ -670,6 +674,79 @@
     }, 2800);
   }
 
+  function showUndoDeletionToast(target, logEntry) {
+    const container = document.getElementById('toastContainer');
+    if (!container || !target || !logEntry) {
+      showToast('ลบรายการลงทะเบียนเรียบร้อยแล้ว', 'warning');
+      return;
+    }
+
+    while (container.children.length >= 1) {
+      container.removeChild(container.firstChild);
+    }
+
+    const toast = document.createElement('div');
+    toast.className =
+      'pointer-events-auto flex items-center justify-between gap-2.5 px-3.5 py-3 rounded-xl shadow-lg border bg-[#37352F] text-white border-[#CB912F] text-xs font-heading';
+
+    const leftWrap = document.createElement('div');
+    leftWrap.className = 'flex items-center gap-2 min-w-0';
+    leftWrap.innerHTML =
+      ICONS.warning +
+      '<span class="truncate">ลบ "' +
+      escapeHtml(target.school_name || '-') +
+      ' • ' +
+      escapeHtml(target.comp_id || '-') +
+      '" แล้ว</span>';
+
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'flex items-center gap-1.5 shrink-0';
+
+    const undoBtn = document.createElement('button');
+    undoBtn.type = 'button';
+    undoBtn.className =
+      'px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-heading font-semibold transition cursor-pointer';
+    undoBtn.textContent = 'เลิกทำ (กู้คืนทันที)';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'p-1 rounded hover:bg-white/10 text-slate-300 cursor-pointer';
+    closeBtn.setAttribute('aria-label', 'ปิด');
+    closeBtn.innerHTML =
+      '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+
+    btnWrap.appendChild(undoBtn);
+    btnWrap.appendChild(closeBtn);
+    toast.appendChild(leftWrap);
+    toast.appendChild(btnWrap);
+    container.appendChild(toast);
+
+    let dismissed = false;
+    function dismissToast() {
+      if (dismissed) return;
+      dismissed = true;
+      toast.style.opacity = '0';
+      setTimeout(function () {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 250);
+    }
+
+    const timerId = setTimeout(dismissToast, 12000);
+
+    closeBtn.addEventListener('click', function () {
+      clearTimeout(timerId);
+      dismissToast();
+    });
+
+    undoBtn.addEventListener('click', async function () {
+      clearTimeout(timerId);
+      undoBtn.disabled = true;
+      undoBtn.textContent = 'กำลังกู้คืน...';
+      await restoreDeletedRegistration(logEntry.log_id, logEntry.reg_id);
+      dismissToast();
+    });
+  }
+
   function normalizeSchoolsList(schools) {
     if (!Array.isArray(schools)) return [];
     return schools.map(function (s) {
@@ -695,6 +772,13 @@
       if (!Array.isArray(state.deletionLogs)) state.deletionLogs = [];
     } catch (e) {
       state.deletionLogs = [];
+    }
+    try {
+      const rawSnaps = localStorage.getItem(DELETION_SNAPSHOTS_KEY);
+      state.deletionSnapshots = rawSnaps ? JSON.parse(rawSnaps) : [];
+      if (!Array.isArray(state.deletionSnapshots)) state.deletionSnapshots = [];
+    } catch (e) {
+      state.deletionSnapshots = [];
     }
 
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -749,6 +833,7 @@
   function saveState() {
     try {
       localStorage.setItem(DELETION_LOGS_KEY, JSON.stringify(state.deletionLogs || []));
+      localStorage.setItem(DELETION_SNAPSHOTS_KEY, JSON.stringify(state.deletionSnapshots || []));
     } catch (e) {}
     localStorage.setItem(
       STORAGE_KEY,
@@ -953,6 +1038,31 @@
     if (btnClearVenueMapImage) {
       const hasCustomMap = Boolean(state.isAdmin && state.config && state.config.venueMapImageUrl);
       btnClearVenueMapImage.classList.toggle('hidden', !hasCustomMap);
+    }
+
+    const quickDelBadge = document.getElementById('adminQuickDeleteBadge');
+    const quickDelBtn = document.getElementById('btnToggleAdminQuickDelete');
+    if (quickDelBadge) {
+      if (state.adminQuickDeleteEnabled) {
+        quickDelBadge.className =
+          'px-2 py-0.5 rounded text-[11px] font-heading font-semibold bg-rose-100 text-rose-800 border border-rose-200';
+        quickDelBadge.textContent = 'ปลดล็อกปุ่มลบในตารางอยู่ (ระวังการกดพลาด)';
+      } else {
+        quickDelBadge.className =
+          'px-2 py-0.5 rounded text-[11px] font-heading font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200';
+        quickDelBadge.textContent = 'ซ่อนปุ่มลบในตาราง (ปลอดภัย)';
+      }
+    }
+    if (quickDelBtn) {
+      if (state.adminQuickDeleteEnabled) {
+        quickDelBtn.className =
+          'px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium shrink-0 transition cursor-pointer';
+        quickDelBtn.textContent = 'ล็อกซ่อนปุ่มลบในตารางทันที';
+      } else {
+        quickDelBtn.className =
+          'px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium shrink-0 transition cursor-pointer';
+        quickDelBtn.textContent = 'ปลดล็อกปุ่มลบในตารางชั่วคราว';
+      }
     }
 
     updateFeatureVisibilityUI();
@@ -1398,6 +1508,138 @@
     }
   }
 
+  function saveDeletionSnapshot(logId, target) {
+    if (!target || !target.reg_id) return;
+    if (!Array.isArray(state.deletionSnapshots)) state.deletionSnapshots = [];
+    const entry = {
+      log_id: String(logId || ''),
+      reg_id: String(target.reg_id),
+      deleted_at: formatNowTimestamp(),
+      snapshot: cloneDeep(target)
+    };
+    state.deletionSnapshots = [entry]
+      .concat(
+        state.deletionSnapshots.filter(function (item) {
+          if (!item) return false;
+          if (entry.log_id && item.log_id === entry.log_id) return false;
+          return item.reg_id !== entry.reg_id;
+        })
+      )
+      .slice(0, MAX_DELETION_SNAPSHOTS);
+  }
+
+  function findDeletionSnapshot(logId, regId) {
+    if (!Array.isArray(state.deletionSnapshots)) return null;
+    if (logId) {
+      const byLog = state.deletionSnapshots.find(function (item) {
+        return item && item.log_id === logId;
+      });
+      if (byLog && byLog.snapshot) return byLog;
+    }
+    if (regId) {
+      const byReg = state.deletionSnapshots.find(function (item) {
+        return item && item.reg_id === regId;
+      });
+      if (byReg && byReg.snapshot) return byReg;
+    }
+    return null;
+  }
+
+  function removeDeletionSnapshot(logId, regId) {
+    if (!Array.isArray(state.deletionSnapshots)) return;
+    state.deletionSnapshots = state.deletionSnapshots.filter(function (item) {
+      if (!item) return false;
+      if (logId && item.log_id === logId) return false;
+      if (regId && item.reg_id === regId) return false;
+      return true;
+    });
+  }
+
+  async function restoreDeletedRegistration(logId, regId) {
+    if (!state.isAdmin) {
+      showToast('เฉพาะแอดมินเท่านั้นที่สามารถกู้คืนรายการได้', 'error');
+      return false;
+    }
+    const snapEntry = findDeletionSnapshot(logId, regId);
+    const snap = snapEntry && snapEntry.snapshot;
+    if (!snap) {
+      showToast('ไม่พบข้อมูลสำรองของรายการนี้ในเครื่องนี้', 'warning');
+      return false;
+    }
+
+    const dupExisting = state.registrations.find(function (r) {
+      return (
+        r.reg_id === snap.reg_id ||
+        (r.school_name === snap.school_name && r.comp_id === snap.comp_id)
+      );
+    });
+    if (dupExisting) {
+      showToast(
+        'ไม่สามารถกู้คืนได้: โรงเรียน "' +
+          snap.school_name +
+          '" มีทีมลงทะเบียนในรายการ [' +
+          snap.comp_id +
+          '] อยู่แล้ว',
+        'warning'
+      );
+      return false;
+    }
+
+    const restoredRecord = Object.assign({}, cloneDeep(snap), {
+      status: snap.status || 'ลงทะเบียนแล้ว'
+    });
+
+    const serverRes = await postToGoogleSheets({
+      action: 'register',
+      allowOverwrite: false,
+      verify_token: state.adminPin,
+      admin_pin: state.adminPin,
+      reg_id: restoredRecord.reg_id,
+      timestamp: restoredRecord.timestamp,
+      school_name: restoredRecord.school_name,
+      comp_id: restoredRecord.comp_id,
+      learning_area: restoredRecord.learning_area || '',
+      comp_name: restoredRecord.comp_name || '',
+      level: restoredRecord.level || '',
+      team_type: restoredRecord.team_type || '',
+      students: Array.isArray(restoredRecord.students) ? restoredRecord.students : [],
+      teachers: Array.isArray(restoredRecord.teachers) ? restoredRecord.teachers : [],
+      coordinator_phone: restoredRecord.coordinator_phone || '',
+      status: restoredRecord.status,
+      score: restoredRecord.score !== undefined ? restoredRecord.score : '',
+      medal: restoredRecord.medal || '',
+      rank: restoredRecord.rank !== undefined ? restoredRecord.rank : '',
+      award_title: restoredRecord.award_title || '',
+      cert_code: restoredRecord.cert_code || ''
+    });
+
+    if (state.gasWebAppUrl && serverRes && !serverRes.ok && !serverRes.localOnly) {
+      showToast((serverRes && serverRes.error) || 'ไม่สามารถกู้คืนข้อมูลไปยัง Google Sheets ได้', 'error');
+      return false;
+    }
+
+    state.registrations.push(restoredRecord);
+    state.lastAddedRegId = restoredRecord.reg_id;
+    removeDeletionSnapshot(logId, restoredRecord.reg_id);
+    if (Array.isArray(state.deletionLogs)) {
+      state.deletionLogs = state.deletionLogs.map(function (l) {
+        if ((logId && l.log_id === logId) || (regId && l.reg_id === regId)) {
+          return Object.assign({}, l, { restored_local: true });
+        }
+        return l;
+      });
+    }
+
+    saveState();
+    populateRegCompetitionOptions();
+    renderAll();
+    showToast(
+      'กู้คืนรายการสำเร็จ: ' + restoredRecord.school_name + ' • [' + restoredRecord.comp_id + '] ' + restoredRecord.comp_name,
+      'success'
+    );
+    return true;
+  }
+
   function renderAdminDeletionReports() {
     const logs = Array.isArray(state.deletionLogs) ? state.deletionLogs : [];
     const seenCountRaw = localStorage.getItem(ADMIN_SEEN_DELETIONS_KEY);
@@ -1453,7 +1695,7 @@
       }
       if (logs.length === 0) {
         tbodyEl.innerHTML =
-          '<tr><td colspan="5" class="py-6 text-center text-slate-400">ยังไม่มีประวัติการลบข้อมูลผู้สมัคร</td></tr>';
+          '<tr><td colspan="6" class="py-6 text-center text-slate-400">ยังไม่มีประวัติการลบข้อมูลผู้สมัคร</td></tr>';
         return;
       }
       tbodyEl.innerHTML = logs
@@ -1462,6 +1704,35 @@
           const byBadge = isSelf
             ? '<span class="inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-heading font-semibold text-[10px]">ผู้สมัครลบเอง</span>'
             : '<span class="inline-block px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-heading font-medium text-[10px]">แอดมิน</span>';
+
+          const snapEntry = findDeletionSnapshot(log.log_id, log.reg_id);
+          const snap = snapEntry && snapEntry.snapshot;
+          const isExactPresent = state.registrations.some(function (r) {
+            return r.reg_id === log.reg_id;
+          });
+          const hasReplacementTeam =
+            !isExactPresent &&
+            snap &&
+            state.registrations.some(function (r) {
+              return r.school_name === snap.school_name && r.comp_id === snap.comp_id;
+            });
+
+          let restoreCellHtml = '<span class="text-[10px] text-slate-400">ไม่มีสำรองในเครื่อง</span>';
+          if (log.restored_local || isExactPresent) {
+            restoreCellHtml =
+              '<span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-heading font-semibold text-[10px] whitespace-nowrap">กู้คืนแล้ว</span>';
+          } else if (hasReplacementTeam) {
+            restoreCellHtml =
+              '<span class="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-heading text-[10px] whitespace-nowrap" title="โรงเรียนนี้ส่งทีมใหม่ในรายการเดียวกันแล้ว">มีรายการใหม่แทน</span>';
+          } else if (snap) {
+            restoreCellHtml =
+              '<button type="button" data-restore-del-log="' +
+              escapeHtml(log.log_id || '') +
+              '" data-restore-del-reg="' +
+              escapeHtml(log.reg_id || '') +
+              '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-[11px] font-medium transition cursor-pointer whitespace-nowrap">กู้คืนรายการ</button>';
+          }
+
           return (
             '<tr class="hover:bg-slate-50 align-top">' +
             '<td class="py-2 px-3 whitespace-nowrap text-slate-600">' +
@@ -1494,10 +1765,27 @@
             escapeHtml(log.reg_id || '-') +
             '</div>' +
             '</td>' +
+            '<td class="py-2 px-3 text-right whitespace-nowrap">' +
+            restoreCellHtml +
+            '</td>' +
             '</tr>'
           );
         })
         .join('');
+
+      tbodyEl.querySelectorAll('[data-restore-del-log]').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          btn.disabled = true;
+          btn.textContent = 'กำลังกู้คืน...';
+          const logId = btn.getAttribute('data-restore-del-log') || '';
+          const regId = btn.getAttribute('data-restore-del-reg') || '';
+          const ok = await restoreDeletedRegistration(logId, regId);
+          if (!ok) {
+            btn.disabled = false;
+            btn.textContent = 'กู้คืนรายการ';
+          }
+        });
+      });
     }
   }
 
@@ -2790,6 +3078,10 @@
       reason: reason
     };
 
+    if (isAdminAct) {
+      saveDeletionSnapshot(logEntry.log_id, target);
+    }
+
     state.registrations = state.registrations.filter((r) => r.reg_id !== target.reg_id);
     if (!Array.isArray(state.deletionLogs)) state.deletionLogs = [];
     state.deletionLogs.unshift(logEntry);
@@ -2805,7 +3097,107 @@
       onRegistrationSelectionChange();
     }
     renderAll();
-    showToast('ลบรายการลงทะเบียนเรียบร้อยแล้ว (บันทึกแจ้งเตือนแอดมินแล้ว)', 'warning');
+    if (isAdminAct) {
+      showUndoDeletionToast(target, logEntry);
+    } else {
+      showToast('ลบรายการลงทะเบียนเรียบร้อยแล้ว (บันทึกแจ้งเตือนแอดมินแล้ว)', 'warning');
+    }
+  }
+
+  let activeAdminDeleteTarget = null;
+
+  function syncAdminDeleteConfirmButtonState() {
+    const inputEl = document.getElementById('adminDeleteConfirmInput');
+    const submitBtn = document.getElementById('btnAdminDeleteConfirmSubmit');
+    if (!inputEl || !submitBtn || !activeAdminDeleteTarget) return;
+    const typed = String(inputEl.value || '').trim();
+    const expectedCode = String(activeAdminDeleteTarget.comp_id || '').trim();
+    const matches =
+      (expectedCode && typed.toUpperCase() === expectedCode.toUpperCase()) || typed === 'ยืนยันลบ';
+    submitBtn.disabled = !matches;
+  }
+
+  function openAdminDeleteModal(target) {
+    const modal = document.getElementById('adminDeleteConfirmModal');
+    if (!modal || !target) return;
+    activeAdminDeleteTarget = target;
+
+    const regIdEl = document.getElementById('adminDeleteTargetRegId');
+    const schoolEl = document.getElementById('adminDeleteSchoolName');
+    const badgeEl = document.getElementById('adminDeleteRegIdBadge');
+    const compEl = document.getElementById('adminDeleteCompSummary');
+    const stuEl = document.getElementById('adminDeleteStudentsList');
+    const tchEl = document.getElementById('adminDeleteTeachersList');
+    const scoreBox = document.getElementById('adminDeleteScoreWarning');
+    const scoreSummary = document.getElementById('adminDeleteScoreSummary');
+    const codeChip = document.getElementById('adminDeleteExpectedCodeChip');
+    const inputEl = document.getElementById('adminDeleteConfirmInput');
+
+    if (regIdEl) regIdEl.value = target.reg_id || '';
+    if (schoolEl) schoolEl.textContent = target.school_name || '-';
+    if (badgeEl) badgeEl.textContent = target.reg_id || '-';
+    if (compEl) {
+      compEl.textContent =
+        '[' +
+        (target.comp_id || '-') +
+        '] ' +
+        (target.comp_name || '-') +
+        (target.level ? ' (' + target.level + ')' : '');
+    }
+    if (stuEl) {
+      const stuText = (target.students || [])
+        .map(function (s, idx) {
+          return (idx + 1) + '. ' + (s.prefix || '') + (s.name || '') + (s.grade ? ' (' + s.grade + ')' : '');
+        })
+        .join('\n');
+      stuEl.textContent = stuText || '-';
+    }
+    if (tchEl) {
+      const tchText = (target.teachers || [])
+        .map(function (t, idx) {
+          return (idx + 1) + '. ' + (t.prefix || '') + (t.name || '');
+        })
+        .join('\n');
+      tchEl.textContent = tchText || '-';
+    }
+
+    const hasScore = hasValidScore(target) || Boolean(target.medal || target.award_title);
+    if (scoreBox && scoreSummary) {
+      if (hasScore) {
+        const parts = [];
+        if (target.score !== undefined && target.score !== '' && target.score !== null) {
+          parts.push('คะแนน ' + target.score);
+        }
+        if (target.medal) parts.push(target.medal);
+        if (target.award_title) parts.push(target.award_title);
+        scoreSummary.textContent =
+          'ทีมนี้มีผลคะแนน/รางวัล (' + parts.join(' • ') + ') หากไม่ตั้งใจลบ กรุณากดยกเลิก';
+        scoreBox.classList.remove('hidden');
+      } else {
+        scoreBox.classList.add('hidden');
+      }
+    }
+
+    if (codeChip) codeChip.textContent = target.comp_id || 'ยืนยันลบ';
+    if (inputEl) inputEl.value = '';
+    syncAdminDeleteConfirmButtonState();
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (inputEl) {
+      setTimeout(function () {
+        inputEl.focus();
+      }, 60);
+    }
+  }
+
+  function closeAdminDeleteModal() {
+    const modal = document.getElementById('adminDeleteConfirmModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    activeAdminDeleteTarget = null;
   }
 
   async function deleteRegistrationById(regId) {
@@ -2813,17 +3205,7 @@
     if (!target) return;
 
     if (state.isAdmin) {
-      const ok = window.confirm(
-        'ต้องการลบข้อมูลการลงทะเบียนของ "' +
-          target.school_name +
-          '" ในรายการ "' +
-          target.comp_name +
-          ' (' +
-          target.level +
-          ')" ใช่หรือไม่?'
-      );
-      if (!ok) return;
-      await performDeleteRegistration(target, { isAdmin: true, reason: 'ลบโดยแอดมิน' });
+      openAdminDeleteModal(target);
       return;
     }
 
@@ -3602,13 +3984,14 @@
               ? '<span class="inline-block px-2 py-0.5 rounded bg-[#FBF3DB] text-[#CB912F] text-[10px] font-heading ml-1">ตัวอย่าง</span>'
               : '';
 
-            const deleteBtnHtml = state.isAdmin
-              ? '<button type="button" data-dash-del="' +
-                escapeHtml(r.reg_id) +
-                '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
-                ICONS.trash +
-                '<span>ลบ</span></button>'
-              : '';
+            const deleteBtnHtml =
+              state.isAdmin && state.adminQuickDeleteEnabled
+                ? '<button type="button" data-dash-del="' +
+                  escapeHtml(r.reg_id) +
+                  '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
+                  ICONS.trash +
+                  '<span>ลบ</span></button>'
+                : '';
 
             return (
               '<tr class="hover:bg-[#F7F7F5] transition ' +
@@ -4343,13 +4726,14 @@
             : '<span class="text-xs text-[#787774]">รอประกาศผล</span>'
           : statusBadgeHtml;
 
-        const deleteBtnHtml = state.isAdmin
-          ? '<button type="button" data-sch-del="' +
-            escapeHtml(r.reg_id) +
-            '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
-            ICONS.trash +
-            '<span>ลบ</span></button>'
-          : '';
+        const deleteBtnHtml =
+          state.isAdmin && state.adminQuickDeleteEnabled
+            ? '<button type="button" data-sch-del="' +
+              escapeHtml(r.reg_id) +
+              '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#FDEBEC] hover:bg-rose-100 text-[#D44C47] text-xs font-heading">' +
+              ICONS.trash +
+              '<span>ลบ</span></button>'
+            : '';
 
         const roomSubHtml =
           ENABLE_PHASE_2 && canUserAccessFeature('venue')
@@ -11147,6 +11531,7 @@
         if (state.isAdmin) {
           state.isAdmin = false;
           state.adminPin = '';
+          state.adminQuickDeleteEnabled = false;
           sessionStorage.removeItem(ADMIN_SESSION_KEY);
           sessionStorage.removeItem(ADMIN_SESSION_PIN_KEY);
           if (state.activeTab === 'settings') {
@@ -11279,6 +11664,53 @@
     const btnExportDeletionLogsCsv = document.getElementById('btnExportDeletionLogsCsv');
     if (btnExportDeletionLogsCsv) {
       btnExportDeletionLogsCsv.addEventListener('click', exportDeletionLogsCsv);
+    }
+
+    const btnToggleAdminQuickDelete = document.getElementById('btnToggleAdminQuickDelete');
+    if (btnToggleAdminQuickDelete) {
+      btnToggleAdminQuickDelete.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        state.adminQuickDeleteEnabled = !state.adminQuickDeleteEnabled;
+        renderAll();
+        showToast(
+          state.adminQuickDeleteEnabled
+            ? 'ปลดล็อกปุ่ม "ลบ" ในตารางชั่วคราวแล้ว (ระวังการกดพลาด ระบบจะล็อกกลับอัตโนมัติเมื่อรีเฟรช)'
+            : 'ล็อกซ่อนปุ่ม "ลบ" ในตารางเรียบร้อยแล้ว',
+          state.adminQuickDeleteEnabled ? 'warning' : 'success'
+        );
+      });
+    }
+
+    const btnCloseAdminDeleteModal = document.getElementById('btnCloseAdminDeleteModal');
+    const btnCancelAdminDeleteModal = document.getElementById('btnCancelAdminDeleteModal');
+    if (btnCloseAdminDeleteModal) btnCloseAdminDeleteModal.addEventListener('click', closeAdminDeleteModal);
+    if (btnCancelAdminDeleteModal) btnCancelAdminDeleteModal.addEventListener('click', closeAdminDeleteModal);
+
+    const adminDeleteConfirmInput = document.getElementById('adminDeleteConfirmInput');
+    if (adminDeleteConfirmInput) {
+      adminDeleteConfirmInput.addEventListener('input', syncAdminDeleteConfirmButtonState);
+    }
+
+    const adminDeleteConfirmForm = document.getElementById('adminDeleteConfirmForm');
+    if (adminDeleteConfirmForm) {
+      adminDeleteConfirmForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        if (!state.isAdmin || !activeAdminDeleteTarget) return;
+        const inputEl = document.getElementById('adminDeleteConfirmInput');
+        const reasonEl = document.getElementById('adminDeleteReasonSelect');
+        const typed = String((inputEl && inputEl.value) || '').trim();
+        const expectedCode = String(activeAdminDeleteTarget.comp_id || '').trim();
+        const matches =
+          (expectedCode && typed.toUpperCase() === expectedCode.toUpperCase()) || typed === 'ยืนยันลบ';
+        if (!matches) {
+          showToast('กรุณาพิมพ์รหัสรายการ หรือคำว่า "ยืนยันลบ" ให้ถูกต้อง', 'error');
+          return;
+        }
+        const targetToDelete = activeAdminDeleteTarget;
+        const reason = String((reasonEl && reasonEl.value) || 'ลบโดยแอดมิน').trim() || 'ลบโดยแอดมิน';
+        closeAdminDeleteModal();
+        await performDeleteRegistration(targetToDelete, { isAdmin: true, reason: reason });
+      });
     }
 
     // KPI Cards click shortcuts
