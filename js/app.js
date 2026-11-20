@@ -29,6 +29,7 @@
       { id: 'D2', label: '25 พ.ย. 2569' }
     ],
     timeProfile: 'auto_rules', // 'auto_rules' | 'half_day' | 'short_slots' | 'full_day'
+    morningFirst: true,
     strategy: 'same-area-day',
     blurVenue: true,
     masterLocked: false,
@@ -8629,11 +8630,11 @@
     state.pendingJudgeRegenAction = null;
   }
 
-  async function applyAutoJudgePlan(syncToSheets, overrideNote) {
+  async function applyAutoJudgePlan(syncToSheets, overrideNote, opts) {
     if (!state.isAdmin) return;
     const plan = state.autoJudgePreviewPlan;
     if (!plan || !plan.rows || plan.rows.length === 0) {
-      showToast('กรุณากดคำนวณผังจัดสรรก่อนบันทึก', 'warning');
+      if (!(opts && opts.silentToast)) showToast('กรุณากดคำนวณผังจัดสรรก่อนบันทึก', 'warning');
       return;
     }
 
@@ -8659,7 +8660,7 @@
       });
     });
 
-    if (syncToSheets) {
+    if (syncToSheets && !(opts && opts.skipConfirm)) {
       const ok = window.confirm(
         'ยืนยันการส่งรายชื่อกรรมการทั้งหมด ' +
           newJudges.length +
@@ -8697,9 +8698,10 @@
         });
       }
       showToast('บันทึกกรรมการทั้ง ' + newJudges.length + ' ตำแหน่งลง Google Sheets เรียบร้อยแล้ว', 'success');
-    } else {
+    } else if (!(opts && opts.silentToast)) {
       showToast('นำผังกรรมการ ' + newJudges.length + ' ตำแหน่งมาใช้ในหน้าเว็บแล้ว (ยังไม่ส่ง Sheets)', 'success');
     }
+    return newJudges.length;
   }
 
   // ==========================================
@@ -14719,6 +14721,7 @@
       else plan.timeProfile = 'auto_rules';
     }
     if (!Array.isArray(plan.rooms)) plan.rooms = [];
+    plan.morningFirst = plan.morningFirst !== false;
     plan.masterLocked = Boolean(plan.masterLocked);
     if (typeof plan.blurVenue !== 'boolean') plan.blurVenue = true;
     return plan;
@@ -14988,11 +14991,52 @@
     return (plan.days || [{ id: 'D1', label: '24 พ.ย. 2569' }]).slice();
   }
 
-  function computeAutoScheduleAllocation(reasonNote) {
+  function computeCategoryJudgeCapacity(teachers) {
+    const capMap = {};
+    const list = Array.isArray(teachers) ? teachers : buildAutoJudgeTeacherPool();
+    const areaSet = new Set((state.competitions || []).map((c) => String(c.learning_area || '').trim()).filter(Boolean));
+    areaSet.forEach(function (area) {
+      let direct = 0;
+      let near = 0;
+      list.forEach(function (t) {
+        const rk = getMajorMatchRank(t.major, area);
+        if (rk === 0) direct++;
+        if (rk <= 1) near++;
+      });
+      capMap[area] = {
+        directPanels: Math.floor(direct / 3),
+        nearPanels: Math.max(1, Math.floor(near / 3)),
+        directTeachers: direct,
+        nearTeachers: near
+      };
+    });
+    return capMap;
+  }
+
+  function getMorningFirstSlotPenalty(sl, durationProfile, morningFirst, slRank) {
+    if (!morningFirst) return slRank * 6;
+    if (sl.code === 'FULL') {
+      return durationProfile === 'FULL' ? 0 : 260;
+    }
+    if (sl.endMin <= 720) {
+      if (durationProfile === 'HALF') {
+        if (sl.code === 'AM') return 0;
+        if (sl.code === 'AM1') return 18;
+        return 28;
+      }
+      if (sl.code === 'AM1') return 0;
+      if (sl.code === 'AM2') return 12;
+      return 26;
+    }
+    if (sl.code === 'PM1' || sl.code === 'PM') return 90;
+    return 120;
+  }
+
+  function computeAutoScheduleAllocation(reasonNote, opts) {
     const plan = getEffectiveSchedulePlan();
     if (plan.masterLocked) {
       showToast('ผังนี้ถูกล็อกถาวรไว้ กรุณากดปลดล็อกก่อนคำนวณใหม่', 'warning');
-      return;
+      return null;
     }
 
     const days = readDaysFromScheduleDomOrPlan(plan);
@@ -15001,6 +15045,8 @@
       dayById[d.id] = d;
     });
     const timeProfile = (document.getElementById('schedTimeProfileSelect') || {}).value || plan.timeProfile || 'auto_rules';
+    const morningFirstEl = document.getElementById('schedMorningFirstCheckbox');
+    const morningFirst = morningFirstEl ? Boolean(morningFirstEl.checked) : plan.morningFirst !== false;
     const strategy = (document.getElementById('schedStrategySelect') || {}).value || plan.strategy || 'same-area-day';
     const bInputEl = document.getElementById('schedBuildingInput');
     const building = bInputEl ? bInputEl.value.trim() : (plan.building || '');
@@ -15032,12 +15078,15 @@
 
     if (activeComps.length === 0) {
       showToast('ยังไม่มีรายการที่เข้าเกณฑ์แข่งขันจริง (ต้องมีผู้สมัครอย่างน้อย 2 รร. หรือมัธยม 3 รร.)', 'warning');
-      return;
+      return null;
     }
 
     if (Object.keys(plan.allocations || {}).length > 0) {
       appendScheduleHistorySnapshot(reasonNote || 'ก่อนคำนวณตารางใหม่');
     }
+
+    const teacherPool = buildAutoJudgeTeacherPool();
+    const catJudgeCaps = computeCategoryJudgeCapacity(teacherPool);
 
     // Build existing judge -> comp lookup so scheduler routes around already-assigned judges
     const compJudgeKeysMap = {};
@@ -15184,7 +15233,9 @@
       const coaches = compCoachKeysMap[c.comp_id] || [];
       const judgesForComp = compJudgeKeysMap[c.comp_id] || [];
       const areaKey = String(c.learning_area || '').trim();
+      const cap = catJudgeCaps[areaKey] || { directPanels: 0, nearPanels: 1 };
       const lvOrd = getLevelSortOrder(c.level);
+      const durationProfile = inferCompRuleDurationProfile(c);
       const candidateSlots = getCandidateTimeSlotsForComp(c, timeProfile);
       const dayCandidates = [primaryDayId].concat(days.map((d) => d.id).filter((id) => id !== primaryDayId));
 
@@ -15194,13 +15245,15 @@
         segs: splitLunchBreakSegments(candidateSlots[0].startMin, candidateSlots[0].endMin)
       };
       let bestScore = Infinity;
+      let morningBlockedByCoach = false;
+      let morningBlockedByRoom = false;
 
       dayCandidates.forEach(function (dayId, dayRank) {
         candidateSlots.forEach(function (sl, slRank) {
           const candSegs = splitLunchBreakSegments(sl.startMin, sl.endMin);
           let penalty = 0;
 
-          if (dayRank > 0) penalty += 140 + dayRank * 20;
+          if (dayRank > 0) penalty += 160 + dayRank * 20;
 
           // 1. Existing judge overlap penalty
           judgesForComp.forEach(function (pk) {
@@ -15211,33 +15264,51 @@
           });
 
           // 2. Live coach overlap penalty
+          let coachHit = false;
           if (isLive && coaches.length > 0) {
             coaches.forEach(function (ck) {
               const occ = liveCoachIntervals[ck] || [];
               if (occ.some((o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs))) {
                 penalty += 200;
+                coachHit = true;
               }
             });
           }
 
-          // 3. Same category overlap penalty
+          // 3. Same category overlap vs specialist teacher capacity
           const sameAreaOverlapCnt = (areaIntervals[areaKey] || []).filter(
             (o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs)
           ).length;
-          penalty += sameAreaOverlapCnt * 28;
+          if (sameAreaOverlapCnt < cap.directPanels) {
+            penalty += sameAreaOverlapCnt * 8;
+          } else if (sameAreaOverlapCnt < cap.nearPanels) {
+            penalty += 22 + sameAreaOverlapCnt * 6;
+          } else {
+            penalty += 135 + (sameAreaOverlapCnt - cap.nearPanels) * 40;
+          }
 
           // 4. Room congestion penalty (only when rooms exist)
+          let roomHit = false;
           if (rooms.length > 0) {
             let roomUsedTotal = 0;
             Object.values(roomIntervals[dayId] || {}).forEach(function (segsList) {
               if (segsList.some((segs) => intervalsListOverlap(segs, candSegs))) roomUsedTotal++;
             });
-            if (roomUsedTotal >= rooms.length) penalty += 90 + (roomUsedTotal - rooms.length) * 30;
-            else penalty += roomUsedTotal * 2;
+            if (roomUsedTotal >= rooms.length) {
+              penalty += 140 + (roomUsedTotal - rooms.length) * 35;
+              roomHit = true;
+            } else {
+              penalty += roomUsedTotal * 2;
+            }
           }
 
-          // 5. Rule duration preference + level clustering
-          penalty += slRank * 4;
+          if (dayRank === 0 && sl.endMin <= 720) {
+            if (coachHit) morningBlockedByCoach = true;
+            if (roomHit) morningBlockedByRoom = true;
+          }
+
+          // 5. Morning-First time priority + level clustering
+          penalty += getMorningFirstSlotPenalty(sl, durationProfile, morningFirst, slRank);
           const sameLvOverlapCnt = (levelIntervals[lvOrd] || []).filter(
             (o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs)
           ).length;
@@ -15256,6 +15327,19 @@
       const finalSlotKey = finalDayId + '-' + finalSlot.code;
       const dateText = (dayById[finalDayId] && dayById[finalDayId].label) || finalDayId;
       const room = pickPreferredRoomForComp(c, finalDayId, finalSegs, rooms, roomIntervals);
+
+      const isFullDay = finalSlot.endMin - finalSlot.startMin >= 300 || finalSlot.code === 'FULL';
+      const isMorning = !isFullDay && finalSlot.endMin <= 750;
+      const periodGroup = isFullDay ? 'FULL_DAY' : isMorning ? 'MORNING' : 'AFTERNOON';
+      const scheduleReason = isFullDay
+        ? 'รายการต่อเนื่องทั้งวัน (09.00–16.00 น.)'
+        : isMorning
+        ? 'จบภายในช่วงเช้า'
+        : morningBlockedByCoach
+        ? 'ผู้ฝึกซ้อมเวทีสดซ้อนช่วงเช้า'
+        : morningBlockedByRoom
+        ? 'ห้องสอบช่วงเช้าเต็ม'
+        : 'โควตากรรมการตรงเอกช่วงเช้าเต็ม / คิวล้นมาบ่าย';
 
       judgesForComp.forEach(function (pk) {
         if (!judgeOccupiedIntervals[pk]) judgeOccupiedIntervals[pk] = [];
@@ -15283,12 +15367,15 @@
         endMin: finalSlot.endMin,
         building: building,
         room: room,
-        locked: false
+        locked: false,
+        periodGroup: periodGroup,
+        scheduleReason: scheduleReason
       };
     });
 
     plan.days = days;
     plan.timeProfile = timeProfile;
+    plan.morningFirst = morningFirst;
     plan.strategy = strategy;
     plan.building = building;
     plan.rooms = rooms;
@@ -15298,14 +15385,79 @@
     syncSchedulePlanToCompetitions();
     appendScheduleHistorySnapshot(reasonNote || 'ประมวลผลอัตโนมัติ (' + Object.keys(newAllocs).length + ' รายการ)');
     saveState();
-    renderAll();
+    if (!(opts && opts.skipRender)) renderAll();
 
+    const vals = Object.values(newAllocs);
+    const morningCnt = vals.filter((a) => (a.endMin || 960) <= 750 && (a.endMin - a.startMin) < 300).length;
+    const fullDayCnt = vals.filter((a) => (a.endMin - a.startMin) >= 300 || a.slotCode === 'FULL').length;
+    const afternoonCnt = vals.length - morningCnt - fullDayCnt;
+
+    if (!(opts && opts.silentToast)) {
+      const conflicts = analyzeScheduleConflicts();
+      showToast(
+        'จัดตาราง ' +
+          vals.length +
+          ' รายการ (จบช่วงเช้า ' +
+          morningCnt +
+          ' รายการ' +
+          (afternoonCnt + fullDayCnt > 0 ? ', บ่าย/ทั้งวัน ' + (afternoonCnt + fullDayCnt) + ' รายการ' : '') +
+          ')' +
+          (conflicts.judgeClashes.length > 0 ? ' • พบกรรมการชน ' + conflicts.judgeClashes.length + ' จุด' : ''),
+        conflicts.judgeClashes.length > 0 ? 'warning' : 'success'
+      );
+    }
+
+    return {
+      total: vals.length,
+      morningCount: morningCnt,
+      afternoonCount: afternoonCnt,
+      fullDayCount: fullDayCnt
+    };
+  }
+
+  async function runJointScheduleAndJudges(reasonNote) {
+    if (!state.isAdmin) return;
+    const plan = getEffectiveSchedulePlan();
+    if (plan.masterLocked) {
+      showToast('ผังทั้งกระดานถูกล็อกถาวรไว้ กรุณาปลดล็อกก่อนคำนวณใหม่', 'warning');
+      return;
+    }
+    const schedRes = computeAutoScheduleAllocation(reasonNote || 'จัดครบทั้งตาราง + กรรมการในคลิกเดียว', {
+      silentToast: true,
+      skipRender: true
+    });
+    if (!schedRes) return;
+
+    const mode = (document.getElementById('autoJudgeModeSelect') || {}).value || 'B';
+    const allowExtraEl = document.getElementById('autoJudgeExtraSpecialists');
+    const allowExtra = allowExtraEl ? Boolean(allowExtraEl.checked) : true;
+    const includeByeEl = document.getElementById('autoJudgeIncludeBye');
+    const includeBye = includeByeEl ? Boolean(includeByeEl.checked) : true;
+
+    const judgePlan = computeAutoJudgeAllocation({
+      mode: mode,
+      allowExtraSpecialists: allowExtra,
+      includeBye: includeBye
+    });
+    state.autoJudgePreviewPlan = judgePlan;
+    renderAutoJudgePreview(judgePlan);
+
+    const assignedJudgesCount = await applyAutoJudgePlan(
+      false,
+      reasonNote || 'จัดครบทั้งตาราง + กรรมการในคลิกเดียว (ในเครื่อง)',
+      { skipConfirm: true, silentToast: true }
+    );
     const conflicts = analyzeScheduleConflicts();
     showToast(
-      'จัดตารางแข่งขัน ' +
-        Object.keys(newAllocs).length +
-        ' รายการเรียบร้อยแล้ว' +
-        (conflicts.judgeClashes.length > 0 ? ' (พบกรรมการชน ' + conflicts.judgeClashes.length + ' จุด)' : ''),
+      'จัดครบทั้งตาราง ' +
+        schedRes.total +
+        ' รายการ (จบช่วงเช้า ' +
+        schedRes.morningCount +
+        ' รายการ) และกรรมการ ' +
+        (assignedJudgesCount || 0) +
+        ' ตำแหน่งเรียบร้อย (จุดชน ' +
+        conflicts.judgeClashes.length +
+        ' จุด • ยังไม่ส่ง Google Sheets)',
       conflicts.judgeClashes.length > 0 ? 'warning' : 'success'
     );
   }
@@ -15820,21 +15972,28 @@
         const btnPullDays = document.getElementById('btnPullSchedDaysFromTimeline');
         const btnClearRooms = document.getElementById('btnClearSchedRooms');
         const btnRunSched = document.getElementById('btnRunAutoSchedule');
+        const btnRunJoint = document.getElementById('btnRunJointScheduleAndJudges');
+        const morningFirstCb = document.getElementById('schedMorningFirstCheckbox');
+        if (morningFirstCb) {
+          morningFirstCb.checked = plan.morningFirst !== false;
+          morningFirstCb.disabled = plan.masterLocked;
+        }
         if (btnAddDay) btnAddDay.disabled = plan.masterLocked;
         if (btnPullDays) btnPullDays.disabled = plan.masterLocked;
         if (btnClearRooms) btnClearRooms.disabled = plan.masterLocked;
         if (btnRunSched) btnRunSched.disabled = plan.masterLocked;
+        if (btnRunJoint) btnRunJoint.disabled = plan.masterLocked;
 
         const lockBadge = document.getElementById('schedMasterLockBadge');
         const btnMasterLock = document.getElementById('btnToggleScheduleMasterLock');
         if (lockBadge) lockBadge.classList.toggle('hidden', !plan.masterLocked);
         if (btnMasterLock) {
           btnMasterLock.textContent = plan.masterLocked
-            ? 'ปลดล็อกผัง (อนุญาตจัดใหม่)'
-            : 'ล็อกผังทั้งกระดาน (กันกดทับทั้งตารางและกรรมการ)';
+            ? 'ปลดล็อกผัง'
+            : 'ล็อกผังทั้งกระดาน';
           btnMasterLock.className = plan.masterLocked
-            ? 'px-3 py-1.5 rounded-lg border border-slate-900 bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold shrink-0 transition cursor-pointer'
-            : 'px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-heading text-xs font-semibold shrink-0 transition cursor-pointer';
+            ? 'px-3.5 py-2 rounded-lg border border-slate-900 bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold shrink-0 whitespace-nowrap transition cursor-pointer'
+            : 'px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-heading text-xs font-semibold shrink-0 whitespace-nowrap transition cursor-pointer';
         }
         renderScheduleHistoryList();
       }
@@ -15916,6 +16075,56 @@
     }
 
     renderScheduleClashesResolverBox(conflicts, plan, isAdmin);
+
+    const morningSummaryEl = document.getElementById('scheduleMorningSummaryBox');
+    if (morningSummaryEl) {
+      const allocList = Object.values(plan.allocations || {});
+      if (!isAdmin || allocList.length === 0) {
+        morningSummaryEl.classList.add('hidden');
+        morningSummaryEl.innerHTML = '';
+      } else {
+        let mCnt = 0;
+        let aCnt = 0;
+        let fCnt = 0;
+        const reasonCounts = {};
+        allocList.forEach(function (a) {
+          const iv = getActiveIntervalsFromAlloc(a, {});
+          const dur = iv.endMin - iv.startMin;
+          if (dur >= 300 || a.slotCode === 'FULL') {
+            fCnt++;
+          } else if (iv.endMin <= 750) {
+            mCnt++;
+          } else {
+            aCnt++;
+            const rs = a.scheduleReason || 'คิวล้นมาบ่าย';
+            reasonCounts[rs] = (reasonCounts[rs] || 0) + 1;
+          }
+        });
+        const reasonHint = Object.entries(reasonCounts)
+          .map((e) => e[0] + ' ' + e[1])
+          .join(', ');
+        morningSummaryEl.classList.remove('hidden');
+        morningSummaryEl.innerHTML =
+          '<span class="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-heading font-semibold">จบช่วงเช้า (09.00–12.00): ' +
+          mCnt +
+          ' รายการ</span>' +
+          (aCnt > 0
+            ? '<span class="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-heading font-medium">แข่งบ่าย: ' +
+              aCnt +
+              ' รายการ' +
+              (reasonHint ? ' (' + escapeHtml(reasonHint) + ')' : '') +
+              '</span>'
+            : '') +
+          (fCnt > 0
+            ? '<span class="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-800 font-heading font-medium">ต่อเนื่องทั้งวัน: ' +
+              fCnt +
+              ' รายการ</span>'
+            : '') +
+          '<span class="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-700 font-heading">กรรมการจัดแล้ว: ' +
+          (state.judges || []).length +
+          ' ตำแหน่ง</span>';
+      }
+    }
 
     const entries = getScheduleViewEntries();
     const statsEl = document.getElementById('scheduleSummaryStats');
@@ -17882,24 +18091,55 @@
       });
     }
 
+    const schedMorningCb = document.getElementById('schedMorningFirstCheckbox');
+    if (schedMorningCb) {
+      schedMorningCb.addEventListener('change', function () {
+        if (!state.isAdmin) return;
+        const plan = getEffectiveSchedulePlan();
+        if (plan.masterLocked) return;
+        plan.morningFirst = Boolean(schedMorningCb.checked);
+        saveState();
+      });
+    }
+
+    const triggerScheduleOrJoint = function (mode) {
+      if (!state.isAdmin) return;
+      const plan = getEffectiveSchedulePlan();
+      if (plan.masterLocked) {
+        showToast('ผังทั้งกระดานถูกล็อกถาวรไว้ กรุณาปลดล็อกด้านบนก่อนคำนวณใหม่', 'warning');
+        return;
+      }
+      state.pendingScheduleRegenMode = mode;
+      const hasExistingSched = Object.keys(plan.allocations || {}).length > 0;
+      const hasJudges = (state.judges || []).length > 0;
+      if (hasExistingSched || hasJudges) {
+        openScheduleRegenConfirmModal(
+          mode === 'joint'
+            ? 'จัดครบทั้งตาราง (เน้นจบเช้า) + จัดกรรมการอัตโนมัติในคลิกเดียว'
+            : hasJudges
+            ? 'ปรับตารางใหม่และตรวจชนกับกรรมการที่มีอยู่'
+            : 'คำนวณตารางแข่งขันรอบใหม่'
+        );
+        return;
+      }
+      if (mode === 'joint') {
+        runJointScheduleAndJudges('จัดครบทั้งตาราง + กรรมการชุดแรกในคลิกเดียว');
+      } else {
+        computeAutoScheduleAllocation('คำนวณจัดตารางแข่งขันชุดแรก');
+      }
+    };
+
     const btnRunAutoSchedule = document.getElementById('btnRunAutoSchedule');
     if (btnRunAutoSchedule) {
       btnRunAutoSchedule.addEventListener('click', function () {
-        if (!state.isAdmin) return;
-        const plan = getEffectiveSchedulePlan();
-        if (plan.masterLocked) {
-          showToast('ผังทั้งกระดานถูกล็อกถาวรไว้ กรุณาปลดล็อกด้านบนก่อนคำนวณใหม่', 'warning');
-          return;
-        }
-        const hasExistingSched = Object.keys(plan.allocations || {}).length > 0;
-        const hasJudges = (state.judges || []).length > 0;
-        if (hasExistingSched || hasJudges) {
-          openScheduleRegenConfirmModal(
-            hasJudges ? 'ปรับตารางใหม่และตรวจชนกับกรรมการที่มีอยู่' : 'คำนวณตารางแข่งขันรอบใหม่'
-          );
-          return;
-        }
-        computeAutoScheduleAllocation('คำนวณจัดตารางแข่งขันชุดแรก');
+        triggerScheduleOrJoint('schedule_only');
+      });
+    }
+
+    const btnRunJointScheduleAndJudges = document.getElementById('btnRunJointScheduleAndJudges');
+    if (btnRunJointScheduleAndJudges) {
+      btnRunJointScheduleAndJudges.addEventListener('click', function () {
+        triggerScheduleOrJoint('joint');
       });
     }
 
@@ -17923,8 +18163,14 @@
       scheduleRegenConfirmForm.addEventListener('submit', function (e) {
         e.preventDefault();
         const note = scheduleRegenNoteInput ? scheduleRegenNoteInput.value.trim() : '';
+        const mode = state.pendingScheduleRegenMode || 'schedule_only';
+        state.pendingScheduleRegenMode = null;
         closeScheduleRegenConfirmModal();
-        computeAutoScheduleAllocation(note || 'ปรับตารางแข่งขัน');
+        if (mode === 'joint') {
+          runJointScheduleAndJudges(note || 'จัดครบทั้งตาราง + กรรมการในคลิกเดียว');
+        } else {
+          computeAutoScheduleAllocation(note || 'ปรับตารางแข่งขัน');
+        }
       });
     }
 
