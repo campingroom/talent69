@@ -140,6 +140,16 @@
           </div>
           <span id="navBadgeCerts" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-normal shrink-0">แอดมิน</span>
         </button>
+
+        <button type="button" id="navShortcutIdCards" class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <svg class="w-4 h-4 text-blue-700 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+            </svg>
+            <span class="truncate">พิมพ์บัตร / แนบรูป</span>
+          </div>
+          <span id="navBadgeIdCards" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold shrink-0">พร้อมพิมพ์</span>
+        </button>
       </div>
 
       <!-- Group 3: แอดมิน (Admin Only) -->
@@ -550,6 +560,50 @@
   </div>
 
   <!-- ==========================================
+       MODAL 4A: UNIQUE PARTICIPANTS / MULTI-ENTRY CHECK MODAL (ตรวจสอบคนซ้ำรายรายการแบบอ่านอย่างเดียว)
+       ========================================== -->
+  <div id="uniquePeopleModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-4xl w-full p-4 sm:p-6 space-y-4 my-4 sm:my-6">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+        <div>
+          <span class="inline-block px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-heading text-[11px] font-medium mb-1">
+            ตรวจสอบรายชื่อซ้ำข้ามรายการ (อ่านอย่างเดียว — ไม่แก้ไขข้อมูลผู้สมัคร)
+          </span>
+          <h3 class="text-base sm:text-lg font-bold font-heading text-slate-900">สรุปรายชื่อผู้เข้าร่วมที่ลงมากกว่า 1 รายการ</h3>
+          <p id="uniquePeopleModalSummary" class="text-xs text-slate-500 mt-0.5">-</p>
+        </div>
+        <button type="button" id="btnCloseUniquePeopleModal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="inline-flex rounded-lg bg-slate-100 p-1 text-xs font-heading">
+          <button type="button" id="tabUniqueStudentsBtn" class="px-3 py-1.5 rounded-md font-semibold transition cursor-pointer bg-white text-slate-900 shadow-2xs">
+            นักเรียนลง &gt;1 รายการ (<span id="modalMultiStuTabCount">0</span>)
+          </button>
+          <button type="button" id="tabUniqueTeachersBtn" class="px-3 py-1.5 rounded-md font-medium transition cursor-pointer text-slate-600 hover:text-slate-900">
+            ครูคุม &gt;1 รายการ (<span id="modalMultiTchTabCount">0</span>)
+          </button>
+        </div>
+        <select id="uniquePeopleSchoolFilter" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-heading focus:border-slate-900 focus:outline-none">
+          <option value="ALL">-- ทุกโรงเรียน --</option>
+        </select>
+      </div>
+
+      <div id="uniquePeopleModalList" class="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1 text-xs"></div>
+
+      <div class="flex justify-end pt-2 border-t border-slate-100">
+        <button type="button" id="btnOkUniquePeopleModal" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium cursor-pointer">
+          ปิดหน้าต่าง
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
        MODAL 4B: ADMIN BULK SCHEDULE & ROOM EDITOR MODAL (จัดการห้องสอบทั้งหมดแบบตารางรวม)
        ========================================== -->
   <div id="bulkScheduleModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
@@ -709,6 +763,9 @@
           <span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-heading text-[11px] font-semibold mb-1">ทำในเครื่อง 100% • ครอปอัตโนมัติ 26:31 • ปลอดภัย PDPA</span>
           <h3 id="cardPhotoModalTitle" class="text-base sm:text-lg font-bold font-heading text-slate-900">แนบรูปถ่ายติดบัตร</h3>
           <p id="cardPhotoModalSub" class="text-xs text-slate-500 mt-0.5">รูปภาพทั้งหมดเก็บไว้ชั่วคราวเฉพาะในเบราว์เซอร์เครื่องนี้ ไม่ส่งขึ้นเซิร์ฟเวอร์และไม่แตะข้อมูลสมัคร/คะแนน</p>
+          <p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 mt-1.5 inline-block">
+            หมายเหตุ: รายชื่อใดที่ไม่ได้แนบรูป ระบบจะซ่อนกรอบรูปมุมขวาบนและเว้นพื้นที่โล่งให้อัตโนมัติ (พิมพ์ได้ทั้งแบบหน้า–หลัง หรือเฉพาะด้านหน้า)
+          </p>
         </div>
         <button type="button" id="btnCloseCardPhotoModal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer" aria-label="ปิดหน้าต่าง">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -726,6 +783,10 @@
           <button type="button" id="btnDismissCardPhotoModal" class="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-heading text-xs font-medium hover:bg-slate-50 transition cursor-pointer">
             ปิดหน้าต่าง
           </button>
+          <select id="cardPrintSideSelect" aria-label="เลือกรูปแบบหน้าบัตรที่ต้องการพิมพ์" class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-heading font-medium text-slate-700 focus:border-slate-900 focus:outline-none cursor-pointer">
+            <option value="both">ทั้งด้านหน้า + ด้านหลัง (พับประกบ)</option>
+            <option value="front_only">เฉพาะด้านหน้าที่มีชื่อ (4 ใบ/แผ่น)</option>
+          </select>
           <button type="button" id="btnPrintCardsFromPhotoModal" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
             <span>เปิดหน้าพิมพ์บัตร / Save PDF</span>
@@ -930,6 +991,24 @@
         </div>
       </div>
 
+      <!-- Quick ID Card Print & Photo Shortcut Banner (Shown when id_cards is open; hidden when admin closes it) -->
+      <div id="dashIdCardsShortcutBanner" class="hidden bg-white border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-2xs">
+        <div class="flex items-start gap-3">
+          <div class="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+            </svg>
+          </div>
+          <div class="text-xs sm:text-sm text-slate-700">
+            <p class="font-heading font-semibold text-slate-900">พร้อมใช้งานแล้ว: แนบรูปถ่ายและพิมพ์บัตรประจำตัวผู้เข้าแข่งขัน / ครูผู้ฝึกสอน</p>
+            <p class="text-[11px] sm:text-xs text-slate-500 mt-0.5">เลือกพิมพ์ได้ทั้งแบบหน้า–หลัง (พับประกบ) และแบบเฉพาะด้านหน้าที่มีชื่อ (4 ใบ/แผ่น A4) • รูปถ่ายเก็บเฉพาะในเครื่อง</p>
+          </div>
+        </div>
+        <button type="button" id="btnDashGotoIdCards" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold transition shrink-0 cursor-pointer">
+          ไปหน้าแนบรูป / พิมพ์บัตร
+        </button>
+      </div>
+
       <!-- Sample Data Notice Banner -->
       <div id="sampleDataBanner" class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-2xs">
         <div class="flex items-start gap-3">
@@ -1015,45 +1094,51 @@
           <p class="text-[11px] text-blue-700 mt-1">รวม <span id="kpiTotalTeams">0</span> ทีมที่ลงทะเบียน →</p>
         </div>
 
-        <!-- KPI 5: Total Students -->
+        <!-- KPI 5: Total Students (Unique People Top, Slot Count Bottom) -->
         <div class="bg-white rounded-xl p-4 border border-slate-200">
-          <div class="flex items-center justify-between text-slate-500">
-            <span class="text-xs font-heading font-medium">นักเรียนผู้เข้าแข่งขัน</span>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
+          <div class="flex items-center justify-between gap-1 text-slate-500">
+            <span class="text-xs font-heading font-medium leading-tight">นักเรียนผู้เข้าแข่งขัน</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-heading font-medium whitespace-nowrap shrink-0">ตัวจริง</span>
           </div>
           <div class="mt-2 flex items-baseline gap-1.5">
             <span id="kpiTotalStudents" class="text-2xl font-bold font-heading text-slate-900">0</span>
             <span class="text-xs text-slate-500">คน</span>
           </div>
-          <p class="text-[11px] text-slate-500 mt-1">นับรวมทุกประเภทเดี่ยวและทีม</p>
+          <p class="text-[11px] text-slate-500 mt-1 leading-snug">
+            นับตามรายการส่ง <strong id="kpiRawStudents" class="text-slate-700 font-semibold">0</strong> ครั้ง
+            <button type="button" id="btnOpenMultiStudentsModal" class="text-blue-700 hover:underline font-heading font-medium ml-0.5 cursor-pointer hidden">
+              (<span id="kpiMultiStudentsCount">0</span> คนลง &gt;1 รายการ →)
+            </button>
+          </p>
         </div>
 
-        <!-- KPI 6: Total Teachers -->
+        <!-- KPI 6: Total Teachers (Unique People Top, Slot Count Bottom) -->
         <div class="bg-white rounded-xl p-4 border border-slate-200">
-          <div class="flex items-center justify-between text-slate-500">
-            <span class="text-xs font-heading font-medium">ครูผู้ฝึกซ้อม</span>
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
+          <div class="flex items-center justify-between gap-1 text-slate-500">
+            <span class="text-xs font-heading font-medium leading-tight">ครูผู้ฝึกซ้อม</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-heading font-medium whitespace-nowrap shrink-0">ตัวจริง</span>
           </div>
           <div class="mt-2 flex items-baseline gap-1.5">
             <span id="kpiTotalTeachers" class="text-2xl font-bold font-heading text-slate-900">0</span>
             <span class="text-xs text-slate-500">คน<span id="kpiTotalJudges" class="hidden">0</span></span>
           </div>
-          <p class="text-[11px] text-slate-500 mt-1">ผู้เข้าร่วมรวมทั้งสิ้น <span id="kpiGrandTotalPeople">0</span> คน</p>
+          <p class="text-[11px] text-slate-500 mt-1 leading-snug">
+            ตามรายการ <strong id="kpiRawTeachers" class="text-slate-700 font-semibold">0</strong> ครั้ง · รวมจริง <strong id="kpiGrandTotalPeople" class="text-slate-800 font-semibold">0</strong> คน
+            <button type="button" id="btnOpenMultiTeachersModal" class="text-blue-700 hover:underline font-heading font-medium ml-0.5 cursor-pointer hidden">
+              (ดู <span id="kpiMultiTeachersCount">0</span> ท่านคุมหลายทีม →)
+            </button>
+          </p>
         </div>
       </div>
 
-      <!-- 5-Step Visual Timeline Stepper (Roadmap) -->
+      <!-- Visual Timeline Stepper (Roadmap - Auto Date Driven + Admin Editable) -->
       <div class="bg-white rounded-xl border border-slate-200 p-5">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3.5">
           <div>
             <h2 class="text-base font-bold font-heading text-slate-900">กำหนดการดำเนินงาน (Timeline Roadmap)</h2>
-            <p class="text-xs text-slate-500">ลำดับขั้นตอนการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 กลุ่มวังยาวเขวาไร่ดอนกลาง</p>
+            <p class="text-xs text-slate-500">ลำดับขั้นตอนการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 กลุ่มวังยาวเขวาไร่ดอนกลาง (อัปเดตสถานะตามวันที่จริงอัตโนมัติ)</p>
           </div>
-          <span class="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 font-heading shrink-0 self-start sm:self-auto">5 ขั้นตอนหลัก</span>
+          <span id="dashboardTimelineCountBadge" class="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 font-heading shrink-0 self-start sm:self-auto">5 ขั้นตอนหลัก</span>
         </div>
         <div id="dashboardTimelineStepper" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"></div>
       </div>
@@ -1512,11 +1597,11 @@
         <div class="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t border-slate-100 text-xs">
           <!-- Group 1: Documents & Badges -->
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="btnPrintSchoolIdCards" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
-              <svg class="w-3.5 h-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <button type="button" id="btnPrintSchoolIdCards" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold transition shadow-2xs cursor-pointer">
+              <svg class="w-3.5 h-3.5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
               </svg>
-              <span>พิมพ์บัตรประจำตัว (พับครึ่ง A5)</span>
+              <span>พิมพ์บัตรประจำตัว (หน้า-หลัง / เฉพาะหน้า)</span>
             </button>
             <button type="button" id="btnManageSchoolCardPhotos" class="hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-800 font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
               <svg class="w-3.5 h-3.5 text-blue-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -1585,12 +1670,14 @@
             <div class="text-lg font-bold font-heading text-slate-900 mt-1">เดี่ยว <span id="schKpiSingle">0</span> • ทีม <span id="schKpiTeam">0</span></div>
           </div>
           <div class="rounded-lg bg-slate-50 border border-slate-200 p-3.5">
-            <div class="text-xs text-slate-500 font-heading">จำนวนนักเรียนรวม</div>
+            <div class="text-xs text-slate-500 font-heading">นักเรียนผู้เข้าแข่งขัน (คนจริง)</div>
             <div class="text-2xl font-bold font-heading text-slate-900 mt-1"><span id="schKpiStudents">0</span> <span class="text-xs font-normal text-slate-500">คน</span></div>
+            <div class="text-[11px] text-slate-500 mt-0.5">นับตามรายการ <span id="schKpiRawStudents" class="font-semibold text-slate-700">0</span> ครั้ง</div>
           </div>
           <div class="rounded-lg bg-slate-50 border border-slate-200 p-3.5">
-            <div class="text-xs text-slate-500 font-heading">จำนวนครูผู้ฝึกซ้อมรวม</div>
-            <div class="text-2xl font-bold font-heading text-slate-900 mt-1"><span id="schKpiTeachers">0</span> <span class="text-xs font-normal text-slate-500">คน (รายการ)</span></div>
+            <div class="text-xs text-slate-500 font-heading">ครูผู้ฝึกซ้อม (คนจริง)</div>
+            <div class="text-2xl font-bold font-heading text-slate-900 mt-1"><span id="schKpiTeachers">0</span> <span class="text-xs font-normal text-slate-500">คน</span></div>
+            <div class="text-[11px] text-slate-500 mt-0.5">นับตามรายการ <span id="schKpiRawTeachers" class="font-semibold text-slate-700">0</span> ครั้ง</div>
           </div>
         </div>
 
@@ -2451,6 +2538,40 @@
             </div>
           </div>
 
+          <!-- Card 1B: Admin Timeline Roadmap Customizer -->
+          <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold font-heading text-slate-900">จัดการกำหนดการดำเนินงาน (Timeline Roadmap)</h3>
+                  <p class="text-xs text-slate-500">เพิ่ม/แก้ไขขั้นตอนและกำหนดช่วงวันที่จริง เพื่อให้นำไปแสดงผลและเดินตามวันอัตโนมัติ (เหมาะสำหรับคัดลอกไปใช้ปีถัดไป)</p>
+                </div>
+              </div>
+              <button type="button" id="btnAddTimelineStep" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer shrink-0">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                <span>เพิ่มขั้นตอน</span>
+              </button>
+            </div>
+
+            <div id="adminTimelineEditorList" class="space-y-2.5 max-h-96 overflow-y-auto pr-1 text-xs"></div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+              <button type="button" id="btnResetTimelineSteps" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer">
+                รีเซ็ตเป็นค่าเริ่มต้นปี 2569
+              </button>
+              <button type="button" id="btnSaveTimelineSteps" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-semibold transition cursor-pointer shadow-2xs">
+                บันทึกกำหนดการไทม์ไลน์
+              </button>
+            </div>
+          </div>
+
           <!-- Card 2: Official District Reports & Forms -->
           <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
             <div class="flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -2476,21 +2597,56 @@
                   รวบรวมรายชื่อทีมตัวแทนกลุ่มโรงเรียนตามเกณฑ์ที่กำหนด พร้อมรายชื่อนักเรียนและครูผู้ฝึกสอน เพื่อนำส่งระดับเขตพื้นที่การศึกษา
                 </p>
 
-                <!-- Representative Criteria Selector -->
-                <div class="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1.5">
-                  <label for="cfgDistrictRepCriteriaSelect" class="block text-xs font-heading font-semibold text-slate-700">
-                    เกณฑ์กำหนดการคัดเลือกตัวแทนกลุ่มโรงเรียนไปแข่งระดับเขตฯ:
-                  </label>
-                  <div class="flex flex-col sm:flex-row gap-2">
-                    <select id="cfgDistrictRepCriteriaSelect" class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
-                      <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1) [มาตรฐาน]</option>
-                      <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1)</option>
-                      <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
-                      <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
-                    </select>
-                    <button type="button" id="btnSaveDistrictRepCriteria" class="px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition shrink-0">
+                <!-- Representative Criteria Selector (Split by Level Track) -->
+                <div class="p-3 rounded-lg bg-white border border-slate-200 space-y-2.5">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="block text-xs font-heading font-semibold text-slate-800">
+                      เกณฑ์กำหนดการคัดเลือกตัวแทนกลุ่มโรงเรียนไปแข่งระดับเขตฯ (แยกตามช่วงชั้น):
+                    </span>
+                    <button type="button" id="btnSaveDistrictRepCriteria" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition shrink-0 cursor-pointer">
                       บันทึกเกณฑ์ตัวแทน
                     </button>
+                  </div>
+
+                  <div class="space-y-2">
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-1.5 sm:items-center">
+                      <label for="cfgDistrictRepCriteriaPrimarySelect" class="sm:col-span-5 text-[11px] font-heading font-semibold text-slate-700">
+                        1. ปฐมวัย – ประถมศึกษา
+                        <span class="block font-normal text-[10px] text-slate-500">ปฐมวัย, ป.1–ป.3, ป.4–ป.6, ป.1–ป.6</span>
+                      </label>
+                      <select id="cfgDistrictRepCriteriaPrimarySelect" class="sm:col-span-7 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
+                        <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1) [มาตรฐาน]</option>
+                        <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1)</option>
+                        <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
+                        <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
+                      </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-1.5 sm:items-center pt-1.5 border-t border-slate-100">
+                      <label for="cfgDistrictRepCriteriaMixedSelect" class="sm:col-span-5 text-[11px] font-heading font-semibold text-slate-700">
+                        2. รวมช่วงชั้น / ขยายโอกาส
+                        <span class="block font-normal text-[10px] text-slate-500">ป.1–ม.3, ป.1–ม.3 (ขยายโอกาส)</span>
+                      </label>
+                      <select id="cfgDistrictRepCriteriaMixedSelect" class="sm:col-span-7 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
+                        <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1)</option>
+                        <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1)</option>
+                        <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
+                        <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
+                      </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-1.5 sm:items-center pt-1.5 border-t border-slate-100">
+                      <label for="cfgDistrictRepCriteriaSecondarySelect" class="sm:col-span-5 text-[11px] font-heading font-semibold text-slate-700">
+                        3. มัธยมศึกษาตอนต้น
+                        <span class="block font-normal text-[10px] text-slate-500">ม.1–ม.3</span>
+                      </label>
+                      <select id="cfgDistrictRepCriteriaSecondarySelect" class="sm:col-span-7 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium focus:border-slate-900 focus:outline-none">
+                        <option value="rank_1">เฉพาะทีมชนะเลิศ (อันดับ 1)</option>
+                        <option value="rank_1_2">อันดับ 1 และ อันดับ 2 (ชนะเลิศ และ รองชนะเลิศอันดับ 1) [แนะนำมัธยม]</option>
+                        <option value="rank_1_3">อันดับ 1 ถึง อันดับ 3 (ชนะเลิศ และ รองชนะเลิศอันดับ 1–2)</option>
+                        <option value="gold_only">เฉพาะทีมที่ได้เหรียญทอง อันดับ 1</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 

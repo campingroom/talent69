@@ -21,7 +21,10 @@
 
   const DEFAULT_CONFIG = {
     regCloseDate: '2026-11-19T23:59',
-    districtRepCriteria: 'rank_1', // 'rank_1', 'rank_1_2', 'rank_1_3', 'gold_only'
+    districtRepCriteria: 'rank_1', // legacy fallback: 'rank_1', 'rank_1_2', 'rank_1_3', 'gold_only'
+    districtRepCriteriaPrimary: 'rank_1',
+    districtRepCriteriaMixed: 'rank_1',
+    districtRepCriteriaSecondary: 'rank_1_2',
     certPrefix: 'WYK74-2569-',
     certSignerName: 'นายกิจภูมิ บุญอบ',
     certSignerPos: 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
@@ -36,14 +39,16 @@
     certBgMode: 'standard', // 'standard' or 'canva'
     certBgImageUrl: '',
     venueMapImageUrl: '',
+    operationTimeline: null,
     featureVisibility: {
       venue: 'hidden',
       judges: 'auto',
       results: 'auto',
       certificates: 'auto',
-      id_cards: 'hidden',
+      id_cards: 'open',
       substitution_form: 'hidden'
-    }
+    },
+    idCardsDefaultMigratedV1: true
   };
 
   const FEATURE_MILESTONES = {
@@ -86,7 +91,10 @@
     if (cfg.featureVisibility && cfg.featureVisibility[featureKey]) {
       return cfg.featureVisibility[featureKey];
     }
-    if (featureKey === 'venue' || featureKey === 'id_cards' || featureKey === 'substitution_form') {
+    if (featureKey === 'id_cards') {
+      return 'open';
+    }
+    if (featureKey === 'venue' || featureKey === 'substitution_form') {
       return 'hidden';
     }
     return 'auto';
@@ -134,6 +142,53 @@
     }
   }
 
+  function getDistrictRepCriteriaShortLabel(criteria) {
+    switch (criteria) {
+      case 'rank_1_2':
+        return 'อันดับ 1–2';
+      case 'rank_1_3':
+        return 'อันดับ 1–3';
+      case 'gold_only':
+        return 'เหรียญทอง อันดับ 1';
+      case 'rank_1':
+      default:
+        return 'อันดับ 1';
+    }
+  }
+
+  function getDistrictRepLevelGroup(levelStr) {
+    const lvl = String(levelStr || '').trim();
+    if (!lvl) return 'primary';
+    if (lvl.indexOf('ป.1–ม.3') !== -1 || lvl.indexOf('ป.1-ม.3') !== -1 || lvl.indexOf('ขยายโอกาส') !== -1) {
+      return 'mixed';
+    }
+    if (lvl.indexOf('ม.') !== -1) {
+      return 'secondary';
+    }
+    return 'primary';
+  }
+
+  function getDistrictRepCriteriaConfig(cfgInput) {
+    const cfg = cfgInput || state.config || DEFAULT_CONFIG;
+    return {
+      primary: cfg.districtRepCriteriaPrimary || cfg.districtRepCriteria || 'rank_1',
+      mixed: cfg.districtRepCriteriaMixed || 'rank_1',
+      secondary: cfg.districtRepCriteriaSecondary || 'rank_1_2'
+    };
+  }
+
+  function getDistrictRepCriteriaSummaryLabel(cfgInput) {
+    const crit = getDistrictRepCriteriaConfig(cfgInput);
+    return (
+      'ประถมฯ: ' +
+      getDistrictRepCriteriaShortLabel(crit.primary) +
+      ' • ป.1–ม.3/ขยายโอกาส: ' +
+      getDistrictRepCriteriaShortLabel(crit.mixed) +
+      ' • มัธยมฯ (ม.1–ม.3): ' +
+      getDistrictRepCriteriaShortLabel(crit.secondary)
+    );
+  }
+
   function isRegistrationAbsent(r) {
     if (!r) return false;
     const m = String(r.medal || '').trim();
@@ -172,23 +227,39 @@
     return { hasTie: hasTie, hasUnresolvedTie: hasUnresolvedTie, tiedScores: tiedScores };
   }
 
-  function isDistrictRepresentative(r) {
-    if (!r || isRegistrationAbsent(r) || !hasValidScore(r)) return false;
+  function matchesDistrictRepCriteria(r, criteria) {
     const rank = Number(r.rank);
-    const award = r.award_title || '';
-    const medal = r.medal || '';
-    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
+    const award = String(r.award_title || '').trim();
+    const medal = String(r.medal || '').trim();
 
     if (criteria === 'rank_1_2') {
-      return (rank >= 1 && rank <= 2) || award.includes('ชนะเลิศ');
+      return (rank >= 1 && rank <= 2) || award === 'ชนะเลิศ' || award === 'รองชนะเลิศอันดับ 1';
     }
     if (criteria === 'rank_1_3') {
-      return (rank >= 1 && rank <= 3) || award.includes('ชนะเลิศ');
+      return (
+        (rank >= 1 && rank <= 3) ||
+        award === 'ชนะเลิศ' ||
+        award === 'รองชนะเลิศอันดับ 1' ||
+        award === 'รองชนะเลิศอันดับ 2'
+      );
     }
     if (criteria === 'gold_only') {
       return (rank === 1 || award === 'ชนะเลิศ') && medal.includes('ทอง');
     }
     return rank === 1 || award === 'ชนะเลิศ';
+  }
+
+  function isDistrictRepresentative(r) {
+    if (!r || isRegistrationAbsent(r) || !hasValidScore(r)) return false;
+    let levelStr = r.level || '';
+    if (!levelStr && r.comp_id) {
+      const comp = state.competitions.find((c) => c.comp_id === r.comp_id);
+      if (comp) levelStr = comp.level || '';
+    }
+    const group = getDistrictRepLevelGroup(levelStr);
+    const critMap = getDistrictRepCriteriaConfig();
+    const criteria = critMap[group] || 'rank_1';
+    return matchesDistrictRepCriteria(r, criteria);
   }
 
   const DEFAULT_DATA = window.TALENT69_DEFAULT_DATA || {
@@ -271,6 +342,8 @@
     adminShowScoresInLists: false,
     adminPin: '',
     registrationOpen: true,
+    timelineDraft: null,
+    uniquePeopleModalTab: 'students',
     config: Object.assign({}, DEFAULT_CONFIG)
   };
 
@@ -280,6 +353,188 @@
       return new Date(raw + ':59+07:00');
     }
     return new Date(raw);
+  }
+
+  function formatThaiTimelinePeriod(startDate, endDate) {
+    const s = String(startDate || '').trim();
+    const e = String(endDate || s || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+    const fullMonths = [
+      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+    ];
+    const [sy, sm, sd] = s.split('-').map(Number);
+    const [ey, em, ed] = (/^\d{4}-\d{2}-\d{2}$/.test(e) ? e : s).split('-').map(Number);
+    if (sy === ey && sm === em && sd === ed) {
+      return sd + ' ' + fullMonths[sm - 1] + ' ' + (sy + 543);
+    }
+    if (sy === ey && sm === em) {
+      return sd + ' – ' + ed + ' ' + fullMonths[sm - 1] + ' ' + (sy + 543);
+    }
+    if (sy === ey) {
+      return sd + ' ' + fullMonths[sm - 1] + ' – ' + ed + ' ' + fullMonths[em - 1] + ' ' + (sy + 543);
+    }
+    return sd + ' ' + fullMonths[sm - 1] + ' ' + (sy + 543) + ' – ' + ed + ' ' + fullMonths[em - 1] + ' ' + (ey + 543);
+  }
+
+  function getEffectiveTimelineItems() {
+    const cfgList = state.config && Array.isArray(state.config.operationTimeline) && state.config.operationTimeline.length
+      ? state.config.operationTimeline
+      : (DEFAULT_DATA.operationTimeline || []);
+    return cfgList.map(function (it, idx) {
+      return {
+        step: String((it && it.step) || idx + 1),
+        title: String((it && it.title) || ''),
+        period: String((it && it.period) || formatThaiTimelinePeriod(it && it.startDate, it && it.endDate) || ''),
+        startDate: String((it && it.startDate) || ''),
+        endDate: String((it && it.endDate) || (it && it.startDate) || ''),
+        useRegCloseTime: Boolean(it && it.useRegCloseTime),
+        status: String((it && it.status) || '')
+      };
+    });
+  }
+
+  function resolveTimelineStepState(item, nowMs) {
+    const now = typeof nowMs === 'number' ? nowMs : Date.now();
+    const s = String((item && item.startDate) || '').trim();
+    const e = String((item && item.endDate) || s || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const legacy = String((item && item.status) || '');
+      if (legacy.indexOf('เสร็จ') !== -1) return { key: 'done', label: legacy };
+      if (legacy.indexOf('กำลัง') !== -1) return { key: 'active', label: legacy };
+      return { key: 'upcoming', label: legacy || 'กำหนดการ' };
+    }
+    const startMs = new Date(s + 'T00:00:00+07:00').getTime();
+    let endMs = new Date((/^\d{4}-\d{2}-\d{2}$/.test(e) ? e : s) + 'T23:59:59+07:00').getTime();
+    if (item && item.useRegCloseTime) {
+      const closeObj = getEffectiveRegistrationCloseDate();
+      if (!isNaN(closeObj.getTime())) {
+        endMs = closeObj.getTime();
+      }
+    }
+    if (now < startMs) return { key: 'upcoming', label: 'กำหนดการ' };
+    if (now <= endMs) return { key: 'active', label: 'กำลังดำเนินการ' };
+    return { key: 'done', label: 'เสร็จสิ้น' };
+  }
+
+  function stripThaiPersonTitle(rawName) {
+    let clean = String(rawName || '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const titleRe = /^(?:ว่าที่\s*ร\.ต\.หญิง|ว่าที่\s*ร\.ต\.ชาย|ว่าที่\s*ร\.ต\.|ว่าที่\s*ร\.ท\.|ว่าที่\s*ร\.อ\.|จ่าสิบเอก|จ\.ส\.อ\.|สิบเอก|ส\.อ\.|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นางสาว|น\.ส\.|นาย|นาง|ครู)\s*/;
+    let prev = '';
+    while (clean && clean !== prev) {
+      prev = clean;
+      clean = clean.replace(titleRe, '').trim();
+    }
+    return clean;
+  }
+
+  function buildReadablePersonName(person) {
+    const p = String((person && person.prefix) || '').replace(/\s+/g, ' ').trim();
+    const n = String((person && person.name) || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+    const cleanCore = stripThaiPersonTitle(n);
+    if (p && cleanCore) return p + (p.endsWith('.') ? '' : ' ') + cleanCore;
+    return cleanCore || n || '-';
+  }
+
+  function computeParticipantStats(registrations) {
+    const list = Array.isArray(registrations) ? registrations : [];
+    const stuMap = new Map();
+    const tchMap = new Map();
+    const bySchool = {};
+    let rawStudents = 0;
+    let rawTeachers = 0;
+
+    function ensureSchoolStats(schoolName) {
+      if (!bySchool[schoolName]) {
+        bySchool[schoolName] = {
+          rawStudents: 0,
+          rawTeachers: 0,
+          stuMap: new Map(),
+          tchMap: new Map()
+        };
+      }
+      return bySchool[schoolName];
+    }
+
+    function addPersonEntry(globalMap, schoolMap, schoolName, person, reg, idx, kind) {
+      const coreName = stripThaiPersonTitle((person && person.name) || '');
+      const key = coreName
+        ? schoolName + '||' + coreName
+        : '__anon_' + kind + '_' + (reg.reg_id || '') + '_' + idx;
+      const displayName = buildReadablePersonName(person);
+      const entry = {
+        comp_id: reg.comp_id || '',
+        comp_name: reg.comp_name || '',
+        level: reg.level || '',
+        grade: (person && person.grade) || ''
+      };
+      [globalMap, schoolMap].forEach(function (targetMap) {
+        if (!targetMap.has(key)) {
+          targetMap.set(key, {
+            key: key,
+            school_name: schoolName,
+            displayName: displayName,
+            coreName: coreName || displayName,
+            items: [entry]
+          });
+        } else {
+          targetMap.get(key).items.push(entry);
+        }
+      });
+    }
+
+    list.forEach(function (r) {
+      const sch = String((r && r.school_name) || '').trim();
+      const schStats = ensureSchoolStats(sch);
+      const stus = Array.isArray(r && r.students) ? r.students : [];
+      const tchs = Array.isArray(r && r.teachers) ? r.teachers : [];
+      stus.forEach(function (s, idx) {
+        rawStudents++;
+        schStats.rawStudents++;
+        addPersonEntry(stuMap, schStats.stuMap, sch, s, r, idx, 's');
+      });
+      tchs.forEach(function (t, idx) {
+        rawTeachers++;
+        schStats.rawTeachers++;
+        addPersonEntry(tchMap, schStats.tchMap, sch, t, r, idx, 't');
+      });
+    });
+
+    function toMultiList(map) {
+      const out = [];
+      map.forEach(function (val) {
+        if (val.items.length > 1) out.push(val);
+      });
+      out.sort(function (a, b) {
+        if (b.items.length !== a.items.length) return b.items.length - a.items.length;
+        return a.school_name.localeCompare(b.school_name, 'th');
+      });
+      return out;
+    }
+
+    const bySchoolSummary = {};
+    Object.keys(bySchool).forEach(function (sch) {
+      const sObj = bySchool[sch];
+      bySchoolSummary[sch] = {
+        rawStudents: sObj.rawStudents,
+        uniqueStudents: sObj.stuMap.size,
+        rawTeachers: sObj.rawTeachers,
+        uniqueTeachers: sObj.tchMap.size
+      };
+    });
+
+    return {
+      rawStudents: rawStudents,
+      uniqueStudents: stuMap.size,
+      multiEntryStudents: toMultiList(stuMap),
+      rawTeachers: rawTeachers,
+      uniqueTeachers: tchMap.size,
+      multiTeamTeachers: toMultiList(tchMap),
+      bySchool: bySchoolSummary
+    };
   }
 
   function calculateMedalFromScore(scoreVal) {
@@ -808,10 +1063,18 @@
           ? parsed.judges
           : cloneDeep(DEFAULT_DATA.sampleJudges || []);
         state.config = Object.assign({}, DEFAULT_CONFIG, parsed.config || {});
+        if (parsed.config && parsed.config.districtRepCriteria && !parsed.config.districtRepCriteriaPrimary) {
+          state.config.districtRepCriteriaPrimary = parsed.config.districtRepCriteria;
+        }
         if (!state.config.featureVisibility) {
           state.config.featureVisibility = Object.assign({}, DEFAULT_CONFIG.featureVisibility);
         } else {
           state.config.featureVisibility = Object.assign({}, DEFAULT_CONFIG.featureVisibility, state.config.featureVisibility);
+        }
+        if (!parsed.config || !parsed.config.idCardsDefaultMigratedV1) {
+          state.config.featureVisibility.id_cards = 'open';
+          state.config.idCardsDefaultMigratedV1 = true;
+          saveState();
         }
         // Auto-migrate school SCH-13 subdistrict and default signer name if outdated
         state.schools = normalizeSchoolsList(state.schools);
@@ -851,29 +1114,32 @@
     );
   }
 
-  function isRegistrationEffectivelyOpen() {
+  function isPublicRegistrationOpen() {
     if (!state.registrationOpen) return false;
     const closeTime = getEffectiveRegistrationCloseDate().getTime();
-    if (!state.isAdmin && !isNaN(closeTime) && Date.now() > closeTime) {
+    if (!isNaN(closeTime) && Date.now() > closeTime) {
       return false;
     }
     return true;
   }
 
+  function canCurrentUserSubmitRegistration() {
+    return Boolean(state.isAdmin || isPublicRegistrationOpen());
+  }
+
   function updateAdminAndStatusUI() {
-    // 1. Registration Open/Closed Pill & Form Banner
+    // 1. Registration Open/Closed Pill & Form Banner (always reflects real public state)
     const badge = document.getElementById('regOpenStatusBadge');
     const dot = document.getElementById('regOpenStatusDot');
     const text = document.getElementById('regOpenStatusText');
     const closedBanner = document.getElementById('registrationClosedBanner');
     const toggleBtn = document.getElementById('btnToggleRegistrationOpen');
 
-    const effectivelyOpen = isRegistrationEffectivelyOpen();
+    const publicOpen = isPublicRegistrationOpen();
     const closeDateObj = getEffectiveRegistrationCloseDate();
     const closeTime = closeDateObj.getTime();
     const isAutoLocked =
       state.registrationOpen &&
-      !state.isAdmin &&
       !isNaN(closeTime) &&
       Date.now() > closeTime;
 
@@ -881,7 +1147,7 @@
     const closeDateStr = closeDateObj.getDate() + ' ' + thaiMonths[closeDateObj.getMonth()] + ' ' + (closeDateObj.getFullYear() + 543) + ' เวลา ' + String(closeDateObj.getHours()).padStart(2, '0') + '.' + String(closeDateObj.getMinutes()).padStart(2, '0') + ' น.';
 
     if (badge && dot && text) {
-      if (effectivelyOpen) {
+      if (publicOpen) {
         badge.className =
           'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EDF3EC] border border-[#D7E6D5] text-[#448361] text-xs font-heading font-medium';
         dot.className = 'w-2 h-2 rounded-full bg-[#448361]';
@@ -897,14 +1163,33 @@
     }
 
     if (closedBanner) {
-      if (effectivelyOpen) {
+      const closedTitle = closedBanner.querySelector('div.font-heading');
+      const closedText = closedBanner.querySelector('p');
+      if (publicOpen) {
         closedBanner.classList.add('hidden');
-      } else {
-        closedBanner.classList.remove('hidden');
-        const closedText = closedBanner.querySelector('p');
-        if (closedText && isAutoLocked) {
+      } else if (state.isAdmin) {
+        closedBanner.className = 'mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-950';
+        if (closedTitle) {
+          closedTitle.textContent = 'ขณะนี้ปิดรับสมัครสำหรับโรงเรียนทั่วไปแล้ว (โหมดแอดมิน)';
+        }
+        if (closedText) {
+          closedText.className = 'text-xs text-amber-800 mt-0.5';
           closedText.textContent =
-            'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อตามกำหนดการแล้ว (สิ้นสุด ' + closeDateStr + ') อยู่ระหว่างสรุปรายชื่อผู้เข้าร่วมการแข่งขัน';
+            (isAutoLocked
+              ? 'สถานะสาธารณะ: ปิดรับสมัครตามกำหนดการ (' + closeDateStr + ')'
+              : 'สถานะสาธารณะ: ปิดรับสมัครโดยแอดมิน') +
+            ' • สิทธิ์แอดมินสามารถเพิ่มหรือแก้ไขรายชื่อแทนโรงเรียนได้โดยไม่เปิดระบบสาธารณะ';
+        }
+      } else {
+        closedBanner.className = 'mb-6 bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-900';
+        if (closedTitle) {
+          closedTitle.textContent = 'ขณะนี้ระบบปิดรับสมัครแล้ว';
+        }
+        if (closedText) {
+          closedText.className = 'text-xs text-rose-700 mt-0.5';
+          closedText.textContent = isAutoLocked
+            ? 'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อตามกำหนดการแล้ว (สิ้นสุด ' + closeDateStr + ') อยู่ระหว่างสรุปรายชื่อผู้เข้าร่วมการแข่งขัน'
+            : 'หากต้องการแก้ไขข้อมูลเร่งด่วน กรุณาติดต่อผู้ดูแลระบบระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
         }
       }
     }
@@ -926,7 +1211,7 @@
     }
 
     if (cfgScheduleBadge && cfgScheduleStatusText) {
-      if (effectivelyOpen) {
+      if (publicOpen) {
         cfgScheduleBadge.className = 'px-2.5 py-1 rounded-md text-xs font-heading font-medium bg-emerald-50 text-emerald-700 border border-emerald-200';
         cfgScheduleBadge.textContent = 'เปิดรับสมัคร';
         cfgScheduleStatusText.textContent = 'สถานะ: กำลังเปิดรับสมัคร (สิ้นสุด ' + closeDateStr + ')';
@@ -1161,11 +1446,20 @@
       }
     }
 
-    // District Representatives Criteria in Admin
-    const repCriteriaSelect = document.getElementById('cfgDistrictRepCriteriaSelect');
-    if (repCriteriaSelect && document.activeElement !== repCriteriaSelect) {
-      repCriteriaSelect.value = cfg.districtRepCriteria || 'rank_1';
-    }
+    // District Representatives Criteria in Admin (3 Level Tracks)
+    const critMap = getDistrictRepCriteriaConfig(cfg);
+    [
+      ['cfgDistrictRepCriteriaPrimarySelect', critMap.primary],
+      ['cfgDistrictRepCriteriaMixedSelect', critMap.mixed],
+      ['cfgDistrictRepCriteriaSecondarySelect', critMap.secondary]
+    ].forEach(function (pair) {
+      const sel = document.getElementById(pair[0]);
+      if (sel && document.activeElement !== sel) {
+        sel.value = pair[1];
+      }
+    });
+
+    renderTimelineAdminEditor();
   }
 
   function updateFeatureVisibilityUI() {
@@ -1324,7 +1618,30 @@
       });
     });
 
-    // 6. Sidebar Group Header (Hide if no buttons visible)
+    // 6. Sidebar Shortcut for ID Cards & Group Header Visibility
+    const idCardsEnabled = isIdCardsPrintingEnabled();
+    const subFormEnabled = isSubstitutionFormEnabled();
+
+    const navShortcutIdCardsEl = document.getElementById('navShortcutIdCards');
+    const navBadgeIdCardsEl = document.getElementById('navBadgeIdCards');
+    if (navShortcutIdCardsEl) {
+      if (idCardsEnabled || state.isAdmin) {
+        navShortcutIdCardsEl.classList.remove('hidden');
+        visibleBtnCount++;
+        if (navBadgeIdCardsEl) {
+          if (idCardsEnabled) {
+            navBadgeIdCardsEl.className = 'text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold shrink-0';
+            navBadgeIdCardsEl.textContent = 'พร้อมพิมพ์';
+          } else {
+            navBadgeIdCardsEl.className = 'text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-normal shrink-0';
+            navBadgeIdCardsEl.textContent = 'แอดมิน';
+          }
+        }
+      } else {
+        navShortcutIdCardsEl.classList.add('hidden');
+      }
+    }
+
     const sbGroup = document.getElementById('sidebarGroupPhase2');
     if (sbGroup) {
       if (visibleBtnCount > 0) {
@@ -1334,7 +1651,12 @@
       }
     }
 
-    // 7. Dashboard Announcement Card
+    // 7. Dashboard Announcement Cards
+    const dashIdCardsBanner = document.getElementById('dashIdCardsShortcutBanner');
+    if (dashIdCardsBanner) {
+      dashIdCardsBanner.classList.toggle('hidden', !idCardsEnabled);
+    }
+
     const dashRow = document.getElementById('phase2DashboardHighlightRow');
     if (dashRow) {
       const showDash = isFeatureOpenToPublic('results') || state.isAdmin;
@@ -1346,8 +1668,6 @@
     }
 
     // 8. ID Cards Printing & Substitution Request Form Visibility Controls
-    const idCardsEnabled = isIdCardsPrintingEnabled();
-    const subFormEnabled = isSubstitutionFormEnabled();
 
     const btnPrintSchoolIdCardsEl = document.getElementById('btnPrintSchoolIdCards');
     if (btnPrintSchoolIdCardsEl) {
@@ -1971,6 +2291,10 @@
         if (regOpenFlag !== null) {
           state.registrationOpen = regOpenFlag;
           localStorage.setItem(REG_OPEN_KEY, String(regOpenFlag));
+        }
+        if (data.config && Array.isArray(data.config.operationTimeline) && data.config.operationTimeline.length) {
+          if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+          state.config.operationTimeline = data.config.operationTimeline;
         }
         saveState();
         populateStaticSelects();
@@ -2868,7 +3192,7 @@
   async function handleRegistrationSubmit(e) {
     e.preventDefault();
 
-    if (!isRegistrationEffectivelyOpen()) {
+    if (!canCurrentUserSubmitRegistration()) {
       showToast(
         'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อแล้ว (สิ้นสุดวันที่ 19 พ.ย. 2569 เวลา 23.59 น.) กรุณาติดต่อผู้ดูแลระบบ',
         'error'
@@ -3462,6 +3786,224 @@
     });
   }
 
+  function openUniquePeopleModal(tabMode) {
+    state.uniquePeopleModalTab = tabMode === 'teachers' ? 'teachers' : 'students';
+    const filterEl = document.getElementById('uniquePeopleSchoolFilter');
+    if (filterEl && filterEl.options.length <= 1) {
+      let html = '<option value="ALL">-- ทุกโรงเรียน (13 โรงเรียน) --</option>';
+      (state.schools || []).forEach(function (s) {
+        html += '<option value="' + escapeHtml(s.school_name) + '">' + escapeHtml(s.school_name) + '</option>';
+      });
+      filterEl.innerHTML = html;
+    }
+    const modal = document.getElementById('uniquePeopleModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+    renderUniquePeopleModal();
+  }
+
+  function closeUniquePeopleModal() {
+    const modal = document.getElementById('uniquePeopleModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  }
+
+  function renderUniquePeopleModal() {
+    const listEl = document.getElementById('uniquePeopleModalList');
+    if (!listEl) return;
+    const stats = computeParticipantStats(state.registrations);
+    const isTeachers = state.uniquePeopleModalTab === 'teachers';
+    const filterEl = document.getElementById('uniquePeopleSchoolFilter');
+    const schoolFilter = filterEl ? filterEl.value : 'ALL';
+
+    const stuBtn = document.getElementById('tabUniqueStudentsBtn');
+    const tchBtn = document.getElementById('tabUniqueTeachersBtn');
+    const stuCnt = document.getElementById('modalMultiStuTabCount');
+    const tchCnt = document.getElementById('modalMultiTchTabCount');
+    if (stuCnt) stuCnt.textContent = String(stats.multiEntryStudents.length);
+    if (tchCnt) tchCnt.textContent = String(stats.multiTeamTeachers.length);
+
+    if (stuBtn && tchBtn) {
+      const activeCls = 'px-3 py-1.5 rounded-md font-semibold transition cursor-pointer bg-white text-slate-900 shadow-2xs';
+      const inactiveCls = 'px-3 py-1.5 rounded-md font-medium transition cursor-pointer text-slate-600 hover:text-slate-900';
+      stuBtn.className = isTeachers ? inactiveCls : activeCls;
+      tchBtn.className = isTeachers ? activeCls : inactiveCls;
+    }
+
+    const summaryEl = document.getElementById('uniquePeopleModalSummary');
+    if (summaryEl) {
+      summaryEl.textContent =
+        'นักเรียนตัวจริง ' +
+        stats.uniqueStudents +
+        ' คน (ส่งแข่งรวม ' +
+        stats.rawStudents +
+        ' ครั้ง) · ครูตัวจริง ' +
+        stats.uniqueTeachers +
+        ' ท่าน (คุมทีมรวม ' +
+        stats.rawTeachers +
+        ' ครั้ง) — ตรวจสอบจากชื่อ-นามสกุลภายในโรงเรียนเดียวกัน';
+    }
+
+    const sourceList = isTeachers ? stats.multiTeamTeachers : stats.multiEntryStudents;
+    const filtered = sourceList.filter(function (entry) {
+      return schoolFilter === 'ALL' || entry.school_name === schoolFilter;
+    });
+
+    if (filtered.length === 0) {
+      listEl.innerHTML =
+        '<div class="py-8 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">ไม่พบรายชื่อที่ลงมากกว่า 1 รายการตามตัวกรองที่เลือก</div>';
+      return;
+    }
+
+    listEl.innerHTML = filtered
+      .map(function (entry, idx) {
+        const compPills = entry.items
+          .map(function (it, k) {
+            return (
+              '<div class="flex items-start gap-1.5 py-1 px-2 rounded bg-slate-50 border border-slate-200/80">' +
+              '<span class="font-heading font-semibold text-slate-500 shrink-0">' +
+              (k + 1) +
+              '.</span>' +
+              '<div class="min-w-0">' +
+              '<span class="font-heading font-semibold text-blue-700">[' +
+              escapeHtml(it.comp_id) +
+              ']</span> ' +
+              '<span class="text-slate-800 font-medium">' +
+              escapeHtml(it.comp_name) +
+              '</span>' +
+              (it.level
+                ? ' <span class="text-[10px] px-1.5 py-0.2 rounded bg-white border border-slate-200 text-slate-600 font-heading">' +
+                  escapeHtml(it.level) +
+                  '</span>'
+                : '') +
+              '</div></div>'
+            );
+          })
+          .join('');
+        return (
+          '<div class="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2">' +
+          '<div class="flex flex-wrap items-center justify-between gap-2">' +
+          '<div>' +
+          '<span class="font-heading font-bold text-slate-900 text-sm">' +
+          (idx + 1) +
+          '. ' +
+          escapeHtml(entry.displayName) +
+          '</span>' +
+          '<span class="ml-2 text-xs text-slate-500 font-heading">' +
+          escapeHtml(entry.school_name) +
+          '</span>' +
+          '</div>' +
+          '<span class="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 font-heading font-semibold text-[11px]">' +
+          entry.items.length +
+          ' รายการ' +
+          '</span>' +
+          '</div>' +
+          '<div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">' +
+          compPills +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+  }
+
+  function renderTimelineAdminEditor() {
+    const container = document.getElementById('adminTimelineEditorList');
+    if (!container) return;
+    if (!Array.isArray(state.timelineDraft)) {
+      state.timelineDraft = cloneDeep(getEffectiveTimelineItems());
+    }
+    const list = state.timelineDraft;
+    if (list.length === 0) {
+      container.innerHTML =
+        '<div class="p-4 text-center text-slate-400 border border-dashed border-slate-200 rounded-lg">ยังไม่มีขั้นตอนกำหนดการ กด "+ เพิ่มขั้นตอน" ด้านบน</div>';
+      return;
+    }
+
+    container.innerHTML = list
+      .map(function (it, idx) {
+        const resolved = resolveTimelineStepState(it);
+        const badgeCls =
+          resolved.key === 'active'
+            ? 'bg-[#EDF3EC] text-[#448361] border-[#D7E6D5]'
+            : resolved.key === 'done'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            : 'bg-[#F1F1EF] text-[#787774] border-slate-200';
+        return (
+          '<div class="p-3 rounded-lg border border-slate-200 bg-slate-50/70 space-y-2" data-timeline-row="' +
+          idx +
+          '">' +
+          '<div class="flex flex-wrap items-center justify-between gap-2">' +
+          '<div class="flex items-center gap-2">' +
+          '<span class="w-5 h-5 rounded bg-slate-900 text-white font-heading font-bold text-[11px] flex items-center justify-center">' +
+          (idx + 1) +
+          '</span>' +
+          '<span class="px-2 py-0.5 rounded border text-[10px] font-heading font-semibold ' +
+          badgeCls +
+          '" data-tl-preview-badge>' +
+          escapeHtml(resolved.label) +
+          '</span>' +
+          '</div>' +
+          '<div class="flex items-center gap-1">' +
+          '<button type="button" data-tl-move-up="' +
+          idx +
+          '" ' +
+          (idx === 0 ? 'disabled ' : '') +
+          'class="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-600 font-heading text-[11px] cursor-pointer">ขึ้น</button>' +
+          '<button type="button" data-tl-move-down="' +
+          idx +
+          '" ' +
+          (idx === list.length - 1 ? 'disabled ' : '') +
+          'class="px-2 py-1 rounded border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 text-slate-600 font-heading text-[11px] cursor-pointer">ลง</button>' +
+          '<button type="button" data-tl-delete="' +
+          idx +
+          '" class="px-2 py-1 rounded border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-heading text-[11px] cursor-pointer">ลบ</button>' +
+          '</div>' +
+          '</div>' +
+          '<div>' +
+          '<label class="block text-[11px] font-heading font-medium text-slate-600 mb-0.5">หัวข้อ / รายละเอียดขั้นตอน</label>' +
+          '<input type="text" data-tl-field="title" data-tl-idx="' +
+          idx +
+          '" value="' +
+          escapeHtml(it.title || '') +
+          '" placeholder="เช่น เปิดระบบลงทะเบียนและส่งรายชื่อ..." class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-slate-900 focus:outline-none" />' +
+          '</div>' +
+          '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">' +
+          '<div>' +
+          '<label class="block text-[11px] font-heading font-medium text-slate-600 mb-0.5">วันเริ่มต้น (เดินอัตโนมัติ)</label>' +
+          '<input type="date" data-tl-field="startDate" data-tl-idx="' +
+          idx +
+          '" value="' +
+          escapeHtml(it.startDate || '') +
+          '" class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-slate-900 focus:outline-none" />' +
+          '</div>' +
+          '<div>' +
+          '<label class="block text-[11px] font-heading font-medium text-slate-600 mb-0.5">วันสิ้นสุด (เดินอัตโนมัติ)</label>' +
+          '<input type="date" data-tl-field="endDate" data-tl-idx="' +
+          idx +
+          '" value="' +
+          escapeHtml(it.endDate || '') +
+          '" class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs focus:border-slate-900 focus:outline-none" />' +
+          '</div>' +
+          '</div>' +
+          '<div>' +
+          '<label class="block text-[11px] font-heading font-medium text-slate-600 mb-0.5">ข้อความวันที่โชว์บนการ์ด</label>' +
+          '<input type="text" data-tl-field="period" data-tl-idx="' +
+          idx +
+          '" value="' +
+          escapeHtml(it.period || '') +
+          '" placeholder="เช่น 20 พฤศจิกายน 2569" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-slate-900 focus:outline-none" />' +
+          '</div>' +
+          '</div>'
+        );
+      })
+      .join('');
+  }
+
   function renderDashboardTab() {
     const totalComp = state.competitions.length;
     const compRegMap = {};
@@ -3469,10 +4011,7 @@
       compRegMap[c.comp_id] = 0;
     });
 
-    let totalStudents = 0;
-    let totalTeachers = 0;
     const activeSchoolSet = new Set();
-
     state.registrations.forEach(function (r) {
       if (compRegMap[r.comp_id] !== undefined) {
         compRegMap[r.comp_id]++;
@@ -3480,9 +4019,11 @@
         compRegMap[r.comp_id] = 1;
       }
       activeSchoolSet.add(r.school_name);
-      totalStudents += Array.isArray(r.students) ? r.students.length : 0;
-      totalTeachers += Array.isArray(r.teachers) ? r.teachers.length : 0;
     });
+
+    const participantStats = computeParticipantStats(state.registrations);
+    const totalStudents = participantStats.uniqueStudents;
+    const totalTeachers = participantStats.uniqueTeachers;
 
     let regCompCount = 0;
     state.competitions.forEach(function (c) {
@@ -3527,11 +4068,9 @@
       }
     }
 
-    // Set KPI numbers
+    // Set KPI numbers (unique real people on top, slot count underneath)
     const totalJudges = state.judges.length;
-    const grandTotalPeople = ENABLE_PHASE_2
-      ? totalStudents + totalTeachers + totalJudges
-      : totalStudents + totalTeachers;
+    const grandTotalPeople = totalStudents + totalTeachers;
     document.getElementById('kpiTotalComp').textContent = String(totalComp);
     document.getElementById('kpiRegComp').textContent = String(regCompCount);
     document.getElementById('kpiRegCompPct').textContent = regPct + '%';
@@ -3541,27 +4080,71 @@
     document.getElementById('kpiTotalTeams').textContent = String(state.registrations.length);
     document.getElementById('kpiTotalStudents').textContent = String(totalStudents);
     document.getElementById('kpiTotalTeachers').textContent = String(totalTeachers);
+    setTextById('kpiRawStudents', String(participantStats.rawStudents));
+    setTextById('kpiRawTeachers', String(participantStats.rawTeachers));
+    setTextById('kpiMultiStudentsCount', String(participantStats.multiEntryStudents.length));
+    setTextById('kpiMultiTeachersCount', String(participantStats.multiTeamTeachers.length));
+
+    const btnMultiStu = document.getElementById('btnOpenMultiStudentsModal');
+    if (btnMultiStu) {
+      btnMultiStu.classList.toggle('hidden', participantStats.multiEntryStudents.length === 0);
+    }
+    const btnMultiTch = document.getElementById('btnOpenMultiTeachersModal');
+    if (btnMultiTch) {
+      btnMultiTch.classList.toggle('hidden', participantStats.multiTeamTeachers.length === 0);
+    }
+
     const elKpiJudges = document.getElementById('kpiTotalJudges');
     if (elKpiJudges) elKpiJudges.textContent = String(totalJudges);
     const elKpiGrand = document.getElementById('kpiGrandTotalPeople');
     if (elKpiGrand) elKpiGrand.textContent = String(grandTotalPeople);
 
-    // 5-Step Visual Timeline Stepper Card on Dashboard (Roadmap)
+    // Visual Timeline Stepper Card on Dashboard (Auto Date Driven + Admin Editable)
     const stepperEl = document.getElementById('dashboardTimelineStepper');
     if (stepperEl) {
-      const items = DEFAULT_DATA.operationTimeline || [];
+      const items = getEffectiveTimelineItems();
+      const countBadgeEl = document.getElementById('dashboardTimelineCountBadge');
+      if (countBadgeEl) countBadgeEl.textContent = items.length + ' ขั้นตอนหลัก';
+
+      const lgColsClass =
+        items.length <= 1
+          ? 'grid-cols-1'
+          : items.length === 2
+          ? 'grid-cols-1 sm:grid-cols-2'
+          : items.length === 3
+          ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+          : items.length === 4
+          ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+          : items.length === 5
+          ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5'
+          : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+      stepperEl.className = 'grid ' + lgColsClass + ' gap-3';
+
+      const nowMs = Date.now();
+      const checkSvg =
+        '<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>';
+
       stepperEl.innerHTML = items
-        .map(function (it) {
-          const isActive = String(it.status || '').indexOf('กำลัง') !== -1;
+        .map(function (it, idx) {
+          const st = resolveTimelineStepState(it, nowMs);
+          const isActive = st.key === 'active';
+          const isDone = st.key === 'done';
           const cardCls = isActive
             ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-200 shadow-2xs'
+            : isDone
+            ? 'bg-emerald-50/35 border-emerald-200/80'
             : 'bg-[#F7F7F5] border-slate-200/90';
           const stepBadgeCls = isActive
             ? 'bg-amber-600 text-white'
+            : isDone
+            ? 'bg-emerald-600 text-white'
             : 'bg-[#37352F] text-white';
           const statusBadgeCls = isActive
             ? 'bg-[#EDF3EC] text-[#448361] border-[#D7E6D5]'
+            : isDone
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
             : 'bg-[#F1F1EF] text-[#787774] border-slate-200';
+          const stepContent = isDone ? checkSvg : escapeHtml(it.step || String(idx + 1));
           return (
             '<div class="flex flex-col justify-between p-3.5 rounded-xl border text-xs transition ' +
             cardCls +
@@ -3571,12 +4154,12 @@
             '<span class="w-5 h-5 rounded-md font-heading font-bold flex items-center justify-center shrink-0 text-[11px] ' +
             stepBadgeCls +
             '">' +
-            escapeHtml(it.step) +
+            stepContent +
             '</span>' +
             '<span class="px-2 py-0.5 rounded border text-[10px] font-heading font-medium ' +
             statusBadgeCls +
             '">' +
-            escapeHtml(it.status) +
+            escapeHtml(st.label) +
             '</span>' +
             '</div>' +
             '<div class="font-heading font-semibold text-slate-900 leading-snug mb-1.5">' +
@@ -4623,11 +5206,14 @@
       if (Number(r.rank) === 1) winCount++;
     });
 
+    const schParticipantStats = computeParticipantStats(regs);
     document.getElementById('schKpiItems').textContent = String(regs.length);
     document.getElementById('schKpiSingle').textContent = String(singleCount);
     document.getElementById('schKpiTeam').textContent = String(teamCount);
-    document.getElementById('schKpiStudents').textContent = String(stuCount);
-    document.getElementById('schKpiTeachers').textContent = String(tchCount);
+    document.getElementById('schKpiStudents').textContent = String(schParticipantStats.uniqueStudents);
+    document.getElementById('schKpiTeachers').textContent = String(schParticipantStats.uniqueTeachers);
+    setTextById('schKpiRawStudents', String(schParticipantStats.rawStudents));
+    setTextById('schKpiRawTeachers', String(schParticipantStats.rawTeachers));
 
     const showScores = shouldShowScoresInTables();
     const medalSummaryEl = document.getElementById('schoolViewMedalSummary');
@@ -7739,8 +8325,7 @@
     // Update district representative criteria badge text
     const criteriaTextEl = document.getElementById('resDistrictCriteriaText');
     if (criteriaTextEl) {
-      const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
-      criteriaTextEl.textContent = getDistrictRepCriteriaLabel(criteria);
+      criteriaTextEl.textContent = getDistrictRepCriteriaSummaryLabel();
     }
 
     // Group registrations by comp_id
@@ -10000,8 +10585,7 @@
 
   // Export District Representatives as .xlsx
   async function exportDistrictRepresentativesExcel() {
-    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
-    const criteriaLabel = getDistrictRepCriteriaLabel(criteria);
+    const criteriaLabel = getDistrictRepCriteriaSummaryLabel();
     const list = state.registrations.filter(isDistrictRepresentative);
     if (list.length === 0) {
       showToast('ยังไม่มีผลการแข่งขันที่ผ่านเกณฑ์ตัวแทนไปแข่งขันระดับเขต (' + criteriaLabel + ')', 'warning');
@@ -10150,8 +10734,7 @@
 
   // Print Official District Representatives Report (A4 Landscape)
   function printDistrictRepresentativesReport() {
-    const criteria = (state.config && state.config.districtRepCriteria) || 'rank_1';
-    const criteriaLabel = getDistrictRepCriteriaLabel(criteria);
+    const criteriaLabel = getDistrictRepCriteriaSummaryLabel();
     const list = state.registrations.filter(isDistrictRepresentative);
     if (list.length === 0) {
       showToast('ยังไม่มีผลการแข่งขันที่ผ่านเกณฑ์ตัวแทนไปแข่งขันระดับเขต (' + criteriaLabel + ')', 'warning');
@@ -11467,10 +12050,10 @@
     openIdCardsPrintWindow('บัตรประจำตัวคณะกรรมการตัดสิน', [buildCardForJudge(judge)]);
   }
 
-  let cachedObecLogoAsset = null;
-  function getObecLogoSvgAsset() {
-    if (cachedObecLogoAsset) return Promise.resolve(cachedObecLogoAsset);
-    return fetch('assets/logo-obec.svg')
+  const cachedSvgAssets = {};
+  function renderSvgAssetToPngDataUrl(assetPath, width, height) {
+    if (cachedSvgAssets[assetPath]) return Promise.resolve(cachedSvgAssets[assetPath]);
+    return fetch(assetPath)
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.text();
@@ -11484,13 +12067,13 @@
             img.onload = function () {
               try {
                 const canvas = document.createElement('canvas');
-                canvas.width = 547;
-                canvas.height = 789;
+                canvas.width = width;
+                canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 URL.revokeObjectURL(blobUrl);
-                cachedObecLogoAsset = canvas.toDataURL('image/png');
-                resolve(cachedObecLogoAsset);
+                cachedSvgAssets[assetPath] = canvas.toDataURL('image/png');
+                resolve(cachedSvgAssets[assetPath]);
               } catch (err) {
                 URL.revokeObjectURL(blobUrl);
                 resolve(null);
@@ -11511,8 +12094,17 @@
       });
   }
 
+  function getObecLogoSvgAsset() {
+    return renderSvgAssetToPngDataUrl('assets/logo-obec.svg', 547, 789);
+  }
+
+  function getCardWatermarkAsset() {
+    return renderSvgAssetToPngDataUrl('assets/watermark-hybrid-frameless.svg', 600, 600);
+  }
+
   async function openIdCardsPrintWindow(title, cards, opts) {
     const isAdminPreview = Boolean(opts && opts.previewByAdmin);
+    const initialPrintMode = (opts && opts.printMode) === 'front_only' ? 'front_only' : 'both';
     if (!isIdCardsPrintingEnabled() && !(state.isAdmin && isAdminPreview)) {
       showToast('ขณะนี้ผู้ดูแลระบบปิดการพิมพ์บัตรประจำตัวไว้ชั่วคราว', 'warning');
       return;
@@ -11523,28 +12115,17 @@
       return;
     }
 
-    const obecPngUrl = await getObecLogoSvgAsset();
-    await ensureLocalCardPhotosLoaded();
-    const cfg = state.config || DEFAULT_CONFIG;
+    const assetResults = await Promise.all([
+      getObecLogoSvgAsset(),
+      getCardWatermarkAsset(),
+      ensureLocalCardPhotosLoaded()
+    ]);
+    const obecPngUrl = assetResults[0];
+    const watermarkPngUrl = assetResults[1];
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
     const logoObecUrl = obecPngUrl || (baseDir + 'assets/logo-obec.svg');
-    const cardWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
-    const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
-    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+    const cardWatermarkUrl = watermarkPngUrl || (baseDir + 'assets/watermark-hybrid-frameless.svg');
     const showVenueSchedule = isFeatureOpenToPublic('venue');
-    const rawSigUrl = cfg.certSignatureUrl || '';
-    const sigUrl = rawSigUrl
-      ? (/^(data:|https?:|blob:|\/)/i.test(rawSigUrl) ? rawSigUrl : baseDir + rawSigUrl)
-      : '';
-    const sigOffsetX = Number.isFinite(Number(cfg.certSigOffsetX)) ? Number(cfg.certSigOffsetX) : DEFAULT_CONFIG.certSigOffsetX;
-    const sigOffsetY = Number.isFinite(Number(cfg.certSigOffsetY)) ? Number(cfg.certSigOffsetY) : DEFAULT_CONFIG.certSigOffsetY;
-    const sigScale = Number.isFinite(Number(cfg.certSigScale)) ? Number(cfg.certSigScale) : DEFAULT_CONFIG.certSigScale;
-    const sigScaleFactor = Math.max(0.5, Math.min(2.0, sigScale / 100));
-    const sigTransformCss =
-      'translate(' + (sigOffsetX * 0.45).toFixed(1) + 'px, ' + (sigOffsetY * 0.45).toFixed(1) + 'px) scale(' + sigScaleFactor.toFixed(2) + ')';
-    const sigHtml = sigUrl
-      ? `<div class="back-sign-img-wrap"><img src="${escapeHtml(sigUrl)}" alt="ลายมือชื่อ" class="back-sign-img" style="transform:${sigTransformCss};" /></div>`
-      : `<div class="back-sign-line">..................................................</div>`;
 
     let kanokTilesHtml = '';
     for (let kx = 0; kx < 720; kx += 80) {
@@ -11572,18 +12153,24 @@
       return `<div class="box-kanok-strip ${cls}"><svg class="kanok-svg" viewBox="0 0 720 18" preserveAspectRatio="none" aria-hidden="true"><use href="#kanok-strip-sym"/></svg></div>`;
     }
 
-    function renderCard(c) {
-      if (!c) return '';
-      const qrPayloadUrl = encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (c.ref_code || ''));
-      const rulesItemsHtml = (c.rules || [])
-        .map(function (ruleText) {
-          return `<li>${escapeHtml(ruleText)}</li>`;
-        })
-        .join('');
+    function renderFrontCardBox(c, qrPayloadUrl, showFrontQr) {
+      const photoSrc = getResolvedCardPhotoUrl(c);
+      const photoSlotHtml = photoSrc
+        ? `<div class="front-photo-frame"><img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" /></div>`
+        : `<div class="front-photo-empty-space" aria-hidden="true"></div>`;
+
+      const frontQrHtml = showFrontQr
+        ? `<div class="front-sign-bottom-row">
+                  <div class="front-qr-box">
+                    <div class="front-qr-frame">
+                      <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${qrPayloadUrl}" class="front-qr-img" alt="QR Code ตรวจสิทธิ์" onerror="this.style.opacity='0'" />
+                    </div>
+                    <div class="front-qr-text">สแกนตรวจสิทธิ์</div>
+                  </div>
+                </div>`
+        : '';
 
       return `
-        <div class="foldable-card-wrap">
-          <!-- BOX 1 (LEFT): FRONT CARD - INDEPENDENT BOX WITH NAVY/GOLD KANOK TRIM & ASYMMETRIC HIERARCHY -->
           <div class="card-box card-box-front">
             ${renderKanokStrip('box-kanok-top')}
 
@@ -11602,6 +12189,10 @@
               </div>
 
               <div class="front-asymmetric-mid">
+                <div class="front-photo-top-row">
+                  ${photoSlotHtml}
+                </div>
+
                 <div class="front-hero-left">
                   <div class="front-code-tag">${escapeHtml(c.ref_code)}</div>
                   <div class="front-person-name">${escapeHtml(formatFullNameForPrint('', c.person_name))}</div>
@@ -11623,21 +12214,7 @@
                   </div>
                 </div>
 
-                <div class="front-photo-right">
-                  <div class="front-photo-frame">
-                    ${(function () {
-                      const photoSrc = getResolvedCardPhotoUrl(c);
-                      if (photoSrc) {
-                        return `<img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" />`;
-                      }
-                      return `<svg class="photo-user-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/></svg><span class="photo-box-label">ติดรูปถ่าย</span><span class="photo-box-hint">1 – 1.5 นิ้ว</span>`;
-                    })()}
-                  </div>
-                  <div class="front-holder-sign">
-                    <div class="front-sign-dots">...........................</div>
-                    <div class="front-sign-cap">ลงชื่อผู้ถือบัตร</div>
-                  </div>
-                </div>
+                ${frontQrHtml}
               </div>
 
               <div class="front-bottom-barcode">
@@ -11648,13 +12225,29 @@
 
             ${renderKanokStrip('box-kanok-bottom')}
           </div>
+      `;
+    }
+
+    function renderCard(c) {
+      if (!c) return '';
+      const qrPayloadUrl = encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (c.ref_code || ''));
+      const rulesItemsHtml = (c.rules || [])
+        .map(function (ruleText) {
+          return `<li>${escapeHtml(ruleText)}</li>`;
+        })
+        .join('');
+
+      return `
+        <div class="foldable-card-wrap">
+          <!-- BOX 1 (LEFT): FRONT CARD -->
+          ${renderFrontCardBox(c, qrPayloadUrl, false)}
 
           <!-- CLEAN FOLD/CUT GAP BETWEEN THE TWO SEPARATE BOXES -->
           <div class="card-gap-divider">
             <div class="fold-guide-label"><span>รอยพับ / แยกแผ่น</span></div>
           </div>
 
-          <!-- BOX 2 (RIGHT): BACK CARD - INDEPENDENT BOX WITH NAVY/GOLD KANOK TRIM -->
+          <!-- BOX 2 (RIGHT): BACK CARD -->
           <div class="card-box card-box-back">
             ${renderKanokStrip('box-kanok-top')}
             <img src="${escapeHtml(cardWatermarkUrl)}" alt="" class="back-watermark-img" />
@@ -11671,28 +12264,22 @@
                 <div class="back-event-pill">${escapeHtml(c.badge_type)}</div>
               </div>
 
-              <div class="back-terms-box">
-                <div class="back-terms-title">${escapeHtml(c.rules_title)}</div>
-                <ol class="back-terms-list">
-                  ${rulesItemsHtml}
-                </ol>
-                <div class="back-schedule-strip">
-                  แข่งขัน 24 – 25 พ.ย. 2569 • ศูนย์แข่งขันกลุ่ม รร.วังยาวเขวาไร่ดอนกลาง
-                </div>
-              </div>
-
-              <div class="back-footer-asym">
-                <div class="back-qr-left">
+              <div class="back-lower-stack">
+                <div class="back-qr-top-left">
                   <div class="back-qr-frame">
                     <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${qrPayloadUrl}" class="back-qr-img" alt="QR Code ตรวจสอบข้อมูล" onerror="this.style.opacity='0'" />
                   </div>
                   <div class="back-qr-label">สแกนตรวจสิทธิ์</div>
                 </div>
 
-                <div class="back-certifier-right">
-                  ${sigHtml}
-                  <div class="back-cert-name">(${escapeHtml(signerName)})</div>
-                  <div class="back-cert-pos">${escapeHtml(signerPos)}</div>
+                <div class="back-terms-box">
+                  <div class="back-terms-title">${escapeHtml(c.rules_title)}</div>
+                  <ol class="back-terms-list">
+                    ${rulesItemsHtml}
+                  </ol>
+                  <div class="back-schedule-strip">
+                    แข่งขัน 24 – 25 พ.ย. 2569 • ศูนย์แข่งขันกลุ่ม รร.วังยาวเขวาไร่ดอนกลาง
+                  </div>
                 </div>
               </div>
             </div>
@@ -11703,7 +12290,24 @@
       `;
     }
 
-    // Chunk cards into pairs (2 two-box cards per A4 page)
+    function renderFrontOnlyPair(cLeft, cRight) {
+      if (!cLeft) return '';
+      const qrLeft = encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (cLeft.ref_code || ''));
+      const rightHtml = cRight
+        ? renderFrontCardBox(cRight, encodeURIComponent('https://campingroom.github.io/talent69/#card=' + (cRight.ref_code || '')), true)
+        : `<div class="card-box card-box-empty-slot" aria-hidden="true"></div>`;
+      return `
+        <div class="foldable-card-wrap">
+          ${renderFrontCardBox(cLeft, qrLeft, true)}
+          <div class="card-gap-divider">
+            <div class="fold-guide-label"><span>รอยตัดแยกบัตร</span></div>
+          </div>
+          ${rightHtml}
+        </div>
+      `;
+    }
+
+    // Chunk Both-Side cards (2 two-box cards per A4 page)
     const sheetsHtml = [];
     for (let i = 0; i < cards.length; i += 2) {
       const card1 = cards[i];
@@ -11716,6 +12320,31 @@
               <span>[-- รอยตัดแยกชุดบัตร (ด้านหน้า และ ด้านหลัง แยกกล่องชัดเจน พับครึ่งประกบกันได้พอดี) --]</span>
             </div>
             ${renderCard(card2)}
+          ` : `
+            <div class="cut-line">
+              <span>[-- รอยตัดแยกแผ่น --]</span>
+            </div>
+            <div class="card-empty-placeholder"></div>
+          `}
+        </div>
+      `);
+    }
+
+    // Chunk Front-Only cards (4 front cards 2x2 per A4 page)
+    const frontOnlySheetsHtml = [];
+    for (let i = 0; i < cards.length; i += 4) {
+      const c1 = cards[i];
+      const c2 = cards[i + 1] || null;
+      const c3 = cards[i + 2] || null;
+      const c4 = cards[i + 3] || null;
+      frontOnlySheetsHtml.push(`
+        <div class="a4-sheet">
+          ${renderFrontOnlyPair(c1, c2)}
+          ${c3 ? `
+            <div class="cut-line">
+              <span>[-- รอยตัดแยกบัตร (พิมพ์เฉพาะด้านหน้า • 4 ใบต่อ 1 แผ่น A4) --]</span>
+            </div>
+            ${renderFrontOnlyPair(c3, c4)}
           ` : `
             <div class="cut-line">
               <span>[-- รอยตัดแยกแผ่น --]</span>
@@ -11748,12 +12377,20 @@
       background: #0B1E47;
       color: #fff;
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
+      gap: 10px;
       font-family: 'Niramit', 'Prompt', sans-serif;
       border-bottom: 2px solid #D4AF37;
     }
-    .no-print button {
+    .no-print-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .no-print button.btn-print-main {
       background: linear-gradient(135deg, #FCE276 0%, #D4AF37 100%);
       color: #0B1E47;
       border: none;
@@ -11762,6 +12399,30 @@
       font-weight: 700;
       cursor: pointer;
       font-family: 'Niramit', 'Prompt', sans-serif;
+    }
+    .no-print button.btn-mode-toggle {
+      background: rgba(255, 255, 255, 0.12);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Niramit', 'Prompt', sans-serif;
+    }
+    .no-print button.btn-mode-toggle.active {
+      background: #ffffff;
+      color: #0B1E47;
+      border-color: #FCE276;
+    }
+    .mode-wrap.is-hidden {
+      display: none !important;
+    }
+    .card-box-empty-slot {
+      border: 1px dashed #cbd5e1 !important;
+      box-shadow: none !important;
+      background: transparent !important;
     }
     .a4-sheet {
       width: 196mm;
@@ -11872,13 +12533,20 @@
     .front-asymmetric-mid {
       flex: 1;
       display: flex;
-      align-items: stretch;
-      gap: 3mm;
-      padding: 2.5mm 0 1.5mm 0;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1.5mm;
+      padding: 2mm 0 1mm 0;
       min-height: 0;
+    }
+    .front-photo-top-row {
+      display: flex;
+      justify-content: flex-end;
+      flex-shrink: 0;
     }
     .front-hero-left {
       flex: 1;
+      width: 100%;
       min-width: 0;
       display: flex;
       flex-direction: column;
@@ -11888,52 +12556,52 @@
       display: inline-block;
       align-self: flex-start;
       font-family: monospace;
-      font-size: 7.4px;
+      font-size: 9px;
       font-weight: 700;
       color: #0B1E47;
       background: #fef3c7;
       border: 1px solid #D4AF37;
       border-radius: 4px;
-      padding: 0.5px 5px;
-      margin-bottom: 2mm;
+      padding: 1px 7px;
+      margin-bottom: 1.4mm;
     }
     .front-person-name {
       font-family: 'Prompt', 'Niramit', sans-serif;
-      font-size: 14.5px;
+      font-size: 21px;
       font-weight: 700;
       color: #0B1E47;
-      line-height: 1.18;
+      line-height: 1.16;
       word-break: break-word;
     }
     .front-sub-role {
-      font-size: 8.2px;
+      font-size: 10.5px;
       font-weight: 600;
       color: #926815;
       margin-top: 1px;
-      margin-bottom: 2.5mm;
+      margin-bottom: 2mm;
     }
     .front-comp-block {
       background: rgba(11, 30, 71, 0.04);
-      border-left: 3px solid #D4AF37;
+      border-left: 3.5px solid #D4AF37;
       border-radius: 0 5px 5px 0;
-      padding: 2mm 2.5mm;
-      margin-bottom: 2mm;
+      padding: 2mm 2.8mm;
+      margin-bottom: 1.8mm;
     }
     .front-comp-label {
-      font-size: 6.8px;
+      font-size: 8.5px;
       font-weight: 700;
       color: #475569;
       margin-bottom: 1px;
     }
     .front-comp-name {
-      font-size: 9.8px;
+      font-size: 11.8px;
       font-weight: 700;
       color: #0B1E47;
       line-height: 1.24;
       word-break: break-word;
     }
     .front-school-row {
-      font-size: 8.6px;
+      font-size: 11px;
       font-weight: 700;
       color: #1e293b;
       line-height: 1.22;
@@ -11942,30 +12610,50 @@
     .front-meta-chip-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 2px 4px;
+      gap: 3px 5px;
     }
     .front-meta-chip {
-      font-size: 7px;
+      font-size: 8.6px;
       font-weight: 600;
       color: #334155;
       background: #f1f5f9;
       border: 1px solid #cbd5e1;
       border-radius: 4px;
-      padding: 0.5px 4.5px;
+      padding: 1px 6px;
     }
-
-    .front-photo-right {
-      width: 27mm;
-      flex-shrink: 0;
+    .front-sign-bottom-row {
       display: flex;
+      justify-content: flex-end;
+      flex-shrink: 0;
+    }
+    .front-qr-box {
+      display: inline-flex;
       flex-direction: column;
       align-items: center;
-      justify-content: space-between;
-      padding-top: 1mm;
+      gap: 1px;
+    }
+    .front-qr-text {
+      font-size: 6.8px;
+      font-weight: 700;
+      color: #0B1E47;
+      line-height: 1.15;
+      text-align: center;
+    }
+    .front-qr-frame {
+      padding: 1.5px;
+      background: #ffffff;
+      border: 1.3px solid #D4AF37;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .front-qr-img {
+      width: 11.5mm;
+      height: 11.5mm;
+      display: block;
     }
     .front-photo-frame {
-      width: 26mm;
-      height: 31mm;
+      width: 30mm;
+      height: 36mm;
       border-radius: 6px;
       background: #ffffff;
       border: 1.8px solid #D4AF37;
@@ -11979,6 +12667,11 @@
       text-align: center;
       color: #64748b;
     }
+    .front-photo-empty-space {
+      width: 30mm;
+      height: 36mm;
+      flex-shrink: 0;
+    }
     .front-photo-img {
       width: 100%;
       height: 100%;
@@ -11986,37 +12679,6 @@
       object-position: center;
       border-radius: 4.2px;
       display: block;
-    }
-    .photo-user-icon {
-      width: 28px;
-      height: 28px;
-      color: #cbd5e1;
-      margin-bottom: 2px;
-    }
-    .photo-box-label {
-      font-size: 8px;
-      font-weight: 700;
-      color: #0B1E47;
-    }
-    .photo-box-hint {
-      font-size: 6.6px;
-      color: #64748b;
-    }
-    .front-holder-sign {
-      width: 100%;
-      text-align: center;
-      line-height: 1.1;
-      margin-top: 2mm;
-    }
-    .front-sign-dots {
-      font-size: 7.5px;
-      color: #64748b;
-      letter-spacing: 0.4px;
-    }
-    .front-sign-cap {
-      font-size: 6.6px;
-      color: #334155;
-      font-weight: 600;
     }
 
     .front-bottom-barcode {
@@ -12079,7 +12741,7 @@
       width: 56mm;
       height: 56mm;
       object-fit: contain;
-      opacity: 0.06;
+      opacity: 0.15;
       pointer-events: none;
       z-index: 1;
     }
@@ -12092,6 +12754,19 @@
       min-height: 0;
       position: relative;
       z-index: 2;
+    }
+    .back-lower-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2.2mm;
+      margin-top: auto;
+    }
+    .back-qr-top-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
     }
     .back-top-asym {
       display: flex;
@@ -12174,20 +12849,6 @@
       text-align: center;
     }
 
-    .back-footer-asym {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 3mm;
-      border-top: 1px solid rgba(212, 175, 55, 0.45);
-      padding-top: 2mm;
-    }
-    .back-qr-left {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      flex-shrink: 0;
-    }
     .back-qr-frame {
       padding: 2px;
       background: #ffffff;
@@ -12196,50 +12857,14 @@
       margin-bottom: 1px;
     }
     .back-qr-img {
-      width: 13.5mm;
-      height: 13.5mm;
+      width: 14mm;
+      height: 14mm;
       display: block;
     }
     .back-qr-label {
       font-size: 6.8px;
       font-weight: 700;
       color: #0B1E47;
-    }
-
-    .back-certifier-right {
-      flex: 1;
-      text-align: center;
-      line-height: 1.25;
-      padding-bottom: 1px;
-    }
-    .back-sign-img-wrap {
-      height: 24px;
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      overflow: visible;
-      margin-bottom: 1px;
-    }
-    .back-sign-img {
-      max-height: 24px;
-      max-width: 96px;
-      object-fit: contain;
-      transform-origin: bottom center;
-    }
-    .back-sign-line {
-      font-size: 8px;
-      color: #64748b;
-      letter-spacing: 0.8px;
-      margin-bottom: 1px;
-    }
-    .back-cert-name {
-      font-size: 8.6px;
-      font-weight: 700;
-      color: #0B1E47;
-    }
-    .back-cert-pos {
-      font-size: 6.9px;
-      color: #475569;
     }
 
     .cut-line {
@@ -12266,7 +12891,7 @@
       .no-print { display: none !important; }
       .a4-sheet { margin: 0; padding: 0; box-shadow: none; height: 284mm; }
       .card-box { box-shadow: none !important; }
-      .card-box, .box-kanok-strip, .front-role-pill, .front-code-tag, .front-comp-block, .back-event-pill, .back-watermark-img {
+      .card-box, .box-kanok-strip, .front-role-pill, .front-code-tag, .front-comp-block, .back-event-pill, .back-watermark-img, .front-qr-frame, .back-qr-frame {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
@@ -12276,16 +12901,46 @@
 <body>
   ${svgDefsBlock}
   <div class="no-print">
-    <div>${escapeHtml(title)} (รวม ${cards.length} บัตร — แยกกล่องหน้าซ้าย / กล่องหลังขวา กรอบลายกนกทอง-น้ำเงิน)</div>
-    <button onclick="window.print()">สั่งพิมพ์บัตรประจำตัว</button>
+    <div>
+      <div style="font-weight:700; font-size:13px;">${escapeHtml(title)} (รวม ${cards.length} บัตร)</div>
+      <div style="font-size:11px; color:#cbd5e1; margin-top:2px;">หมายเหตุ: รายชื่อที่ยังไม่ได้แนบรูป ระบบจะซ่อนกรอบรูปมุมขวาบนและเว้นพื้นที่โล่งให้อัตโนมัติ</div>
+    </div>
+    <div class="no-print-actions">
+      <button type="button" id="btnModeBoth" class="btn-mode-toggle ${initialPrintMode === 'both' ? 'active' : ''}">ทั้งด้านหน้า + ด้านหลัง (2 ชุด/แผ่น)</button>
+      <button type="button" id="btnModeFrontOnly" class="btn-mode-toggle ${initialPrintMode === 'front_only' ? 'active' : ''}">เฉพาะด้านหน้าที่มีชื่อ (4 ใบ/แผ่น)</button>
+      <button type="button" id="btnPopupPrintMain" class="btn-print-main">สั่งพิมพ์ / Save PDF</button>
+    </div>
   </div>
-  ${sheetsHtml.join('')}
+  <div id="sheetsBothWrap" class="mode-wrap ${initialPrintMode === 'both' ? '' : 'is-hidden'}">
+    ${sheetsHtml.join('')}
+  </div>
+  <div id="sheetsFrontOnlyWrap" class="mode-wrap ${initialPrintMode === 'front_only' ? '' : 'is-hidden'}">
+    ${frontOnlySheetsHtml.join('')}
+  </div>
 </body>
 </html>`;
 
     win.document.open();
     win.document.write(html);
     win.document.close();
+
+    function applyPopupPrintMode(mode) {
+      const bothWrap = win.document.getElementById('sheetsBothWrap');
+      const frontWrap = win.document.getElementById('sheetsFrontOnlyWrap');
+      const btnBoth = win.document.getElementById('btnModeBoth');
+      const btnFront = win.document.getElementById('btnModeFrontOnly');
+      const isFrontOnly = mode === 'front_only';
+      if (bothWrap) bothWrap.classList.toggle('is-hidden', isFrontOnly);
+      if (frontWrap) frontWrap.classList.toggle('is-hidden', !isFrontOnly);
+      if (btnBoth) btnBoth.classList.toggle('active', !isFrontOnly);
+      if (btnFront) btnFront.classList.toggle('active', isFrontOnly);
+    }
+    const popupBtnBoth = win.document.getElementById('btnModeBoth');
+    const popupBtnFront = win.document.getElementById('btnModeFrontOnly');
+    const popupBtnPrint = win.document.getElementById('btnPopupPrintMain');
+    if (popupBtnBoth) popupBtnBoth.addEventListener('click', function () { applyPopupPrintMode('both'); });
+    if (popupBtnFront) popupBtnFront.addEventListener('click', function () { applyPopupPrintMode('front_only'); });
+    if (popupBtnPrint) popupBtnPrint.addEventListener('click', function () { win.print(); });
   }
 
   function printCompetitionResultSheet(compId) {
@@ -13028,6 +13683,7 @@
         localStorage.setItem(REG_OPEN_KEY, String(state.registrationOpen));
         await postToGoogleSheets({
           action: 'set_registration_open',
+          registrationOpen: state.registrationOpen,
           registration_open: state.registrationOpen,
           admin_pin: state.adminPin
         });
@@ -13223,6 +13879,43 @@
       });
     }
 
+    function openIdCardsShortcut() {
+      if (!isIdCardsPrintingEnabled() && !state.isAdmin) {
+        showToast('ขณะนี้ผู้ดูแลระบบปิดการพิมพ์บัตรประจำตัวไว้ชั่วคราว', 'warning');
+        return;
+      }
+      if (window.innerWidth < 768) {
+        closeMobileSidebar();
+      }
+      switchTab('school');
+      setTimeout(function () {
+        const schoolSel = document.getElementById('schoolViewSelect');
+        const btnPrint = document.getElementById('btnPrintSchoolIdCards');
+        const btnPhoto = document.getElementById('btnManageSchoolCardPhotos');
+        const targetEl = btnPrint && !btnPrint.classList.contains('hidden') ? btnPrint : schoolSel;
+        if (targetEl && typeof targetEl.scrollIntoView === 'function') {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        [schoolSel, btnPhoto, btnPrint].forEach(function (el) {
+          if (!el || el.classList.contains('hidden')) return;
+          el.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+          setTimeout(function () {
+            el.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+          }, 2400);
+        });
+      }, 120);
+      showToast('เลือกโรงเรียนด้านบน แล้วกด "แนบรูปติดบัตร" หรือ "พิมพ์บัตรประจำตัว" ได้เลย', 'info');
+    }
+
+    const navShortcutIdCards = document.getElementById('navShortcutIdCards');
+    if (navShortcutIdCards) {
+      navShortcutIdCards.addEventListener('click', openIdCardsShortcut);
+    }
+    const btnDashGotoIdCards = document.getElementById('btnDashGotoIdCards');
+    if (btnDashGotoIdCards) {
+      btnDashGotoIdCards.addEventListener('click', openIdCardsShortcut);
+    }
+
     // Phase 2 School ID Cards Print & Photo Upload Buttons
     const btnPrintSchoolIdCards = document.getElementById('btnPrintSchoolIdCards');
     if (btnPrintSchoolIdCards) {
@@ -13298,8 +13991,11 @@
           showToast('ขณะนี้ผู้ดูแลระบบปิดการพิมพ์บัตรประจำตัวไว้ชั่วคราว', 'warning');
           return;
         }
+        const sideSelect = document.getElementById('cardPrintSideSelect');
+        const printMode = sideSelect && sideSelect.value === 'front_only' ? 'front_only' : 'both';
         openIdCardsPrintWindow(ctx.title.replace(/^แนบรูป.*•\s*/, 'บัตรประจำตัว • '), ctx.cards, {
-          previewByAdmin: state.isAdmin && !isIdCardsPrintingEnabled()
+          previewByAdmin: state.isAdmin && !isIdCardsPrintingEnabled(),
+          printMode: printMode
         });
       });
     }
@@ -13599,6 +14295,202 @@
       });
     }
 
+    // Unique Participants Modal Bindings (Read-only Inspection)
+    const btnOpenMultiStu = document.getElementById('btnOpenMultiStudentsModal');
+    if (btnOpenMultiStu) {
+      btnOpenMultiStu.addEventListener('click', function () {
+        openUniquePeopleModal('students');
+      });
+    }
+    const btnOpenMultiTch = document.getElementById('btnOpenMultiTeachersModal');
+    if (btnOpenMultiTch) {
+      btnOpenMultiTch.addEventListener('click', function () {
+        openUniquePeopleModal('teachers');
+      });
+    }
+    ['btnCloseUniquePeopleModal', 'btnOkUniquePeopleModal'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', closeUniquePeopleModal);
+    });
+    const uniqueModalEl = document.getElementById('uniquePeopleModal');
+    if (uniqueModalEl) {
+      uniqueModalEl.addEventListener('click', function (e) {
+        if (e.target === uniqueModalEl) closeUniquePeopleModal();
+      });
+    }
+    const tabUniqueStuBtn = document.getElementById('tabUniqueStudentsBtn');
+    if (tabUniqueStuBtn) {
+      tabUniqueStuBtn.addEventListener('click', function () {
+        state.uniquePeopleModalTab = 'students';
+        renderUniquePeopleModal();
+      });
+    }
+    const tabUniqueTchBtn = document.getElementById('tabUniqueTeachersBtn');
+    if (tabUniqueTchBtn) {
+      tabUniqueTchBtn.addEventListener('click', function () {
+        state.uniquePeopleModalTab = 'teachers';
+        renderUniquePeopleModal();
+      });
+    }
+    const uniqueSchoolFilterEl = document.getElementById('uniquePeopleSchoolFilter');
+    if (uniqueSchoolFilterEl) {
+      uniqueSchoolFilterEl.addEventListener('change', renderUniquePeopleModal);
+    }
+
+    // Admin Timeline Roadmap Editor Bindings
+    const adminTimelineListEl = document.getElementById('adminTimelineEditorList');
+    if (adminTimelineListEl) {
+      adminTimelineListEl.addEventListener('input', function (e) {
+        const target = e.target;
+        if (!target || !target.hasAttribute('data-tl-field')) return;
+        const idx = Number(target.getAttribute('data-tl-idx'));
+        const field = target.getAttribute('data-tl-field');
+        if (!Array.isArray(state.timelineDraft) || !state.timelineDraft[idx]) return;
+        const item = state.timelineDraft[idx];
+        const prevAutoPeriod = formatThaiTimelinePeriod(item.startDate, item.endDate);
+        item[field] = target.value;
+        if (field === 'startDate' || field === 'endDate') {
+          if (field === 'startDate' && (!item.endDate || item.endDate < item.startDate)) {
+            item.endDate = item.startDate;
+            const endInput = adminTimelineListEl.querySelector('input[data-tl-field="endDate"][data-tl-idx="' + idx + '"]');
+            if (endInput) endInput.value = item.endDate;
+          }
+          if (idx === 0) item.useRegCloseTime = false;
+          if (!item.period || item.period === prevAutoPeriod) {
+            item.period = formatThaiTimelinePeriod(item.startDate, item.endDate);
+            const periodInput = adminTimelineListEl.querySelector('input[data-tl-field="period"][data-tl-idx="' + idx + '"]');
+            if (periodInput) periodInput.value = item.period;
+          }
+          const rowEl = adminTimelineListEl.querySelector('[data-timeline-row="' + idx + '"]');
+          const badgeEl = rowEl ? rowEl.querySelector('[data-tl-preview-badge]') : null;
+          if (badgeEl) {
+            const st = resolveTimelineStepState(item);
+            badgeEl.textContent = st.label;
+            badgeEl.className =
+              'px-2 py-0.5 rounded border text-[10px] font-heading font-semibold ' +
+              (st.key === 'active'
+                ? 'bg-[#EDF3EC] text-[#448361] border-[#D7E6D5]'
+                : st.key === 'done'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-[#F1F1EF] text-[#787774] border-slate-200');
+          }
+        }
+      });
+
+      adminTimelineListEl.addEventListener('click', function (e) {
+        const upBtn = e.target.closest ? e.target.closest('[data-tl-move-up]') : null;
+        const downBtn = e.target.closest ? e.target.closest('[data-tl-move-down]') : null;
+        const delBtn = e.target.closest ? e.target.closest('[data-tl-delete]') : null;
+        if (!Array.isArray(state.timelineDraft)) return;
+        if (upBtn) {
+          const i = Number(upBtn.getAttribute('data-tl-move-up'));
+          if (i > 0) {
+            const tmp = state.timelineDraft[i - 1];
+            state.timelineDraft[i - 1] = state.timelineDraft[i];
+            state.timelineDraft[i] = tmp;
+            renderTimelineAdminEditor();
+          }
+        } else if (downBtn) {
+          const i = Number(downBtn.getAttribute('data-tl-move-down'));
+          if (i >= 0 && i < state.timelineDraft.length - 1) {
+            const tmp = state.timelineDraft[i + 1];
+            state.timelineDraft[i + 1] = state.timelineDraft[i];
+            state.timelineDraft[i] = tmp;
+            renderTimelineAdminEditor();
+          }
+        } else if (delBtn) {
+          const i = Number(delBtn.getAttribute('data-tl-delete'));
+          if (state.timelineDraft.length <= 1) {
+            showToast('ต้องมีอย่างน้อย 1 ขั้นตอนในกำหนดการ', 'warning');
+            return;
+          }
+          state.timelineDraft.splice(i, 1);
+          renderTimelineAdminEditor();
+        }
+      });
+    }
+
+    const btnAddTimelineStep = document.getElementById('btnAddTimelineStep');
+    if (btnAddTimelineStep) {
+      btnAddTimelineStep.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        if (!Array.isArray(state.timelineDraft)) {
+          state.timelineDraft = cloneDeep(getEffectiveTimelineItems());
+        }
+        const todayBkk = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+        state.timelineDraft.push({
+          step: String(state.timelineDraft.length + 1),
+          title: 'ขั้นตอนใหม่ (ระบุรายละเอียด)',
+          startDate: todayBkk,
+          endDate: todayBkk,
+          period: formatThaiTimelinePeriod(todayBkk, todayBkk),
+          useRegCloseTime: false
+        });
+        renderTimelineAdminEditor();
+      });
+    }
+
+    const btnSaveTimelineSteps = document.getElementById('btnSaveTimelineSteps');
+    if (btnSaveTimelineSteps) {
+      btnSaveTimelineSteps.addEventListener('click', async function () {
+        if (!state.isAdmin) return;
+        const list = Array.isArray(state.timelineDraft) ? state.timelineDraft : getEffectiveTimelineItems();
+        const cleaned = list
+          .map(function (it, idx) {
+            return {
+              step: String(idx + 1),
+              title: String((it && it.title) || '').trim(),
+              period: String((it && it.period) || formatThaiTimelinePeriod(it && it.startDate, it && it.endDate)).trim(),
+              startDate: String((it && it.startDate) || '').trim(),
+              endDate: String((it && it.endDate) || (it && it.startDate) || '').trim(),
+              useRegCloseTime: Boolean(it && it.useRegCloseTime)
+            };
+          })
+          .filter(function (it) {
+            return Boolean(it.title);
+          });
+        if (!cleaned.length) {
+          showToast('กรุณากรอกชื่อขั้นตอนอย่างน้อย 1 รายการ', 'warning');
+          return;
+        }
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        state.config.operationTimeline = cleaned;
+        state.timelineDraft = cloneDeep(cleaned);
+        saveState();
+        renderAll();
+
+        const res = await postToGoogleSheets({
+          action: 'save_timeline_config',
+          timeline: cleaned,
+          admin_pin: state.adminPin
+        });
+        if (res && res.ok) {
+          showToast('บันทึกกำหนดการไทม์ไลน์เรียบร้อยแล้ว', 'success');
+        } else {
+          showToast('บันทึกกำหนดการในหน้าเว็บแล้ว (หมายเหตุ: ซิงก์ขึ้น Apps Script เมื่อ Deploy Code.gs ใหม่)', 'info');
+        }
+      });
+    }
+
+    const btnResetTimelineSteps = document.getElementById('btnResetTimelineSteps');
+    if (btnResetTimelineSteps) {
+      btnResetTimelineSteps.addEventListener('click', async function () {
+        if (!state.isAdmin) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        state.config.operationTimeline = null;
+        state.timelineDraft = cloneDeep(DEFAULT_DATA.operationTimeline || []);
+        saveState();
+        renderAll();
+        await postToGoogleSheets({
+          action: 'save_timeline_config',
+          reset: true,
+          timeline: null,
+          admin_pin: state.adminPin
+        });
+        showToast('รีเซ็ตกำหนดการไทม์ไลน์เป็นค่าเริ่มต้นปี 2569 เรียบร้อยแล้ว', 'success');
+      });
+    }
+
     const btnToggleRegistrationOpenSchedule = document.getElementById(
       'btnToggleRegistrationOpenSchedule'
     );
@@ -13609,6 +14501,7 @@
         localStorage.setItem(REG_OPEN_KEY, String(state.registrationOpen));
         await postToGoogleSheets({
           action: 'set_registration_open',
+          registrationOpen: state.registrationOpen,
           registration_open: state.registrationOpen,
           admin_pin: state.adminPin
         });
@@ -13645,24 +14538,44 @@
       btnAdminPrintDistrictRepsReport.addEventListener('click', printDistrictRepresentativesReport);
     }
 
-    const repCriteriaSelect = document.getElementById('cfgDistrictRepCriteriaSelect');
-    const btnSaveDistrictRepCriteria = document.getElementById('btnSaveDistrictRepCriteria');
-    if (btnSaveDistrictRepCriteria && repCriteriaSelect) {
-      btnSaveDistrictRepCriteria.addEventListener('click', function () {
-        if (!state.isAdmin) return;
-        state.config.districtRepCriteria = repCriteriaSelect.value || 'rank_1';
-        saveState();
-        renderAll();
-        showToast('บันทึกเกณฑ์ตัวแทนระดับเขตฯ เรียบร้อยแล้ว: ' + getDistrictRepCriteriaLabel(state.config.districtRepCriteria), 'success');
+    const repCriteriaBindings = [
+      ['cfgDistrictRepCriteriaPrimarySelect', 'districtRepCriteriaPrimary'],
+      ['cfgDistrictRepCriteriaMixedSelect', 'districtRepCriteriaMixed'],
+      ['cfgDistrictRepCriteriaSecondarySelect', 'districtRepCriteriaSecondary']
+    ];
+    function applyDistrictRepCriteriaFromUI(isExplicitSave) {
+      if (!state.isAdmin) return;
+      if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+      repCriteriaBindings.forEach(function (pair) {
+        const sel = document.getElementById(pair[0]);
+        if (sel && sel.value) {
+          state.config[pair[1]] = sel.value;
+        }
       });
-      repCriteriaSelect.addEventListener('change', function () {
-        if (!state.isAdmin) return;
-        state.config.districtRepCriteria = repCriteriaSelect.value || 'rank_1';
-        saveState();
-        renderAll();
-        showToast('ปรับเกณฑ์ตัวแทนระดับเขตฯ เป็น: ' + getDistrictRepCriteriaLabel(state.config.districtRepCriteria), 'info');
+      state.config.districtRepCriteria = state.config.districtRepCriteriaPrimary || 'rank_1';
+      saveState();
+      renderAll();
+      const summary = getDistrictRepCriteriaSummaryLabel(state.config);
+      showToast(
+        (isExplicitSave ? 'บันทึกเกณฑ์ตัวแทนระดับเขตฯ เรียบร้อยแล้ว: ' : 'ปรับเกณฑ์ตัวแทนระดับเขตฯ เป็น: ') + summary,
+        isExplicitSave ? 'success' : 'info'
+      );
+    }
+
+    const btnSaveDistrictRepCriteria = document.getElementById('btnSaveDistrictRepCriteria');
+    if (btnSaveDistrictRepCriteria) {
+      btnSaveDistrictRepCriteria.addEventListener('click', function () {
+        applyDistrictRepCriteriaFromUI(true);
       });
     }
+    repCriteriaBindings.forEach(function (pair) {
+      const sel = document.getElementById(pair[0]);
+      if (sel) {
+        sel.addEventListener('change', function () {
+          applyDistrictRepCriteriaFromUI(false);
+        });
+      }
+    });
 
     // Feature Visibility Toggle Handlers (Admin)
     const btnUnlockAllFeaturesNow = document.getElementById('btnUnlockAllFeaturesNow');
@@ -13690,11 +14603,12 @@
         state.config.featureVisibility.judges = 'auto';
         state.config.featureVisibility.results = 'auto';
         state.config.featureVisibility.certificates = 'auto';
-        state.config.featureVisibility.id_cards = 'hidden';
+        state.config.featureVisibility.id_cards = 'open';
         state.config.featureVisibility.substitution_form = 'hidden';
+        state.config.idCardsDefaultMigratedV1 = true;
         saveState();
         renderAll();
-        showToast('รีเซ็ตทุกฟีเจอร์เป็นค่ามาตรฐานแล้ว (คงสถานะปิดห้องสอบ/ปุ่มพิมพ์บัตร/ใบเปลี่ยนตัว)', 'info');
+        showToast('รีเซ็ตทุกฟีเจอร์เป็นค่ามาตรฐานแล้ว (คงสถานะเปิดพิมพ์บัตร และปิดห้องสอบ/ใบเปลี่ยนตัว)', 'info');
       });
     }
 
