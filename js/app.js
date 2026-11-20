@@ -9712,15 +9712,66 @@
     ]);
   }
 
-  function openIdCardsPrintWindow(title, cards, opts) {
+  let cachedObecLogoAsset = null;
+  function getObecLogoSvgAsset() {
+    if (cachedObecLogoAsset) return Promise.resolve(cachedObecLogoAsset);
+    return fetch('assets/logo-obec.svg')
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function (svgText) {
+        return new Promise(function (resolve) {
+          try {
+            const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+            const blobUrl = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = function () {
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width = 547;
+                canvas.height = 789;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(blobUrl);
+                cachedObecLogoAsset = canvas.toDataURL('image/png');
+                resolve(cachedObecLogoAsset);
+              } catch (err) {
+                URL.revokeObjectURL(blobUrl);
+                resolve(null);
+              }
+            };
+            img.onerror = function () {
+              URL.revokeObjectURL(blobUrl);
+              resolve(null);
+            };
+            img.src = blobUrl;
+          } catch (err) {
+            resolve(null);
+          }
+        });
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  async function openIdCardsPrintWindow(title, cards, opts) {
     const isAdminPreview = Boolean(opts && opts.previewByAdmin);
     if (!isIdCardsPrintingEnabled() && !(state.isAdmin && isAdminPreview)) {
       showToast('ขณะนี้ผู้ดูแลระบบปิดการพิมพ์บัตรประจำตัวไว้ชั่วคราว', 'warning');
       return;
     }
+    const win = window.open('', '_blank');
+    if (!win) {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
+      return;
+    }
+
+    const obecPngUrl = await getObecLogoSvgAsset();
     const cfg = state.config || DEFAULT_CONFIG;
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
-    const logoObecUrl = baseDir + 'assets/logo-obec.svg';
+    const logoObecUrl = obecPngUrl || (baseDir + 'assets/logo-obec.svg');
     const cardWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
     const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
     const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
@@ -9739,18 +9790,31 @@
       ? `<div class="back-sign-img-wrap"><img src="${escapeHtml(sigUrl)}" alt="ลายมือชื่อ" class="back-sign-img" style="transform:${sigTransformCss};" /></div>`
       : `<div class="back-sign-line">..................................................</div>`;
 
-    const kanokBorderSvg =
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 18" width="40" height="9">' +
-      '<rect width="80" height="18" fill="#0B1E47"/>' +
-      '<path d="M0 15 Q10 2 20 15 Q30 2 40 15 Q50 2 60 15 Q70 2 80 15 L80 18 L0 18 Z" fill="#D4AF37"/>' +
-      '<path d="M0 0 L40 0 L40 14 Q20 3 0 14 Z" fill="#0B1E47"/>' +
-      '<path d="M40 0 L80 0 L80 14 Q60 3 40 14 Z" fill="#D4AF37"/>' +
-      '<path d="M12 13 C12 7, 19 5, 20 10 C21 13, 16 14, 16 11" stroke="#FCE276" stroke-width="1.35" fill="none" stroke-linecap="round"/>' +
-      '<path d="M52 13 C52 7, 59 5, 60 10 C61 13, 56 14, 56 11" stroke="#0B1E47" stroke-width="1.35" fill="none" stroke-linecap="round"/>' +
-      '<polygon points="40,4 44,9 40,14 36,9" fill="#FFFFFF" stroke="#0B1E47" stroke-width="0.9"/>' +
-      '<rect y="16" width="80" height="2" fill="#D4AF37"/>' +
-      '</svg>';
-    const kanokBorderUrl = 'url("data:image/svg+xml;utf8,' + encodeURIComponent(kanokBorderSvg) + '")';
+    let kanokTilesHtml = '';
+    for (let kx = 0; kx < 720; kx += 80) {
+      kanokTilesHtml +=
+        `<g transform="translate(${kx},0)">` +
+        `<path d="M0 15 Q10 2 20 15 Q30 2 40 15 Q50 2 60 15 Q70 2 80 15 L80 18 L0 18 Z" fill="#D4AF37"/>` +
+        `<path d="M0 0 L40 0 L40 14 Q20 3 0 14 Z" fill="#0B1E47"/>` +
+        `<path d="M40 0 L80 0 L80 14 Q60 3 40 14 Z" fill="#D4AF37"/>` +
+        `<path d="M12 13 C12 7, 19 5, 20 10 C21 13, 16 14, 16 11" stroke="#FCE276" stroke-width="1.35" fill="none" stroke-linecap="round"/>` +
+        `<path d="M52 13 C52 7, 59 5, 60 10 C61 13, 56 14, 56 11" stroke="#0B1E47" stroke-width="1.35" fill="none" stroke-linecap="round"/>` +
+        `<polygon points="40,4 44,9 40,14 36,9" fill="#FFFFFF" stroke="#0B1E47" stroke-width="0.9"/>` +
+        `</g>`;
+    }
+
+    const svgDefsBlock =
+      `<svg style="position:absolute;width:0;height:0;overflow:hidden;" aria-hidden="true">` +
+      `<defs>` +
+      `<symbol id="kanok-strip-sym" viewBox="0 0 720 18" preserveAspectRatio="none">` +
+      `<rect width="720" height="18" fill="#0B1E47"/>${kanokTilesHtml}<rect y="16" width="720" height="2" fill="#D4AF37"/>` +
+      `</symbol>` +
+      `</defs>` +
+      `</svg>`;
+
+    function renderKanokStrip(cls) {
+      return `<div class="box-kanok-strip ${cls}"><svg class="kanok-svg" viewBox="0 0 720 18" preserveAspectRatio="none" aria-hidden="true"><use href="#kanok-strip-sym"/></svg></div>`;
+    }
 
     function renderCard(c) {
       if (!c) return '';
@@ -9765,7 +9829,7 @@
         <div class="foldable-card-wrap">
           <!-- BOX 1 (LEFT): FRONT CARD - INDEPENDENT BOX WITH NAVY/GOLD KANOK TRIM & ASYMMETRIC HIERARCHY -->
           <div class="card-box card-box-front">
-            <div class="box-kanok-strip box-kanok-top"></div>
+            ${renderKanokStrip('box-kanok-top')}
 
             <div class="front-body">
               <div class="front-top-bar">
@@ -9824,7 +9888,7 @@
               </div>
             </div>
 
-            <div class="box-kanok-strip box-kanok-bottom"></div>
+            ${renderKanokStrip('box-kanok-bottom')}
           </div>
 
           <!-- CLEAN FOLD/CUT GAP BETWEEN THE TWO SEPARATE BOXES -->
@@ -9834,7 +9898,7 @@
 
           <!-- BOX 2 (RIGHT): BACK CARD - INDEPENDENT BOX WITH NAVY/GOLD KANOK TRIM -->
           <div class="card-box card-box-back">
-            <div class="box-kanok-strip box-kanok-top"></div>
+            ${renderKanokStrip('box-kanok-top')}
             <img src="${escapeHtml(cardWatermarkUrl)}" alt="" class="back-watermark-img" />
 
             <div class="back-body">
@@ -9875,7 +9939,7 @@
               </div>
             </div>
 
-            <div class="box-kanok-strip box-kanok-bottom"></div>
+            ${renderKanokStrip('box-kanok-bottom')}
           </div>
         </div>
       `;
@@ -9982,10 +10046,13 @@
       height: 9px;
       flex-shrink: 0;
       background-color: #0B1E47;
-      background-image: ${kanokBorderUrl};
-      background-repeat: repeat-x;
-      background-size: 40px 9px;
+      overflow: hidden;
       z-index: 3;
+    }
+    .kanok-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
     .box-kanok-bottom {
       transform: scaleY(-1);
@@ -10430,6 +10497,7 @@
       body { background: #ffffff; }
       .no-print { display: none !important; }
       .a4-sheet { margin: 0; padding: 0; box-shadow: none; height: 284mm; }
+      .card-box { box-shadow: none !important; }
       .card-box, .box-kanok-strip, .front-role-pill, .front-code-tag, .front-comp-block, .back-event-pill, .back-watermark-img {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
@@ -10438,6 +10506,7 @@
   </style>
 </head>
 <body>
+  ${svgDefsBlock}
   <div class="no-print">
     <div>${escapeHtml(title)} (รวม ${cards.length} บัตร — แยกกล่องหน้าซ้าย / กล่องหลังขวา กรอบลายกนกทอง-น้ำเงิน)</div>
     <button onclick="window.print()">สั่งพิมพ์บัตรประจำตัว</button>
@@ -10446,14 +10515,9 @@
 </body>
 </html>`;
 
-    const win = window.open('', '_blank');
-    if (win) {
-      win.document.open();
-      win.document.write(html);
-      win.document.close();
-    } else {
-      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
-    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
   }
 
   function printCompetitionResultSheet(compId) {
@@ -12047,6 +12111,7 @@
   // Boot Application
   document.addEventListener('DOMContentLoaded', function () {
     loadState();
+    getObecLogoSvgAsset();
     populateStaticSelects();
     initEvents();
     onRegistrationSelectionChange();
