@@ -847,29 +847,32 @@
     );
   }
 
-  function isRegistrationEffectivelyOpen() {
+  function isPublicRegistrationOpen() {
     if (!state.registrationOpen) return false;
     const closeTime = getEffectiveRegistrationCloseDate().getTime();
-    if (!state.isAdmin && !isNaN(closeTime) && Date.now() > closeTime) {
+    if (!isNaN(closeTime) && Date.now() > closeTime) {
       return false;
     }
     return true;
   }
 
+  function canCurrentUserSubmitRegistration() {
+    return Boolean(state.isAdmin || isPublicRegistrationOpen());
+  }
+
   function updateAdminAndStatusUI() {
-    // 1. Registration Open/Closed Pill & Form Banner
+    // 1. Registration Open/Closed Pill & Form Banner (always reflects real public state)
     const badge = document.getElementById('regOpenStatusBadge');
     const dot = document.getElementById('regOpenStatusDot');
     const text = document.getElementById('regOpenStatusText');
     const closedBanner = document.getElementById('registrationClosedBanner');
     const toggleBtn = document.getElementById('btnToggleRegistrationOpen');
 
-    const effectivelyOpen = isRegistrationEffectivelyOpen();
+    const publicOpen = isPublicRegistrationOpen();
     const closeDateObj = getEffectiveRegistrationCloseDate();
     const closeTime = closeDateObj.getTime();
     const isAutoLocked =
       state.registrationOpen &&
-      !state.isAdmin &&
       !isNaN(closeTime) &&
       Date.now() > closeTime;
 
@@ -877,7 +880,7 @@
     const closeDateStr = closeDateObj.getDate() + ' ' + thaiMonths[closeDateObj.getMonth()] + ' ' + (closeDateObj.getFullYear() + 543) + ' เวลา ' + String(closeDateObj.getHours()).padStart(2, '0') + '.' + String(closeDateObj.getMinutes()).padStart(2, '0') + ' น.';
 
     if (badge && dot && text) {
-      if (effectivelyOpen) {
+      if (publicOpen) {
         badge.className =
           'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EDF3EC] border border-[#D7E6D5] text-[#448361] text-xs font-heading font-medium';
         dot.className = 'w-2 h-2 rounded-full bg-[#448361]';
@@ -893,14 +896,33 @@
     }
 
     if (closedBanner) {
-      if (effectivelyOpen) {
+      const closedTitle = closedBanner.querySelector('div.font-heading');
+      const closedText = closedBanner.querySelector('p');
+      if (publicOpen) {
         closedBanner.classList.add('hidden');
-      } else {
-        closedBanner.classList.remove('hidden');
-        const closedText = closedBanner.querySelector('p');
-        if (closedText && isAutoLocked) {
+      } else if (state.isAdmin) {
+        closedBanner.className = 'mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-950';
+        if (closedTitle) {
+          closedTitle.textContent = 'ขณะนี้ปิดรับสมัครสำหรับโรงเรียนทั่วไปแล้ว (โหมดแอดมิน)';
+        }
+        if (closedText) {
+          closedText.className = 'text-xs text-amber-800 mt-0.5';
           closedText.textContent =
-            'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อตามกำหนดการแล้ว (สิ้นสุด ' + closeDateStr + ') อยู่ระหว่างสรุปรายชื่อผู้เข้าร่วมการแข่งขัน';
+            (isAutoLocked
+              ? 'สถานะสาธารณะ: ปิดรับสมัครตามกำหนดการ (' + closeDateStr + ')'
+              : 'สถานะสาธารณะ: ปิดรับสมัครโดยแอดมิน') +
+            ' • สิทธิ์แอดมินสามารถเพิ่มหรือแก้ไขรายชื่อแทนโรงเรียนได้โดยไม่เปิดระบบสาธารณะ';
+        }
+      } else {
+        closedBanner.className = 'mb-6 bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-900';
+        if (closedTitle) {
+          closedTitle.textContent = 'ขณะนี้ระบบปิดรับสมัครแล้ว';
+        }
+        if (closedText) {
+          closedText.className = 'text-xs text-rose-700 mt-0.5';
+          closedText.textContent = isAutoLocked
+            ? 'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อตามกำหนดการแล้ว (สิ้นสุด ' + closeDateStr + ') อยู่ระหว่างสรุปรายชื่อผู้เข้าร่วมการแข่งขัน'
+            : 'หากต้องการแก้ไขข้อมูลเร่งด่วน กรุณาติดต่อผู้ดูแลระบบระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
         }
       }
     }
@@ -922,7 +944,7 @@
     }
 
     if (cfgScheduleBadge && cfgScheduleStatusText) {
-      if (effectivelyOpen) {
+      if (publicOpen) {
         cfgScheduleBadge.className = 'px-2.5 py-1 rounded-md text-xs font-heading font-medium bg-emerald-50 text-emerald-700 border border-emerald-200';
         cfgScheduleBadge.textContent = 'เปิดรับสมัคร';
         cfgScheduleStatusText.textContent = 'สถานะ: กำลังเปิดรับสมัคร (สิ้นสุด ' + closeDateStr + ')';
@@ -2864,7 +2886,7 @@
   async function handleRegistrationSubmit(e) {
     e.preventDefault();
 
-    if (!isRegistrationEffectivelyOpen()) {
+    if (!canCurrentUserSubmitRegistration()) {
       showToast(
         'ขณะนี้ระบบปิดรับสมัครส่งรายชื่อแล้ว (สิ้นสุดวันที่ 19 พ.ย. 2569 เวลา 23.59 น.) กรุณาติดต่อผู้ดูแลระบบ',
         'error'
@@ -12093,6 +12115,7 @@
         localStorage.setItem(REG_OPEN_KEY, String(state.registrationOpen));
         await postToGoogleSheets({
           action: 'set_registration_open',
+          registrationOpen: state.registrationOpen,
           registration_open: state.registrationOpen,
           admin_pin: state.adminPin
         });
@@ -12595,6 +12618,7 @@
         localStorage.setItem(REG_OPEN_KEY, String(state.registrationOpen));
         await postToGoogleSheets({
           action: 'set_registration_open',
+          registrationOpen: state.registrationOpen,
           registration_open: state.registrationOpen,
           admin_pin: state.adminPin
         });
