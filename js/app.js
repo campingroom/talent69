@@ -10762,6 +10762,18 @@
               </div>
 
               <div class="front-asymmetric-mid">
+                <div class="front-photo-top-row">
+                  <div class="front-photo-frame">
+                    ${(function () {
+                      const photoSrc = getResolvedCardPhotoUrl(c);
+                      if (photoSrc) {
+                        return `<img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" />`;
+                      }
+                      return `<svg class="photo-user-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/></svg><span class="photo-box-label">ติดรูปถ่าย</span><span class="photo-box-hint">1 – 1.5 นิ้ว</span>`;
+                    })()}
+                  </div>
+                </div>
+
                 <div class="front-hero-left">
                   <div class="front-code-tag">${escapeHtml(c.ref_code)}</div>
                   <div class="front-person-name">${escapeHtml(formatFullNameForPrint('', c.person_name))}</div>
@@ -10783,16 +10795,7 @@
                   </div>
                 </div>
 
-                <div class="front-photo-right">
-                  <div class="front-photo-frame">
-                    ${(function () {
-                      const photoSrc = getResolvedCardPhotoUrl(c);
-                      if (photoSrc) {
-                        return `<img src="${escapeHtml(photoSrc)}" alt="รูปถ่าย" class="front-photo-img" />`;
-                      }
-                      return `<svg class="photo-user-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.866 0-7 2.239-7 5v1h14v-1c0-2.761-3.134-5-7-5z"/></svg><span class="photo-box-label">ติดรูปถ่าย</span><span class="photo-box-hint">1 – 1.5 นิ้ว</span>`;
-                    })()}
-                  </div>
+                <div class="front-sign-bottom-row">
                   <div class="front-holder-sign">
                     <div class="front-sign-dots">...........................</div>
                     <div class="front-sign-cap">ลงชื่อผู้ถือบัตร</div>
@@ -11032,13 +11035,20 @@
     .front-asymmetric-mid {
       flex: 1;
       display: flex;
-      align-items: stretch;
-      gap: 3mm;
-      padding: 2.5mm 0 1.5mm 0;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1.5mm;
+      padding: 2mm 0 1mm 0;
       min-height: 0;
+    }
+    .front-photo-top-row {
+      display: flex;
+      justify-content: flex-end;
+      flex-shrink: 0;
     }
     .front-hero-left {
       flex: 1;
+      width: 100%;
       min-width: 0;
       display: flex;
       flex-direction: column;
@@ -11048,80 +11058,75 @@
       display: inline-block;
       align-self: flex-start;
       font-family: monospace;
-      font-size: 7.4px;
+      font-size: 9px;
       font-weight: 700;
       color: #0B1E47;
       background: #fef3c7;
       border: 1px solid #D4AF37;
       border-radius: 4px;
-      padding: 0.5px 5px;
-      margin-bottom: 2mm;
+      padding: 1px 7px;
+      margin-bottom: 1.8mm;
     }
     .front-person-name {
       font-family: 'Prompt', 'Niramit', sans-serif;
-      font-size: 14.5px;
+      font-size: 19px;
       font-weight: 700;
       color: #0B1E47;
       line-height: 1.18;
       word-break: break-word;
     }
     .front-sub-role {
-      font-size: 8.2px;
+      font-size: 10.5px;
       font-weight: 600;
       color: #926815;
-      margin-top: 1px;
+      margin-top: 1.5px;
       margin-bottom: 2.5mm;
     }
     .front-comp-block {
       background: rgba(11, 30, 71, 0.04);
-      border-left: 3px solid #D4AF37;
+      border-left: 3.5px solid #D4AF37;
       border-radius: 0 5px 5px 0;
-      padding: 2mm 2.5mm;
-      margin-bottom: 2mm;
+      padding: 2.2mm 3mm;
+      margin-bottom: 2.2mm;
     }
     .front-comp-label {
-      font-size: 6.8px;
+      font-size: 8.5px;
       font-weight: 700;
       color: #475569;
-      margin-bottom: 1px;
+      margin-bottom: 1.5px;
     }
     .front-comp-name {
-      font-size: 9.8px;
+      font-size: 12px;
       font-weight: 700;
       color: #0B1E47;
-      line-height: 1.24;
+      line-height: 1.25;
       word-break: break-word;
     }
     .front-school-row {
-      font-size: 8.6px;
+      font-size: 11px;
       font-weight: 700;
       color: #1e293b;
-      line-height: 1.22;
-      margin-bottom: 1.5mm;
+      line-height: 1.24;
+      margin-bottom: 1.8mm;
     }
     .front-meta-chip-row {
       display: flex;
       flex-wrap: wrap;
-      gap: 2px 4px;
+      gap: 3px 5px;
     }
     .front-meta-chip {
-      font-size: 7px;
+      font-size: 8.8px;
       font-weight: 600;
       color: #334155;
       background: #f1f5f9;
       border: 1px solid #cbd5e1;
       border-radius: 4px;
-      padding: 0.5px 4.5px;
+      padding: 1px 6px;
     }
-
-    .front-photo-right {
-      width: 27mm;
-      flex-shrink: 0;
+    .front-sign-bottom-row {
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-      padding-top: 1mm;
+      justify-content: flex-end;
+      flex-shrink: 0;
     }
     .front-photo-frame {
       width: 26mm;
@@ -11163,10 +11168,10 @@
       color: #64748b;
     }
     .front-holder-sign {
-      width: 100%;
+      width: 27mm;
       text-align: center;
       line-height: 1.1;
-      margin-top: 2mm;
+      margin-top: 0;
     }
     .front-sign-dots {
       font-size: 7.5px;
