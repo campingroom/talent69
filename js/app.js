@@ -6326,57 +6326,6 @@
     }
   }
 
-  function renderCompAreaQuickJumpStrip(statusFilteredPool, activeAreaFilter) {
-    const container = document.getElementById('compAreaQuickJumpButtons');
-    if (!container) return;
-
-    const orderedAreas = [];
-    const areaCounts = {};
-    state.competitions.forEach(function (c) {
-      if (!Object.prototype.hasOwnProperty.call(areaCounts, c.learning_area)) {
-        areaCounts[c.learning_area] = 0;
-        orderedAreas.push(c.learning_area);
-      }
-    });
-    statusFilteredPool.forEach(function (c) {
-      areaCounts[c.learning_area] = (areaCounts[c.learning_area] || 0) + 1;
-    });
-
-    const pillHtml = function (areaVal, labelText, countVal, isActive) {
-      const cls = isActive
-        ? 'shrink-0 px-2.5 py-1 rounded-full font-heading text-[11px] font-semibold bg-slate-900 text-white border border-slate-900 transition cursor-pointer'
-        : countVal === 0
-          ? 'shrink-0 px-2.5 py-1 rounded-full font-heading text-[11px] font-medium bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100 transition cursor-pointer'
-          : 'shrink-0 px-2.5 py-1 rounded-full font-heading text-[11px] font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 transition cursor-pointer';
-      return (
-        '<button type="button" data-comp-quick-area="' +
-        escapeHtml(areaVal) +
-        '" class="' +
-        cls +
-        '">' +
-        escapeHtml(labelText) +
-        ' <span class="opacity-75">(' +
-        countVal +
-        ')</span></button>'
-      );
-    };
-
-    const htmlParts = [pillHtml('ALL', 'ทุกหมวด', statusFilteredPool.length, activeAreaFilter === 'ALL')];
-    orderedAreas.forEach(function (area) {
-      htmlParts.push(pillHtml(area, area, areaCounts[area] || 0, activeAreaFilter === area));
-    });
-
-    container.innerHTML = htmlParts.join('');
-    container.querySelectorAll('[data-comp-quick-area]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const targetArea = btn.getAttribute('data-comp-quick-area') || 'ALL';
-        const areaSel = document.getElementById('compViewAreaFilter');
-        if (areaSel) areaSel.value = targetArea;
-        renderCompetitionViewTab();
-      });
-    });
-  }
-
   function renderCompetitionViewTab() {
     const areaFilter = (document.getElementById('compViewAreaFilter') || {}).value || 'ALL';
     const levelFilter = (document.getElementById('compViewLevelFilter') || {}).value || 'ALL';
@@ -6401,14 +6350,8 @@
       roomBannerName.textContent = state.compRoomFilter;
     }
 
-    const matchesStatusFilter = function (c) {
-      const count = (regByComp[c.comp_id] || []).length;
-      if (state.compStatusFilter === 'REGISTERED') return count > 0;
-      if (state.compStatusFilter === 'EMPTY') return count === 0;
-      return true;
-    };
-
-    const nonAreaFiltered = state.competitions.filter(function (c) {
+    const baseFiltered = state.competitions.filter(function (c) {
+      if (areaFilter !== 'ALL' && c.learning_area !== areaFilter) return false;
       if (levelFilter !== 'ALL' && c.level !== levelFilter) return false;
       if (state.compRoomFilter !== 'ALL') {
         const cRoom = (c.venue_room || 'อาคารเรียนรวม ห้อง 101').trim();
@@ -6433,15 +6376,6 @@
       return true;
     });
 
-    renderCompAreaQuickJumpStrip(nonAreaFiltered.filter(matchesStatusFilter), areaFilter);
-
-    const baseFiltered =
-      areaFilter === 'ALL'
-        ? nonAreaFiltered
-        : nonAreaFiltered.filter(function (c) {
-            return c.learning_area === areaFilter;
-          });
-
     const regCount = baseFiltered.filter((c) => (regByComp[c.comp_id] || []).length > 0).length;
     const emptyCount = baseFiltered.length - regCount;
 
@@ -6460,7 +6394,12 @@
       }
     });
 
-    const finalList = baseFiltered.filter(matchesStatusFilter);
+    const finalList = baseFiltered.filter(function (c) {
+      const count = (regByComp[c.comp_id] || []).length;
+      if (state.compStatusFilter === 'REGISTERED') return count > 0;
+      if (state.compStatusFilter === 'EMPTY') return count === 0;
+      return true;
+    });
 
     const container = document.getElementById('competitionListContainer');
     if (!container) return;
