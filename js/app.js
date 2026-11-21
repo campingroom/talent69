@@ -377,6 +377,7 @@
     judgeHistory: [],
     pendingJudgeRegenAction: null,
     scheduleSubview: 'timeline',
+    scheduleStatusFilter: 'REG_ALL',
     scheduleHistory: [],
     pendingScheduleRegenNote: null,
     adminSettingsCategory: 'ALL',
@@ -7953,15 +7954,132 @@
     }
   }
 
-  async function parseTeacherRosterFile(file) {
-    if (!file) return;
-    const ext = (file.name.split('.').pop() || '').toLowerCase();
-    const rows = [];
+  const AUTO_JUDGE_STANDARD_MAJORS = Array.from(
+    new Set([
+      ...Object.values(AUTO_JUDGE_CORE_MAJORS),
+      ...Object.values(AUTO_JUDGE_SECONDARY_MAJORS),
+      ...Object.values(AUTO_JUDGE_GENERAL_MAJORS)
+    ])
+  );
 
+  const TEACHER_MAJOR_SYNONYM_RULES = [
+    [/หนังสือเล่มเล็ก|เล่มเล็ก/, 'หนังสือเล่มเล็ก'],
+    [/พื้นเมือง|อีสาน|โปงลาง|แคน|พิณ|หมอลำ/, 'ดนตรีพื้นเมืองอีสาน'],
+    [/ภาพยนตร์|โสต|มัลติมีเดีย|นิเทศ|สื่อการสอน/, 'ภาพยนตร์สั้น/สื่อ'],
+    [/นาฏศิลป์|รำ|ระบำ|โขน|ละคร/, 'นาฏศิลป์'],
+    [/ดนตรี|ขับร้อง|คีต|วงโย|ลูกทุ่ง/, 'ดนตรี'],
+    [/ทัศนศิลป์|ศิลปศึกษา|ศิลปะ|วาดเขียน|จิตรกรรม|ประติมากรรม/, 'ทัศนศิลป์/ศิลปะ'],
+    [/การศึกษาพิเศษ|เด็กพิเศษ|เรียนรวม|โสตศึกษา/, 'การศึกษาพิเศษ/เรียนรวม'],
+    [/ปฐมวัย|อนุบาล|เด็กเล็ก|ประถมศึกษา|การประถม/, 'ปฐมวัย'],
+    [/สุขศึกษา|พลศึกษา|พละ|กีฬา|วิทยาศาสตร์การกีฬา/, 'สุขศึกษาและพลศึกษา'],
+    [/คอมพิวเตอร์|วิทยาการคำนวณ|สารสนเทศ|\bict\b|เทคโนโลยีสารสนเทศ|\bcom\b/, 'คอมพิวเตอร์'],
+    [/คณิต|คณิตศาสตร์|\bmath\b/, 'คณิตศาสตร์'],
+    [/วิทยาศาสตร์|วิทย์ทั่วไป|ฟิสิกส์|เคมี|ชีววิทยา|\bscience\b/, 'วิทยาศาสตร์'],
+    [/ภาษาอังกฤษ|อังกฤษ|ภาษาต่างประเทศ|\beng(?:lish)?\b/, 'ภาษาอังกฤษ'],
+    [/สังคม|ประวัติศาสตร์|ภูมิศาสตร์|พระพุทธ|ศาสนา|รัฐศาสตร์|นิติศาสตร์/, 'สังคมศึกษา'],
+    [/การงาน|เกษตร|คหกรรม|ช่าง|อาชีพ|อุตสาหกรรมศิลป์|ประดิษฐ์/, 'การงานอาชีพ'],
+    [/พัฒนาผู้เรียน|ลูกเสือ|เนตรนารี|แนะแนว|ยุวกาชาด/, 'กิจกรรมพัฒนาผู้เรียน'],
+    [/ภาษาไทย|ไทย|\bthai\b/, 'ภาษาไทย']
+  ];
+
+  function normalizeTeacherMajor(rawMajor) {
+    const raw = String(rawMajor || '').replace(/\s+/g, ' ').trim();
+    if (!raw || raw === '-' || raw === '—') {
+      return { major: 'ทั่วไป/ไม่ระบุเอก', matched: false, raw: raw };
+    }
+    const exact = AUTO_JUDGE_STANDARD_MAJORS.find((m) => m === raw);
+    if (exact) return { major: exact, matched: true, raw: raw };
+    const lower = raw.toLowerCase();
+    for (let i = 0; i < TEACHER_MAJOR_SYNONYM_RULES.length; i++) {
+      const rule = TEACHER_MAJOR_SYNONYM_RULES[i];
+      if (rule[0].test(lower)) {
+        return { major: rule[1], matched: true, raw: raw };
+      }
+    }
+    return { major: raw, matched: false, raw: raw };
+  }
+
+  function stripSchoolPrefixForMatch(name) {
+    return String(name || '')
+      .replace(/^(?:โรงเรียน|ร\.?ร\.?|รร\.?)\s*/i, '')
+      .replace(/[\s.\-()]+/g, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  function normalizeTeacherSchoolName(rawSchool) {
+    const raw = String(rawSchool || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return { school_name: '', matched: false };
+    const schools = Array.isArray(state.schools) ? state.schools : [];
+    const exact = schools.find((s) => s.school_name === raw);
+    if (exact) return { school_name: exact.school_name, matched: true };
+
+    const normRaw = stripSchoolPrefixForMatch(raw);
+    if (!normRaw) return { school_name: raw, matched: false };
+
+    const exactStripped = schools.find((s) => stripSchoolPrefixForMatch(s.school_name) === normRaw);
+    if (exactStripped) return { school_name: exactStripped.school_name, matched: true };
+
+    const coreRaw = normRaw.replace(/^บ้าน/, '');
+    const partialMatches = schools.filter(function (s) {
+      const sNorm = stripSchoolPrefixForMatch(s.school_name);
+      const sCore = sNorm.replace(/^บ้าน/, '');
+      if (!coreRaw || coreRaw.length < 3) return false;
+      return sCore.includes(coreRaw) || coreRaw.includes(sCore);
+    });
+    if (partialMatches.length === 1) {
+      return { school_name: partialMatches[0].school_name, matched: true };
+    }
+    return { school_name: raw, matched: false };
+  }
+
+  function splitTeacherPrefixAndName(rawPrefix, rawName, rawLastName) {
+    let prefix = String(rawPrefix || '').replace(/\s+/g, ' ').trim();
+    const first = String(rawName || '').replace(/\s+/g, ' ').trim();
+    const last = String(rawLastName || '').replace(/\s+/g, ' ').trim();
+    let combined = last && !first.includes(last) ? (first + ' ' + last).trim() : first;
+    if (!combined) return { prefix: prefix, full_name: '' };
+
+    const cleanName = stripThaiPersonTitle(combined);
+    if (!prefix && cleanName && cleanName !== combined) {
+      const idx = combined.lastIndexOf(cleanName);
+      if (idx > 0) {
+        prefix = combined.slice(0, idx).trim();
+      }
+    }
+    return { prefix: prefix, full_name: cleanName || combined };
+  }
+
+  function excelCellToString(val) {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val.trim();
+    if (typeof val === 'number' || typeof val === 'boolean') return String(val).trim();
+    if (val instanceof Date) return val.toISOString().slice(0, 10);
+    if (typeof val === 'object') {
+      if (Array.isArray(val.richText)) {
+        return val.richText.map((r) => (r && r.text) || '').join('').trim();
+      }
+      if (val.text !== undefined) return String(val.text || '').trim();
+      if (val.result !== undefined) return excelCellToString(val.result);
+    }
+    return String(val).trim();
+  }
+
+  async function extractTabularSheetsFromFile(file) {
+    if (!file) throw new Error('ไม่ได้เลือกไฟล์');
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
     if (ext === 'csv') {
-      const text = await file.text();
+      const buf = await file.arrayBuffer();
+      let text = new TextDecoder('utf-8').decode(buf);
+      if (text.includes('\uFFFD')) {
+        try {
+          text = new TextDecoder('windows-874').decode(buf);
+        } catch (_) {
+          // keep utf-8 text if windows-874 decoder is unavailable
+        }
+      }
       const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
-      if (lines.length < 2) throw new Error('ไฟล์ CSV ไม่มีข้อมูลรายชื่อครู');
+      if (lines.length === 0) throw new Error('ไฟล์ CSV ว่างเปล่า');
       const splitCsvLine = function (line) {
         const out = [];
         let cur = '';
@@ -7985,63 +8103,437 @@
         out.push(cur.trim());
         return out;
       };
-      const hdrs = splitCsvLine(lines[0]);
-      for (let r = 1; r < lines.length; r++) {
-        const vals = splitCsvLine(lines[r]);
-        const obj = {};
-        hdrs.forEach((h, idx) => {
-          obj[h] = vals[idx] || '';
-        });
-        rows.push(obj);
-      }
-    } else if (ext === 'xlsx') {
+      const rows = lines.map(splitCsvLine).filter((r) => r.some((c) => c !== ''));
+      return [{ name: file.name, rows: rows }];
+    }
+    if (ext === 'xlsx') {
       const ExcelJS = await loadExcelJs();
       const buf = await file.arrayBuffer();
       const wb = new ExcelJS.Workbook();
       await wb.xlsx.load(buf);
-      const ws = wb.getWorksheet('2_คลังครูและวิชาเอก') || wb.worksheets[0];
-      if (!ws) throw new Error('ไม่พบแผ่นงานในไฟล์ Excel');
-      let headerIdx = -1;
-      let headers = [];
-      ws.eachRow(function (row, rowNumber) {
-        const vals = (row.values || []).slice(1).map((v) => (v && typeof v === 'object' && v.text ? v.text : String(v || '').trim()));
-        if (headerIdx === -1 && rowNumber <= 10) {
-          const joined = vals.join(' ');
-          if (joined.includes('โรงเรียน') && (joined.includes('ชื่อ') || joined.includes('นามสกุล'))) {
-            headerIdx = rowNumber;
-            headers = vals;
-            return;
+      const sheets = [];
+      wb.worksheets.forEach(function (ws) {
+        const rows = [];
+        ws.eachRow(function (row) {
+          const vals = (row.values || []).slice(1).map(excelCellToString);
+          if (vals.some((v) => v !== '')) {
+            rows.push(vals);
           }
-        }
-        if (headerIdx !== -1 && rowNumber > headerIdx && vals.some((v) => v !== '')) {
-          const obj = {};
-          headers.forEach((h, idx) => {
-            obj[h] = vals[idx] || '';
-          });
-          rows.push(obj);
+        });
+        if (rows.length > 0) {
+          sheets.push({ name: ws.name || 'Sheet1', rows: rows });
         }
       });
-    } else {
-      throw new Error('รองรับเฉพาะไฟล์ .xlsx หรือ .csv เท่านั้น');
+      if (sheets.length === 0) throw new Error('ไม่พบข้อมูลในไฟล์ Excel');
+      return sheets;
+    }
+    throw new Error('รองรับเฉพาะไฟล์ .xlsx หรือ .csv เท่านั้น');
+  }
+
+  function detectTeacherImportConfig(rows) {
+    const maxScan = Math.min(rows.length, 15);
+    let bestRowIdx = -1;
+    let bestScore = 0;
+
+    const matchFieldByHeader = function (h) {
+      const s = String(h || '').replace(/\s+/g, '').toLowerCase();
+      if (!s) return '';
+      if (/คำนำหน้า|ยศ|prefix|title/.test(s)) return 'prefix';
+      if (/โรงเรียน|สถานศึกษา|สังกัด|รร\.|ร\.ร\.|school/.test(s)) return 'school';
+      if (/วิชาเอก|สาขาวิชา|สาขา|กลุ่มสาระ|สาระการเรียนรู้|ความถนัด|major|subject|^เอก/.test(s)) return 'major';
+      if (/นามสกุล|สกุล|last_?name|surname/.test(s) && !/ชื่อ/.test(s)) return 'lastName';
+      if (/ชื่อ-นามสกุล|ชื่อ-สกุล|ชื่อสกุล|ชื่อนามสกุล|ชื่อและนามสกุล|ชื่อผู้สอน|ชื่อครู|บุคลากร|full_?name|^name$/.test(s)) return 'fullName';
+      if (/^ชื่อ|first_?name|ชื่อจริง|ชื่อตัว/.test(s)) return 'firstName';
+      return '';
+    };
+
+    for (let r = 0; r < maxScan; r++) {
+      const row = rows[r] || [];
+      const seen = new Set();
+      let score = 0;
+      row.forEach(function (cell) {
+        const fld = matchFieldByHeader(cell);
+        if (fld && !seen.has(fld)) {
+          seen.add(fld);
+          score += fld === 'school' || fld === 'fullName' || fld === 'firstName' ? 2 : 1;
+        }
+      });
+      if (score > bestScore) {
+        bestScore = score;
+        bestRowIdx = r;
+      }
     }
 
-    const parsed = [];
-    rows.forEach(function (rec) {
-      const sch = rec['โรงเรียน'] || rec['school_name'] || '';
-      const name = rec['ชื่อ-นามสกุล'] || rec['full_name'] || '';
-      const prefix = rec['คำนำหน้า'] || rec['prefix'] || '';
-      const major =
-        rec['วิชาเอก (แก้ไข/กรอกเพิ่มได้)'] || rec['วิชาเอก'] || rec['major'] || '';
-      if (sch && name) {
-        parsed.push({ school_name: sch, prefix: prefix, full_name: name, major: major });
-      }
-    });
-    if (parsed.length === 0) {
-      throw new Error('ไม่พบคอลัมน์ "โรงเรียน" และ "ชื่อ-นามสกุล" ในไฟล์');
+    if (bestScore < 2) bestRowIdx = -1;
+    const headerRow = bestRowIdx >= 0 ? rows[bestRowIdx] || [] : [];
+    const colCount = rows.reduce((mx, r) => Math.max(mx, r.length), 0);
+    const mapping = { schoolCol: -1, prefixCol: -1, nameCol: -1, lastNameCol: -1, majorCol: -1 };
+
+    if (bestRowIdx >= 0) {
+      headerRow.forEach(function (cell, idx) {
+        const fld = matchFieldByHeader(cell);
+        if (fld === 'school' && mapping.schoolCol === -1) mapping.schoolCol = idx;
+        else if (fld === 'prefix' && mapping.prefixCol === -1) mapping.prefixCol = idx;
+        else if (fld === 'fullName' && mapping.nameCol === -1) mapping.nameCol = idx;
+        else if (fld === 'firstName' && mapping.nameCol === -1) mapping.nameCol = idx;
+        else if (fld === 'lastName' && mapping.lastNameCol === -1) mapping.lastNameCol = idx;
+        else if (fld === 'major' && mapping.majorCol === -1) mapping.majorCol = idx;
+      });
     }
-    state.importedTeacherRoster = parsed;
-    updateAutoJudgeTeacherPoolBadge();
-    showToast('นำเข้าข้อมูลครูและวิชาเอกสำเร็จ (' + parsed.length + ' แถว)', 'success');
+
+    // Content-based fallback when header is missing or partial
+    const sampleRows = rows.slice(bestRowIdx + 1, Math.min(rows.length, bestRowIdx + 25));
+    if (sampleRows.length > 0) {
+      for (let c = 0; c < colCount; c++) {
+        const vals = sampleRows.map((r) => String(r[c] || '').trim()).filter(Boolean);
+        if (vals.length === 0) continue;
+        if (mapping.schoolCol === -1) {
+          const schoolHits = vals.filter((v) => normalizeTeacherSchoolName(v).matched).length;
+          if (schoolHits >= Math.max(1, Math.ceil(vals.length * 0.4))) {
+            mapping.schoolCol = c;
+            continue;
+          }
+        }
+        if (mapping.majorCol === -1) {
+          const majorHits = vals.filter((v) => normalizeTeacherMajor(v).matched).length;
+          if (majorHits >= Math.max(1, Math.ceil(vals.length * 0.4))) {
+            mapping.majorCol = c;
+            continue;
+          }
+        }
+        if (mapping.prefixCol === -1) {
+          const prefixHits = vals.filter((v) => /^(?:นาย|นางสาว|น\.ส\.|นาง|ว่าที่\s*ร\.ต\.|ดร\.|ผอ\.)$/.test(v)).length;
+          if (prefixHits >= Math.max(1, Math.ceil(vals.length * 0.4))) {
+            mapping.prefixCol = c;
+            continue;
+          }
+        }
+        if (mapping.nameCol === -1) {
+          const nameHits = vals.filter((v) => !/^\d+$/.test(v) && /[ก-ฮa-zA-Z]{2,}/.test(v) && !normalizeTeacherSchoolName(v).matched).length;
+          if (nameHits >= Math.max(1, Math.ceil(vals.length * 0.5))) {
+            mapping.nameCol = c;
+          }
+        }
+      }
+    }
+
+    return {
+      headerRowIdx: bestRowIdx,
+      colCount: colCount,
+      mapping: mapping
+    };
+  }
+
+  let teacherImportDraftState = null;
+
+  function openTeacherImportPreviewModal(fileName, sheets) {
+    const modal = document.getElementById('teacherImportPreviewModal');
+    if (!modal) return;
+    let preferredIdx = sheets.findIndex((s) => s.name === '2_คลังครูและวิชาเอก');
+    if (preferredIdx === -1) {
+      preferredIdx = sheets.findIndex((s) => detectTeacherImportConfig(s.rows).headerRowIdx >= 0);
+    }
+    if (preferredIdx === -1) preferredIdx = 0;
+
+    const firstSheet = sheets[preferredIdx];
+    const detected = detectTeacherImportConfig(firstSheet.rows);
+    teacherImportDraftState = {
+      fileName: fileName,
+      sheets: sheets,
+      sheetIdx: preferredIdx,
+      headerRowIdx: detected.headerRowIdx,
+      mapping: detected.mapping,
+      fixedSchool: (state.schools && state.schools[0] && state.schools[0].school_name) || ''
+    };
+
+    const fileBadge = document.getElementById('teacherImportFileNameBadge');
+    if (fileBadge) fileBadge.textContent = fileName;
+
+    const sheetSel = document.getElementById('teacherImportSheetSelect');
+    if (sheetSel) {
+      sheetSel.innerHTML = sheets
+        .map((s, idx) => '<option value="' + idx + '">' + escapeHtml(s.name + ' (' + s.rows.length + ' แถว)') + '</option>')
+        .join('');
+      sheetSel.value = String(preferredIdx);
+    }
+
+    const fixedSchSel = document.getElementById('teacherImportFixedSchoolSelect');
+    if (fixedSchSel) {
+      fixedSchSel.innerHTML = (state.schools || [])
+        .map((s) => '<option value="' + escapeHtml(s.school_name) + '">' + escapeHtml(s.school_name) + '</option>')
+        .join('');
+      if (teacherImportDraftState.fixedSchool) {
+        fixedSchSel.value = teacherImportDraftState.fixedSchool;
+      }
+    }
+
+    syncTeacherImportMappingControls();
+    renderTeacherImportPreviewTable();
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function closeTeacherImportPreviewModal() {
+    const modal = document.getElementById('teacherImportPreviewModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    teacherImportDraftState = null;
+  }
+
+  function syncTeacherImportMappingControls() {
+    if (!teacherImportDraftState) return;
+    const sheet = teacherImportDraftState.sheets[teacherImportDraftState.sheetIdx];
+    const rows = sheet ? sheet.rows : [];
+    const headerRowSel = document.getElementById('teacherImportHeaderRowSelect');
+    if (headerRowSel) {
+      const maxOpt = Math.min(rows.length, 15);
+      let opts = '<option value="-1">ไม่มีหัวตาราง (อ่านข้อมูลตั้งแต่แถวที่ 1)</option>';
+      for (let r = 0; r < maxOpt; r++) {
+        const previewTxt = (rows[r] || []).filter(Boolean).slice(0, 4).join(' | ').slice(0, 55);
+        opts += '<option value="' + r + '">แถวที่ ' + (r + 1) + (previewTxt ? ': ' + escapeHtml(previewTxt) : '') + '</option>';
+      }
+      headerRowSel.innerHTML = opts;
+      headerRowSel.value = String(teacherImportDraftState.headerRowIdx);
+    }
+
+    const colCount = rows.reduce((mx, r) => Math.max(mx, r.length), 0);
+    const hdrRow = teacherImportDraftState.headerRowIdx >= 0 ? rows[teacherImportDraftState.headerRowIdx] || [] : [];
+    const sampleData = rows[teacherImportDraftState.headerRowIdx + 1] || rows[0] || [];
+    const buildColOptions = function (extraOptionsHtml) {
+      let html = extraOptionsHtml || '';
+      for (let c = 0; c < colCount; c++) {
+        const hdrLabel = hdrRow[c] || 'คอลัมน์ ' + (c + 1);
+        const samp = sampleData[c] ? ' (เช่น ' + String(sampleData[c]).slice(0, 22) + ')' : '';
+        html += '<option value="' + c + '">' + escapeHtml(hdrLabel + samp) + '</option>';
+      }
+      return html;
+    };
+
+    const m = teacherImportDraftState.mapping;
+    const schSel = document.getElementById('teacherMapSchoolCol');
+    const fixedSchSel = document.getElementById('teacherImportFixedSchoolSelect');
+    if (schSel) {
+      schSel.innerHTML = buildColOptions('<option value="__FIXED__">-- กำหนดเป็นโรงเรียนเดียวทั้งหมด --</option>');
+      schSel.value = m.schoolCol >= 0 ? String(m.schoolCol) : '__FIXED__';
+      if (fixedSchSel) {
+        fixedSchSel.classList.toggle('hidden', schSel.value !== '__FIXED__');
+      }
+    }
+    const pfxSel = document.getElementById('teacherMapPrefixCol');
+    if (pfxSel) {
+      pfxSel.innerHTML = buildColOptions('<option value="-1">-- ไม่มี (แยกจากชื่ออัตโนมัติ) --</option>');
+      pfxSel.value = String(m.prefixCol >= 0 ? m.prefixCol : -1);
+    }
+    const nameSel = document.getElementById('teacherMapNameCol');
+    if (nameSel) {
+      nameSel.innerHTML = buildColOptions('<option value="-1">-- ยังไม่ได้เลือก --</option>');
+      nameSel.value = String(m.nameCol >= 0 ? m.nameCol : -1);
+    }
+    const lastSel = document.getElementById('teacherMapLastNameCol');
+    if (lastSel) {
+      lastSel.innerHTML = buildColOptions('<option value="-1">-- รวมอยู่ในช่องชื่อแล้ว --</option>');
+      lastSel.value = String(m.lastNameCol >= 0 ? m.lastNameCol : -1);
+    }
+    const majSel = document.getElementById('teacherMapMajorCol');
+    if (majSel) {
+      majSel.innerHTML = buildColOptions('<option value="-1">-- ไม่มีช่องวิชาเอก --</option>');
+      majSel.value = String(m.majorCol >= 0 ? m.majorCol : -1);
+    }
+  }
+
+  function buildMappedTeacherRosterRows() {
+    if (!teacherImportDraftState) return [];
+    const sheet = teacherImportDraftState.sheets[teacherImportDraftState.sheetIdx];
+    if (!sheet) return [];
+    const rows = sheet.rows;
+    const m = teacherImportDraftState.mapping;
+    const startIdx = teacherImportDraftState.headerRowIdx >= 0 ? teacherImportDraftState.headerRowIdx + 1 : 0;
+    const useFixedSchool = m.schoolCol === -1;
+    const results = [];
+
+    for (let i = startIdx; i < rows.length; i++) {
+      const r = rows[i] || [];
+      const rawName = m.nameCol >= 0 ? r[m.nameCol] || '' : '';
+      const rawLast = m.lastNameCol >= 0 ? r[m.lastNameCol] || '' : '';
+      const rawPrefix = m.prefixCol >= 0 ? r[m.prefixCol] || '' : '';
+      const rawMajor = m.majorCol >= 0 ? r[m.majorCol] || '' : '';
+      const rawSchool = useFixedSchool ? teacherImportDraftState.fixedSchool : r[m.schoolCol] || '';
+
+      const person = splitTeacherPrefixAndName(rawPrefix, rawName, rawLast);
+      if (!person.full_name) continue;
+      if (/^(?:รวม|ทั้งหมด|หมายเหตุ|ลงชื่อ|สรุป)/.test(person.full_name)) continue;
+
+      const schRes = normalizeTeacherSchoolName(rawSchool);
+      if (!schRes.school_name) continue;
+      const majRes = normalizeTeacherMajor(rawMajor);
+
+      results.push({
+        school_name: schRes.school_name,
+        school_matched: schRes.matched,
+        prefix: person.prefix,
+        full_name: person.full_name,
+        major: majRes.major,
+        major_raw: majRes.raw,
+        major_matched: majRes.matched
+      });
+    }
+    return results;
+  }
+
+  function renderTeacherImportPreviewTable() {
+    const mapped = buildMappedTeacherRosterRows();
+    const statsEl = document.getElementById('teacherImportStatsBox');
+    const tbody = document.getElementById('teacherImportPreviewBody');
+    const footEl = document.getElementById('teacherImportPreviewFooterNote');
+    const confirmBtn = document.getElementById('btnConfirmTeacherImport');
+
+    const schoolMatchedCount = mapped.filter((x) => x.school_matched).length;
+    const majorMatchedCount = mapped.filter((x) => x.major_matched).length;
+    const majorUnmatchedCount = mapped.length - majorMatchedCount;
+
+    if (statsEl) {
+      statsEl.innerHTML =
+        '<div class="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2"><div class="text-[11px] text-slate-500">รายชื่อที่อ่านได้</div><div class="text-sm font-bold text-slate-900">' + mapped.length + ' คน</div></div>' +
+        '<div class="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2"><div class="text-[11px] text-emerald-700">จับคู่ 13 โรงเรียน</div><div class="text-sm font-bold text-emerald-900">' + schoolMatchedCount + ' คน</div></div>' +
+        '<div class="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2"><div class="text-[11px] text-blue-700">แมปกลุ่มวิชาเอกแล้ว</div><div class="text-sm font-bold text-blue-900">' + majorMatchedCount + ' คน</div></div>' +
+        '<div class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2"><div class="text-[11px] text-amber-700">ไม่ระบุ / อื่น ๆ</div><div class="text-sm font-bold text-amber-900">' + majorUnmatchedCount + ' คน</div></div>';
+    }
+
+    if (confirmBtn) {
+      confirmBtn.disabled = mapped.length === 0;
+      confirmBtn.textContent = mapped.length > 0 ? 'ยืนยันนำเข้าคลังครู (' + mapped.length + ' คน)' : 'กรุณาเลือกคอลัมน์รายชื่อให้ถูกต้อง';
+    }
+
+    if (!tbody) return;
+    if (mapped.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="py-6 px-4 text-center text-xs text-slate-500">ไม่พบรายชื่อครูจากการจับคู่คอลัมน์นี้ ลองเปลี่ยนแถวหัวตารางหรือเลือกคอลัมน์ชื่อ-สกุลด้านบน</td></tr>';
+      if (footEl) footEl.textContent = 'ยังไม่มีข้อมูลพร้อมนำเข้า';
+      return;
+    }
+
+    const previewSlice = mapped.slice(0, 40);
+    tbody.innerHTML = previewSlice
+      .map(function (row, idx) {
+        const schBadge = row.school_matched
+          ? '<span class="ml-1.5 inline-block px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[10px]">13 รร.</span>'
+          : '<span class="ml-1.5 inline-block px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[10px]">ชื่อนอกกลุ่ม</span>';
+        const majDisplay = row.major_raw && row.major_raw !== row.major
+          ? '<span class="text-slate-400">' + escapeHtml(row.major_raw) + '</span> → <strong class="text-blue-800">' + escapeHtml(row.major) + '</strong>'
+          : '<strong class="' + (row.major_matched ? 'text-blue-800' : 'text-slate-600') + '">' + escapeHtml(row.major) + '</strong>';
+        const fullDisplay = (row.prefix ? row.prefix + (row.prefix.endsWith('.') ? '' : ' ') : '') + row.full_name;
+        return (
+          '<tr class="hover:bg-slate-50/70">' +
+          '<td class="py-1.5 px-3 text-center text-slate-400">' + (idx + 1) + '</td>' +
+          '<td class="py-1.5 px-3 text-slate-800">' + escapeHtml(row.school_name) + schBadge + '</td>' +
+          '<td class="py-1.5 px-3 font-medium text-slate-900">' + escapeHtml(fullDisplay) + '</td>' +
+          '<td class="py-1.5 px-3 text-xs">' + majDisplay + '</td>' +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    if (footEl) {
+      footEl.textContent = mapped.length > 40
+        ? 'แสดงตัวอย่าง 40 คนแรก จากทั้งหมด ' + mapped.length + ' คน'
+        : 'แสดงครบทั้งหมด ' + mapped.length + ' คน';
+    }
+  }
+
+  async function downloadTeacherRosterTemplate() {
+    let ExcelJS;
+    try {
+      ExcelJS = await loadExcelJs();
+    } catch (err) {
+      showToast('ไม่สามารถโหลดตัวสร้างไฟล์ Excel ได้: ' + (err.message || err), 'error');
+      return;
+    }
+
+    const pool = buildAutoJudgeTeacherPool().slice().sort(function (a, b) {
+      const sCmp = String(a.school_name || '').localeCompare(String(b.school_name || ''), 'th');
+      if (sCmp !== 0) return sCmp;
+      return String(a.full_name || '').localeCompare(String(b.full_name || ''), 'th');
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('2_คลังครูและวิชาเอก');
+    ws.views = [{ state: 'frozen', ySplit: 2 }];
+
+    ws.mergeCells('A1:F1');
+    ws.getCell('A1').value = 'แม่แบบรายชื่อครูและวิชาเอก (เติมหรือแก้คอลัมน์ E แล้วนำเข้ากลับที่ระบบได้เลย)';
+    ws.getCell('A1').font = { name: 'TH Sarabun New', size: 15, bold: true };
+
+    const hdr = ws.getRow(2);
+    hdr.values = ['ลำดับ', 'โรงเรียน', 'คำนำหน้า', 'ชื่อ-นามสกุล', 'วิชาเอก (แก้ไข/กรอกเพิ่มได้)', 'กลุ่มสาระที่ฝึกสอนในระบบ'];
+    hdr.eachCell(function (cell) {
+      cell.font = { name: 'TH Sarabun New', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    const totalRows = Math.max(pool.length, 20);
+    for (let i = 0; i < totalRows; i++) {
+      const t = pool[i];
+      const r = ws.getRow(i + 3);
+      if (t) {
+        const areaText = Array.from(new Set((t.areas || []).map(stripAreaNumberPrefix).filter(Boolean))).join(', ');
+        r.values = [i + 1, t.school_name, t.prefix || '', t.full_name, t.major || '', areaText || '-'];
+      } else {
+        r.values = [i + 1, '', '', '', '', ''];
+      }
+      r.eachCell(function (cell, col) {
+        cell.font = { name: 'TH Sarabun New', size: 14 };
+        if (col === 5) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEFCE8' } };
+        }
+      });
+      r.getCell(5).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ["'1_คู่มือชื่อวิชาเอกมาตรฐาน'!$A$2:$A$" + (AUTO_JUDGE_STANDARD_MAJORS.length + 1)]
+      };
+    }
+    ws.columns = [{ width: 8 }, { width: 32 }, { width: 14 }, { width: 28 }, { width: 28 }, { width: 34 }];
+
+    const wsGuide = wb.addWorksheet('1_คู่มือชื่อวิชาเอกมาตรฐาน');
+    wsGuide.getRow(1).values = ['ชื่อวิชาเอกมาตรฐาน (ใช้ในระบบจัดกรรมการ)', 'รายชื่อโรงเรียนในกลุ่ม (13 แห่ง)'];
+    wsGuide.getRow(1).eachCell(function (cell) {
+      cell.font = { name: 'TH Sarabun New', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+    });
+    const maxGuideRows = Math.max(AUTO_JUDGE_STANDARD_MAJORS.length, (state.schools || []).length);
+    for (let g = 0; g < maxGuideRows; g++) {
+      const gr = wsGuide.getRow(g + 2);
+      gr.values = [
+        AUTO_JUDGE_STANDARD_MAJORS[g] || '',
+        (state.schools && state.schools[g] && state.schools[g].school_name) || ''
+      ];
+      gr.eachCell(function (cell) {
+        cell.font = { name: 'TH Sarabun New', size: 14 };
+      });
+    }
+    wsGuide.columns = [{ width: 36 }, { width: 36 }];
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'แม่แบบ_คลังครูและวิชาเอก_ศิลปหัตถกรรม74.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดไฟล์แม่แบบคลังครู (.xlsx) เรียบร้อยแล้ว', 'success');
+  }
+
+  async function parseTeacherRosterFile(file) {
+    const sheets = await extractTabularSheetsFromFile(file);
+    openTeacherImportPreviewModal(file.name, sheets);
   }
 
   function computeAutoJudgeAllocation(options) {
@@ -8439,7 +8931,7 @@
       '<div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200"><div class="text-slate-500">รายการตัดสินจริง</div><div class="text-base font-bold font-heading text-slate-900">' + s.activeCount + ' รายการ</div></div>' +
       '<div class="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200"><div class="text-emerald-700">จัดครบ 3+ คนพร้อมใช้</div><div class="text-base font-bold font-heading text-emerald-900">' + s.readyCount + ' / ' + s.activeCount + '</div></div>' +
       '<div class="p-2.5 rounded-lg bg-blue-50 border border-blue-200"><div class="text-blue-700">ได้กรรมการ &gt;3 คน (ตรงเอก)</div><div class="text-base font-bold font-heading text-blue-900">' + s.gt3Count + ' รายการ</div></div>' +
-      '<div class="p-2.5 rounded-lg bg-amber-50 border border-amber-200"><div class="text-amber-700">รายการบาย (ใส่ชื่อคำสั่ง)</div><div class="text-base font-bold font-heading text-amber-900">' + s.byeCount + ' รายการ</div></div>';
+      '<div class="p-2.5 rounded-lg bg-amber-50 border border-amber-200"><div class="text-amber-700">ชนะบาย (มีชื่อในคำสั่งเฉยๆ)</div><div class="text-base font-bold font-heading text-amber-900">' + s.byeCount + ' รายการ</div></div>';
 
     tbody.innerHTML = plan.rows
       .map(function (row) {
@@ -8472,7 +8964,7 @@
           .join('');
         const warnText =
           row.type === 'BYE'
-            ? 'พร้อม (ใส่ชื่อในคำสั่ง)'
+            ? 'มีทีมชนะบายแล้ว ไม่ต้องแข่งขัน (มีชื่อในคำสั่งเฉยๆ)'
             : row.warnings.length === 0
             ? 'พร้อม (' + row.judges.length + ' คน)'
             : row.warnings.join(', ');
@@ -8482,7 +8974,7 @@
           '<div class="font-semibold text-slate-900">[' + escapeHtml(row.comp.comp_id) + '] ' + escapeHtml(row.comp.comp_name) + ' (' + escapeHtml(row.comp.level) + ')</div>' +
           '<div class="text-[11px] text-slate-500">' + escapeHtml(row.slotLabel) + ' • ' + escapeHtml(row.formatLabel) + ' • ' + row.schoolCount + ' รร.</div>' +
           '</td>' +
-          '<td class="py-2.5 px-2 text-center align-top"><span class="inline-block px-2 py-0.5 rounded text-[11px] font-heading ' + badgeCls + '">' + escapeHtml(row.type === 'BYE' ? 'บาย' : row.judges.length + ' คน') + '</span></td>' +
+          '<td class="py-2.5 px-2 text-center align-top"><span class="inline-block px-2 py-0.5 rounded text-[11px] font-heading ' + badgeCls + '">' + escapeHtml(row.type === 'BYE' ? 'ชนะบาย (ไม่ต้องแข่ง)' : row.judges.length + ' คน') + '</span></td>' +
           '<td class="py-2.5 px-3 align-top space-y-1">' + (judgesHtml || '-') + '</td>' +
           '<td class="py-2.5 px-3 align-top text-[11px] font-medium text-slate-700">' + escapeHtml(warnText) + '</td>' +
           '</tr>'
@@ -9101,8 +9593,8 @@
             const meta = getJudgeCompScheduleMeta(grp.comp_id);
             const isBye = meta.byeStatus === 'BYE';
             const statusBadge = isBye
-              ? '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-heading font-medium">บาย (ใส่ชื่อในคำสั่ง)</span>'
-              : '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-heading font-medium">' +
+              ? '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-heading font-medium shrink-0">มีทีมชนะบายแล้ว ไม่ต้องแข่งขัน (มีชื่อในคำสั่งเฉยๆ)</span>'
+              : '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-heading font-medium shrink-0">' +
                 grp.judges.length +
                 ' ท่าน</span>';
 
@@ -9155,9 +9647,9 @@
               .join('');
 
             return (
-              '<div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-between space-y-3 shadow-2xs">' +
+              '<div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col justify-start space-y-3 shadow-2xs">' +
               '<div class="space-y-1 border-b border-slate-100 pb-2.5">' +
-              '<div class="flex items-start justify-between gap-2">' +
+              '<div class="flex flex-wrap items-start justify-between gap-2">' +
               '<h4 class="font-heading font-bold text-sm text-slate-900 leading-snug">' +
               (aIdx + 1) +
               '.' +
@@ -9170,8 +9662,10 @@
               statusBadge +
               '</div>' +
               '<div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-500">' +
-              '<span>กำหนดการ: ' +
-              escapeHtml(meta.slotLabel) +
+              '<span>' +
+              (isBye
+                ? 'สถานะ: มีทีมชนะบายแล้ว ไม่ต้องแข่งขัน (ใส่ชื่อกรรมการในคำสั่งเฉยๆ)'
+                : 'กำหนดการ: ' + escapeHtml(meta.slotLabel)) +
               '</span>' +
               '<div class="flex items-center gap-2">' +
               (meta.uniqueSchools > 0
@@ -9316,7 +9810,7 @@
             const j = entry.judge;
             const roleCls = getRoleBadgeClass(j.role);
             const typeBadge = entry.isBye
-              ? '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-heading">บาย (ในคำสั่ง)</span>'
+              ? '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-heading">ชนะบาย (มีชื่อในคำสั่งเฉยๆ)</span>'
               : '<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-heading">ตัดสินจริง</span>';
             return (
               '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50/60">' +
@@ -9333,8 +9827,8 @@
               ' (' +
               escapeHtml(j.level) +
               ')</div>' +
-              '<div class="text-xs text-slate-600">กำหนดการ: ' +
-              escapeHtml(entry.isBye ? 'ไม่นับภาระงานวันแข่ง (ใส่ชื่อในคำสั่ง)' : entry.meta.slotLabel) +
+              '<div class="text-xs text-slate-600">' +
+              (entry.isBye ? 'สถานะ: มีทีมชนะบายแล้ว ไม่ต้องแข่งขัน (มีชื่อในคำสั่งกรรมการเฉยๆ)' : 'กำหนดการ: ' + escapeHtml(entry.meta.slotLabel)) +
               '</div>' +
               '</div>' +
               '<div class="flex flex-wrap items-center gap-1.5 shrink-0">' +
@@ -9381,7 +9875,7 @@
           '<span class="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">ตัดสินจริง ' +
           activePerson.activeCount +
           ' รายการ</span>' +
-          '<span class="px-3 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 font-semibold">บาย (ในคำสั่ง) ' +
+          '<span class="px-3 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200 font-semibold">ชนะบาย (มีชื่อในคำสั่งเฉยๆ) ' +
           activePerson.byeCount +
           ' รายการ</span>' +
           '<span class="px-3 py-1 rounded-lg ' +
@@ -9764,7 +10258,7 @@
     personList.forEach(function (p, idx) {
       const r = ws2.getRow(idx + 3);
       const listTxt = p.items
-        .map((x) => '[' + x.judge.comp_id + '] ' + x.judge.comp_name + ' (' + (x.judge.role || 'กรรมการ') + (x.isBye ? ' - บาย' : '') + ')')
+        .map((x) => '[' + x.judge.comp_id + '] ' + x.judge.comp_name + ' (' + (x.judge.role || 'กรรมการ') + (x.isBye ? ' - มีทีมชนะบายแล้ว ไม่ต้องแข่งขัน/มีชื่อในคำสั่ง' : '') + ')')
         .join(' | ');
       r.values = [idx + 1, p.fullName, p.school_name, p.activeCount, p.byeCount, p.items.length, listTxt];
       r.eachCell(function (cell) {
@@ -14763,8 +15257,27 @@
       'การ์ตูน',
       'พับกระดาษ',
       'ตัดกระดาษ',
+      'ฉีกปะ',
+      'ปะติด',
       'ร้อยมาลัย',
+      'บายศรี',
+      'สวนถาด',
+      'จัดสวน',
+      'แกะสลัก',
+      'จักสาน',
+      'ประดิษฐ์',
+      'ปั้น',
+      'สีน้ำ',
+      'สีไม้',
+      'สีชอล์ก',
+      'ลายเส้น',
+      'เขียนภาพ',
+      'ออกแบบ',
+      'เครื่องร่อน',
+      'จรวดขวดน้ำ',
+      'สะพาน',
       'ทำอาหาร',
+      'อาหาร',
       'นาฏศิลป์',
       'คีตะ',
       'แอโรบิก',
@@ -14777,8 +15290,30 @@
       'รำ',
       'ขับร้อง'
     ];
-    if (halfDayKw.some((k) => name.includes(k)) || /^(1\.|4\.|6\.|7\.|8\.|13\.)/.test(area.trim())) {
+    if (halfDayKw.some((k) => name.includes(k)) || /^(1\.|3\.|4\.|5\.|6\.|7\.|8\.|13\.)/.test(area.trim())) {
       return 'HALF';
+    }
+    return 'SHORT';
+  }
+
+  function isStageOrFewJudgeFlexComp(comp) {
+    const name = String((comp && comp.comp_name) || '');
+    const area = String((comp && comp.learning_area) || '');
+    const stageKw = [
+      'ขับร้อง', 'ดนตรี', 'วง', 'นาฏศิลป์', 'รำ', 'ระบำ', 'เต้น', 'แอโรบิก', 'คีตะ',
+      'มารยาทไทย', 'สวดมนต์', 'เล่านิทาน', 'พูดภาษาอังกฤษ', 'สุนทรพจน์', 'ผูกเงื่อน', 'เข็มทิศ'
+    ];
+    if (stageKw.some((k) => name.includes(k))) return true;
+    return /^(4\.|6\.|7\.|13\.)/.test(area.trim());
+  }
+
+  function getCompMorningPriorityTier(comp) {
+    const dur = inferCompRuleDurationProfile(comp);
+    if (dur === 'FULL') return 'FULL';
+    if (isStageOrFewJudgeFlexComp(comp)) return 'FLEX_STAGE';
+    const area = String((comp && comp.learning_area) || '').trim();
+    if (dur === 'HALF' || /^(2\.|3\.|5\.|8\.|9\.|11\.|12\.1)/.test(area)) {
+      return 'LONG_MORNING';
     }
     return 'SHORT';
   }
@@ -15013,23 +15548,29 @@
     return capMap;
   }
 
-  function getMorningFirstSlotPenalty(sl, durationProfile, morningFirst, slRank) {
+  function getMorningFirstSlotPenalty(sl, durationProfile, morningFirst, slRank, morningTier) {
     if (!morningFirst) return slRank * 6;
+    const tier = morningTier || (durationProfile === 'FULL' ? 'FULL' : 'SHORT');
     if (sl.code === 'FULL') {
       return durationProfile === 'FULL' ? 0 : 260;
     }
     if (sl.endMin <= 720) {
+      if (tier === 'FULL') return 120;
       if (durationProfile === 'HALF') {
         if (sl.code === 'AM') return 0;
-        if (sl.code === 'AM1') return 18;
-        return 28;
+        if (sl.code === 'AM1') return 16;
+        return 26;
       }
       if (sl.code === 'AM1') return 0;
-      if (sl.code === 'AM2') return 12;
-      return 26;
+      if (sl.code === 'AM2') return 10;
+      return 24;
     }
-    if (sl.code === 'PM1' || sl.code === 'PM') return 90;
-    return 120;
+    // Afternoon slots: strictly discourage starting FULL or long/core morning tasks in the afternoon
+    const isPm2 = sl.code === 'PM2';
+    if (tier === 'FULL') return 2500;
+    if (tier === 'LONG_MORNING') return isPm2 ? 580 : 480;
+    if (tier === 'SHORT') return isPm2 ? 360 : 280;
+    return isPm2 ? 290 : 220;
   }
 
   function computeAutoScheduleAllocation(reasonNote, opts) {
@@ -15205,10 +15746,16 @@
       });
     }
 
+    const tierOrder = { FULL: 0, LONG_MORNING: 1, SHORT: 2, FLEX_STAGE: 3 };
     const orderedComps = unlockedComps.slice().sort(function (a, b) {
       const ja = (compJudgeKeysMap[a.comp_id] || []).length > 0 ? 0 : 1;
       const jb = (compJudgeKeysMap[b.comp_id] || []).length > 0 ? 0 : 1;
       if (ja !== jb) return ja - jb;
+      if (morningFirst) {
+        const ta = tierOrder[getCompMorningPriorityTier(a)] ?? 2;
+        const tb = tierOrder[getCompMorningPriorityTier(b)] ?? 2;
+        if (ta !== tb) return ta - tb;
+      }
       const da = dayCompAssignment[a.comp_id];
       const db = dayCompAssignment[b.comp_id];
       if (da !== db) return da.localeCompare(db);
@@ -15236,6 +15783,7 @@
       const cap = catJudgeCaps[areaKey] || { directPanels: 0, nearPanels: 1 };
       const lvOrd = getLevelSortOrder(c.level);
       const durationProfile = inferCompRuleDurationProfile(c);
+      const morningTier = getCompMorningPriorityTier(c);
       const candidateSlots = getCandidateTimeSlotsForComp(c, timeProfile);
       const dayCandidates = [primaryDayId].concat(days.map((d) => d.id).filter((id) => id !== primaryDayId));
 
@@ -15253,7 +15801,14 @@
           const candSegs = splitLunchBreakSegments(sl.startMin, sl.endMin);
           let penalty = 0;
 
-          if (dayRank > 0) penalty += 160 + dayRank * 20;
+          if (dayRank > 0) {
+            if (morningFirst && (sl.endMin <= 720 || sl.code === 'FULL')) {
+              // Moving to another day's morning is strongly preferred over pushing into afternoon
+              penalty += 30 + dayRank * 10;
+            } else {
+              penalty += 160 + dayRank * 20;
+            }
+          }
 
           // 1. Existing judge overlap penalty
           judgesForComp.forEach(function (pk) {
@@ -15279,7 +15834,10 @@
           const sameAreaOverlapCnt = (areaIntervals[areaKey] || []).filter(
             (o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs)
           ).length;
-          if (sameAreaOverlapCnt < cap.directPanels) {
+          if (morningFirst && (morningTier === 'FULL' || (morningTier === 'LONG_MORNING' && !isLive))) {
+            // Crafts, art, projects, board games & exams can start in parallel at 09:00 and be judged/monitored together
+            penalty += Math.min(sameAreaOverlapCnt * 10, 60);
+          } else if (sameAreaOverlapCnt < cap.directPanels) {
             penalty += sameAreaOverlapCnt * 8;
           } else if (sameAreaOverlapCnt < cap.nearPanels) {
             penalty += 22 + sameAreaOverlapCnt * 6;
@@ -15308,7 +15866,7 @@
           }
 
           // 5. Morning-First time priority + level clustering
-          penalty += getMorningFirstSlotPenalty(sl, durationProfile, morningFirst, slRank);
+          penalty += getMorningFirstSlotPenalty(sl, durationProfile, morningFirst, slRank, morningTier);
           const sameLvOverlapCnt = (levelIntervals[lvOrd] || []).filter(
             (o) => o.dayId === dayId && intervalsListOverlap(o.segments, candSegs)
           ).length;
@@ -15703,6 +16261,30 @@
     }
   }
 
+  function getScheduleStatusCounts() {
+    const regByComp = {};
+    (state.registrations || []).forEach(function (r) {
+      if (!regByComp[r.comp_id]) regByComp[r.comp_id] = new Set();
+      if (r.school_name) regByComp[r.comp_id].add(r.school_name);
+    });
+    let activeCount = 0;
+    let byeCount = 0;
+    let emptyCount = 0;
+    (state.competitions || []).forEach(function (c) {
+      const schCnt = regByComp[c.comp_id] ? regByComp[c.comp_id].size : 0;
+      const st = isCompetitionByeStatus(c, schCnt);
+      if (st === 'ACTIVE') activeCount++;
+      else if (st === 'BYE') byeCount++;
+      else emptyCount++;
+    });
+    return {
+      regAll: activeCount + byeCount,
+      active: activeCount,
+      bye: byeCount,
+      all: activeCount + byeCount + emptyCount
+    };
+  }
+
   function getScheduleViewEntries() {
     const plan = getEffectiveSchedulePlan();
     const allocs = plan.allocations || {};
@@ -15711,8 +16293,7 @@
     const levelVal = (document.getElementById('schedViewLevelFilter') || {}).value || 'ALL';
     const schoolVal = (document.getElementById('schedViewSchoolFilter') || {}).value || 'ALL';
     const searchVal = ((document.getElementById('schedViewSearchInput') || {}).value || '').trim().toLowerCase();
-    const activeOnlyEl = document.getElementById('schedViewActiveOnly');
-    const activeOnly = activeOnlyEl ? activeOnlyEl.checked : true;
+    const statusFilter = state.scheduleStatusFilter || 'REG_ALL';
 
     const regByComp = {};
     (state.registrations || []).forEach(function (r) {
@@ -15725,7 +16306,9 @@
       const regs = regByComp[c.comp_id] || [];
       const schSet = new Set(regs.map((r) => r.school_name));
       const status = isCompetitionByeStatus(c, schSet.size);
-      if (activeOnly && status !== 'ACTIVE') return;
+      if (statusFilter === 'REG_ALL' && status !== 'ACTIVE' && status !== 'BYE') return;
+      if (statusFilter === 'ACTIVE' && status !== 'ACTIVE') return;
+      if (statusFilter === 'BYE' && status !== 'BYE') return;
       const alloc = allocs[c.comp_id] || null;
 
       if (dayVal !== 'ALL') {
@@ -16045,6 +16628,23 @@
         : 'sched-subview-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer';
     });
 
+    const statusCounts = getScheduleStatusCounts();
+    const cntRegAllEl = document.getElementById('schedFilterCountRegAll');
+    const cntActiveEl = document.getElementById('schedFilterCountActive');
+    const cntByeEl = document.getElementById('schedFilterCountBye');
+    const cntAllEl = document.getElementById('schedFilterCountAll');
+    if (cntRegAllEl) cntRegAllEl.textContent = statusCounts.regAll;
+    if (cntActiveEl) cntActiveEl.textContent = statusCounts.active;
+    if (cntByeEl) cntByeEl.textContent = statusCounts.bye;
+    if (cntAllEl) cntAllEl.textContent = statusCounts.all;
+    const curStatusFilter = state.scheduleStatusFilter || 'REG_ALL';
+    document.querySelectorAll('.sched-status-filter-btn').forEach(function (btn) {
+      const isAct = btn.getAttribute('data-schedule-status') === curStatusFilter;
+      btn.className = isAct
+        ? 'sched-status-filter-btn px-2.5 py-1.5 rounded-lg border border-slate-900 bg-slate-900 text-white font-heading text-xs font-semibold transition cursor-pointer'
+        : 'sched-status-filter-btn px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer';
+    });
+
     const conflicts = analyzeScheduleConflicts();
     const conflictBanner = document.getElementById('scheduleConflictBanner');
     const clashCompSet = new Set();
@@ -16262,6 +16862,16 @@
       );
     };
 
+    const renderEntryStatusBadge = function (e) {
+      if (e.status === 'BYE') {
+        return '<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-heading font-semibold">มีทีมชนะบายแล้ว ไม่ต้องแข่งขัน</span>';
+      }
+      if (e.status === 'EMPTY') {
+        return '<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-heading">ยังไม่มีผู้สมัคร</span>';
+      }
+      return '';
+    };
+
     const subview = state.scheduleSubview || 'timeline';
     if (subview === 'by-comp') {
       const areaGroups = {};
@@ -16277,19 +16887,25 @@
             .map(function (e, iIdx) {
               const a = e.alloc;
               const isClash = clashCompSet.has(e.comp.comp_id);
+              const byeNote = e.status === 'BYE'
+                ? 'มีทีมชนะบายแล้ว ไม่ต้องแข่งขัน' + (e.schools.length ? ' (' + e.schools.join(', ') + ')' : '')
+                : e.status === 'EMPTY'
+                ? 'ยังไม่มีผู้สมัครเข้าแข่งขัน'
+                : 'รอจัดเวลา';
               return (
                 '<div class="p-3 rounded-xl border ' +
-                (isClash ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-white') +
+                (isClash ? 'border-rose-300 bg-rose-50/40' : e.status === 'BYE' ? 'border-blue-200 bg-blue-50/25' : 'border-slate-200 bg-white') +
                 ' flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
                 '<div class="min-w-0 space-y-0.5">' +
-                '<div class="font-heading font-semibold text-sm text-slate-900">' +
-                (gIdx + 1) + '.' + (iIdx + 1) + ' ' + escapeHtml(e.comp.comp_name) +
+                '<div class="font-heading font-semibold text-sm text-slate-900 flex flex-wrap items-center gap-1.5">' +
+                '<span>' + (gIdx + 1) + '.' + (iIdx + 1) + ' ' + escapeHtml(e.comp.comp_name) + '</span>' +
                 ' <span class="text-xs font-normal text-slate-600">(' + escapeHtml(e.comp.level) + ')</span>' +
+                renderEntryStatusBadge(e) +
                 (isClash ? ' <span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-heading">เวลา/ห้องชน</span>' : '') +
                 (a && a.locked ? ' <span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-heading">ล็อกไว้</span>' : '') +
                 '</div>' +
                 '<div class="text-xs text-slate-600">' +
-                (a ? escapeHtml(a.dateText + ' • ' + a.timeText) : 'ยังไม่ได้จัดเวลา (รายการบาย/รอจัด)') +
+                (a ? escapeHtml(a.dateText + ' • ' + a.timeText) : escapeHtml(byeNote)) +
                 ' • ' +
                 e.teamCount +
                 ' โรงเรียน</div>' +
@@ -16338,17 +16954,24 @@
             sorted
               .map(function (e) {
                 const a = e.alloc;
+                const timeCell = a
+                  ? escapeHtml(a.dateText + ' • ' + a.timeText)
+                  : e.status === 'BYE'
+                  ? '<span class="text-blue-700 font-medium">ชนะบาย (ไม่ต้องแข่งขัน)</span>'
+                  : 'รอจัดเวลา';
                 return (
                   '<tr class="hover:bg-slate-50"><td class="py-2.5 px-3 whitespace-nowrap font-heading font-medium text-slate-900">' +
-                  (a ? escapeHtml(a.dateText + ' • ' + a.timeText) : 'รอจัดเวลา') +
+                  timeCell +
                   '</td><td class="py-2.5 px-3 text-xs text-slate-600">' +
                   escapeHtml(stripAreaNumberPrefix(e.comp.learning_area)) +
                   '</td><td class="py-2.5 px-3 font-heading font-semibold text-slate-900">' +
                   escapeHtml(e.comp.comp_name) +
                   ' (' +
                   escapeHtml(e.comp.level) +
-                  ')</td><td class="py-2.5 px-3">' +
-                  renderVenueBadge(a) +
+                  ') ' +
+                  renderEntryStatusBadge(e) +
+                  '</td><td class="py-2.5 px-3">' +
+                  (e.status === 'BYE' && !a ? '<span class="text-xs text-blue-700">ไม่ต้องเข้าห้องสอบ</span>' : renderVenueBadge(a)) +
                   '</td></tr>'
                 );
               })
@@ -16358,8 +16981,13 @@
       const groupMap = {};
       entries.forEach(function (e) {
         if (!e.alloc) {
-          if (!groupMap.UNSCHEDULED) groupMap.UNSCHEDULED = { sortKey: 'ZZZ', headTitle: 'รายการบาย / ยังไม่กำหนดเวลา', items: [] };
-          groupMap.UNSCHEDULED.items.push(e);
+          if (e.status === 'BYE') {
+            if (!groupMap.BYE_GROUP) groupMap.BYE_GROUP = { sortKey: 'ZZY', headTitle: 'รายการที่มีทีมชนะบายแล้ว ไม่ต้องแข่งขัน (ใส่ชื่อกรรมการในคำสั่งเฉยๆ)', items: [] };
+            groupMap.BYE_GROUP.items.push(e);
+          } else {
+            if (!groupMap.UNSCHEDULED) groupMap.UNSCHEDULED = { sortKey: 'ZZZ', headTitle: 'รายการที่ยังไม่มีผู้สมัคร / ยังไม่กำหนดเวลา', items: [] };
+            groupMap.UNSCHEDULED.items.push(e);
+          }
           return;
         }
         const a = e.alloc;
@@ -16405,7 +17033,10 @@
                 '</span>' +
                 '<span class="text-[11px] text-slate-500">' +
                 e.teamCount +
-                ' โรงเรียน</span>' +
+                ' โรงเรียน' +
+                (e.status === 'BYE' && e.schools.length > 0 ? ' (' + escapeHtml(e.schools.join(', ')) + ')' : '') +
+                '</span>' +
+                renderEntryStatusBadge(e) +
                 (isClash ? '<span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-heading">จุดชน</span>' : '') +
                 (a && a.locked ? '<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[10px] font-heading">ล็อกไว้</span>' : '') +
                 '</div>' +
@@ -17689,6 +18320,13 @@
     }
 
     // Auto Judge Allocator Events
+    const btnAutoJudgeDownloadTemplate = document.getElementById('btnAutoJudgeDownloadTemplate');
+    if (btnAutoJudgeDownloadTemplate) {
+      btnAutoJudgeDownloadTemplate.addEventListener('click', function () {
+        downloadTeacherRosterTemplate();
+      });
+    }
+
     const btnAutoJudgeImportTeachers = document.getElementById('btnAutoJudgeImportTeachers');
     const autoJudgeTeacherFileInput = document.getElementById('autoJudgeTeacherFileInput');
     if (btnAutoJudgeImportTeachers && autoJudgeTeacherFileInput) {
@@ -17704,6 +18342,92 @@
         } catch (err) {
           showToast('อ่านไฟล์ไม่สำเร็จ: ' + (err.message || err), 'error');
         }
+      });
+    }
+
+    const btnCloseTeacherImportModal = document.getElementById('btnCloseTeacherImportModal');
+    const btnCancelTeacherImportModal = document.getElementById('btnCancelTeacherImportModal');
+    if (btnCloseTeacherImportModal) {
+      btnCloseTeacherImportModal.addEventListener('click', closeTeacherImportPreviewModal);
+    }
+    if (btnCancelTeacherImportModal) {
+      btnCancelTeacherImportModal.addEventListener('click', closeTeacherImportPreviewModal);
+    }
+    const teacherImportSheetSelect = document.getElementById('teacherImportSheetSelect');
+    if (teacherImportSheetSelect) {
+      teacherImportSheetSelect.addEventListener('change', function () {
+        if (!teacherImportDraftState) return;
+        const idx = parseInt(teacherImportSheetSelect.value, 10);
+        if (Number.isNaN(idx) || !teacherImportDraftState.sheets[idx]) return;
+        teacherImportDraftState.sheetIdx = idx;
+        const detected = detectTeacherImportConfig(teacherImportDraftState.sheets[idx].rows);
+        teacherImportDraftState.headerRowIdx = detected.headerRowIdx;
+        teacherImportDraftState.mapping = detected.mapping;
+        syncTeacherImportMappingControls();
+        renderTeacherImportPreviewTable();
+      });
+    }
+    const teacherImportHeaderRowSelect = document.getElementById('teacherImportHeaderRowSelect');
+    if (teacherImportHeaderRowSelect) {
+      teacherImportHeaderRowSelect.addEventListener('change', function () {
+        if (!teacherImportDraftState) return;
+        teacherImportDraftState.headerRowIdx = parseInt(teacherImportHeaderRowSelect.value, 10);
+        syncTeacherImportMappingControls();
+        renderTeacherImportPreviewTable();
+      });
+    }
+    [
+      ['teacherMapSchoolCol', 'schoolCol'],
+      ['teacherMapPrefixCol', 'prefixCol'],
+      ['teacherMapNameCol', 'nameCol'],
+      ['teacherMapLastNameCol', 'lastNameCol'],
+      ['teacherMapMajorCol', 'majorCol']
+    ].forEach(function (pair) {
+      const el = document.getElementById(pair[0]);
+      if (!el) return;
+      el.addEventListener('change', function () {
+        if (!teacherImportDraftState) return;
+        if (pair[1] === 'schoolCol' && el.value === '__FIXED__') {
+          teacherImportDraftState.mapping.schoolCol = -1;
+          const fixedSel = document.getElementById('teacherImportFixedSchoolSelect');
+          if (fixedSel) fixedSel.classList.remove('hidden');
+        } else {
+          teacherImportDraftState.mapping[pair[1]] = parseInt(el.value, 10);
+          if (pair[1] === 'schoolCol') {
+            const fixedSel = document.getElementById('teacherImportFixedSchoolSelect');
+            if (fixedSel) fixedSel.classList.add('hidden');
+          }
+        }
+        renderTeacherImportPreviewTable();
+      });
+    });
+    const teacherImportFixedSchoolSelect = document.getElementById('teacherImportFixedSchoolSelect');
+    if (teacherImportFixedSchoolSelect) {
+      teacherImportFixedSchoolSelect.addEventListener('change', function () {
+        if (!teacherImportDraftState) return;
+        teacherImportDraftState.fixedSchool = teacherImportFixedSchoolSelect.value;
+        renderTeacherImportPreviewTable();
+      });
+    }
+    const btnConfirmTeacherImport = document.getElementById('btnConfirmTeacherImport');
+    if (btnConfirmTeacherImport) {
+      btnConfirmTeacherImport.addEventListener('click', function () {
+        const mapped = buildMappedTeacherRosterRows();
+        if (mapped.length === 0) {
+          showToast('ยังไม่มีรายชื่อที่อ่านได้ กรุณาตรวจสอบการจับคู่คอลัมน์', 'warning');
+          return;
+        }
+        state.importedTeacherRoster = mapped.map(function (row) {
+          return {
+            school_name: row.school_name,
+            prefix: row.prefix,
+            full_name: row.full_name,
+            major: row.major
+          };
+        });
+        updateAutoJudgeTeacherPoolBadge();
+        closeTeacherImportPreviewModal();
+        showToast('นำเข้าข้อมูลครูและวิชาเอกสำเร็จ (' + state.importedTeacherRoster.length + ' คน)', 'success');
       });
     }
 
@@ -18187,7 +18911,13 @@
         renderScheduleTab();
       });
     });
-    ['schedViewDayFilter', 'schedViewAreaFilter', 'schedViewLevelFilter', 'schedViewSchoolFilter', 'schedViewActiveOnly'].forEach(function (id) {
+    document.querySelectorAll('.sched-status-filter-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        state.scheduleStatusFilter = btn.getAttribute('data-schedule-status') || 'REG_ALL';
+        renderScheduleTab();
+      });
+    });
+    ['schedViewDayFilter', 'schedViewAreaFilter', 'schedViewLevelFilter', 'schedViewSchoolFilter'].forEach(function (id) {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', renderScheduleTab);
     });

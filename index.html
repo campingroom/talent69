@@ -111,6 +111,16 @@
           จัดการแข่งขัน
         </div>
 
+        <button type="button" id="navShortcutIdCards" class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <svg class="w-4 h-4 text-blue-700 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+            </svg>
+            <span class="truncate">พิมพ์บัตร / แนบรูป</span>
+          </div>
+          <span id="navBadgeIdCards" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold shrink-0">พร้อมพิมพ์</span>
+        </button>
+
         <button type="button" id="navTabSchedule" data-tab="schedule" class="nav-tab-btn hidden w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
           <div class="flex items-center gap-2.5 min-w-0">
             <svg class="w-4 h-4 text-[#787774] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -149,16 +159,6 @@
             <span class="truncate">เกียรติบัตรออนไลน์</span>
           </div>
           <span id="navBadgeCerts" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-normal shrink-0">แอดมิน</span>
-        </button>
-
-        <button type="button" id="navShortcutIdCards" class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-heading font-medium text-[#37352F] hover:bg-[#EBEBEA] transition cursor-pointer">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <svg class="w-4 h-4 text-blue-700 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-            </svg>
-            <span class="truncate">พิมพ์บัตร / แนบรูป</span>
-          </div>
-          <span id="navBadgeIdCards" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold shrink-0">พร้อมพิมพ์</span>
         </button>
       </div>
 
@@ -1030,6 +1030,95 @@
           <button type="submit" id="btnSubmitScheduleRegenModal" disabled class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:bg-amber-200 disabled:text-amber-400 disabled:cursor-not-allowed text-white font-heading text-xs font-semibold transition cursor-pointer">ยืนยันจัดตารางใหม่</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       MODAL 10: SMART TEACHER ROSTER IMPORT & COLUMN MAPPING PREVIEW
+       ========================================== -->
+  <div id="teacherImportPreviewModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3 shrink-0">
+        <div>
+          <div class="flex flex-wrap items-center gap-2 mb-1">
+            <span class="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-heading text-[11px] font-semibold">Smart Import (.xlsx / .csv)</span>
+            <span id="teacherImportFileNameBadge" class="text-xs font-medium text-slate-600">-</span>
+          </div>
+          <h3 class="text-base font-bold font-heading text-slate-900">ตรวจสอบและจับคู่คอลัมน์รายชื่อครู + วิชาเอก</h3>
+          <p class="text-xs text-slate-500 mt-0.5">ระบบวิเคราะห์หัวตาราง จับคู่ชื่อย่อโรงเรียน และแปลงชื่อวิชาเอกให้อัตโนมัติ (สามารถปรับแก้คอลัมน์ด้านล่างก่อนนำเข้าได้)</p>
+        </div>
+        <button type="button" id="btnCloseTeacherImportModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 cursor-pointer shrink-0">
+          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 overflow-y-auto flex-1">
+        <!-- Sheet & Header Row Selector -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+          <div>
+            <label for="teacherImportSheetSelect" class="block text-[11px] font-heading font-semibold text-slate-700 mb-1">เลือกแผ่นงาน (Sheet)</label>
+            <select id="teacherImportSheetSelect" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs"></select>
+          </div>
+          <div>
+            <label for="teacherImportHeaderRowSelect" class="block text-[11px] font-heading font-semibold text-slate-700 mb-1">แถวหัวตาราง (Header Row)</label>
+            <select id="teacherImportHeaderRowSelect" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs"></select>
+          </div>
+        </div>
+
+        <!-- Column Mapping Selectors -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+          <div class="sm:col-span-2 lg:col-span-1">
+            <label for="teacherMapSchoolCol" class="block text-[11px] font-heading font-semibold text-slate-700 mb-1">คอลัมน์โรงเรียน *</label>
+            <select id="teacherMapSchoolCol" class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"></select>
+            <select id="teacherImportFixedSchoolSelect" class="hidden mt-1.5 w-full rounded-lg border border-blue-300 bg-blue-50/50 px-2 py-1.5 text-xs"></select>
+          </div>
+          <div>
+            <label for="teacherMapPrefixCol" class="block text-[11px] font-heading font-semibold text-slate-700 mb-1">คอลัมน์คำนำหน้า</label>
+            <select id="teacherMapPrefixCol" class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"></select>
+          </div>
+          <div>
+            <label for="teacherMapNameCol" class="block text-[11px] font-heading font-semibold text-slate-700 mb-1">ชื่อ-นามสกุล / ชื่อ *</label>
+            <select id="teacherMapNameCol" class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"></select>
+          </div>
+          <div>
+            <label for="teacherMapLastNameCol" class="block text-[11px] font-heading font-semibold text-slate-700 mb-1">นามสกุล (ถ้าแยกช่อง)</label>
+            <select id="teacherMapLastNameCol" class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"></select>
+          </div>
+          <div>
+            <label for="teacherMapMajorCol" class="block text-[11px] font-heading font-semibold text-slate-700 mb-1">คอลัมน์วิชาเอก / สาขา</label>
+            <select id="teacherMapMajorCol" class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"></select>
+          </div>
+        </div>
+
+        <!-- Summary Stats -->
+        <div id="teacherImportStatsBox" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs"></div>
+
+        <!-- Preview Table -->
+        <div class="border border-slate-200 rounded-xl overflow-hidden">
+          <div class="overflow-x-auto max-h-64">
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50 text-slate-600 font-heading border-b border-slate-200 sticky top-0">
+                <tr>
+                  <th class="py-2 px-3 w-12 text-center">#</th>
+                  <th class="py-2 px-3">โรงเรียนต้นสังกัด (ที่จับคู่ได้)</th>
+                  <th class="py-2 px-3">คำนำหน้า + ชื่อ-นามสกุล</th>
+                  <th class="py-2 px-3">วิชาเอกในไฟล์ → กลุ่มวิชาเอกระบบ</th>
+                </tr>
+              </thead>
+              <tbody id="teacherImportPreviewBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+          <div id="teacherImportPreviewFooterNote" class="px-3 py-1.5 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-500"></div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <span class="text-[11px] text-slate-500">ข้อมูลจะเก็บในคลังครูชั่วคราวบนเครื่องนี้เพื่อใช้คำนวณจัดกรรมการ (ยังไม่แก้ Google Sheets)</span>
+        <div class="flex items-center gap-2 ml-auto">
+          <button type="button" id="btnCancelTeacherImportModal" class="px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 font-heading text-xs font-medium hover:bg-slate-100 cursor-pointer">ยกเลิก</button>
+          <button type="button" id="btnConfirmTeacherImport" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-heading text-xs font-semibold cursor-pointer">ยืนยันนำเข้าคลังครู</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2126,8 +2215,8 @@
           <label class="inline-flex items-start sm:items-center gap-2.5 cursor-pointer">
             <input type="checkbox" id="schedMorningFirstCheckbox" checked class="mt-0.5 sm:mt-0 rounded border-slate-300 text-slate-900 focus:ring-slate-900 shrink-0" />
             <span>
-              <strong class="font-heading text-slate-900">เน้นจัดแข่งให้จบภายในช่วงเช้า (09:00–12:00 น.) เป็นหลัก</strong>
-              <span class="block text-[11px] text-slate-600">ลดการรอคิวช่วงบ่าย — ขยับไปช่วงบ่ายเฉพาะรายการต่อเนื่องทั้งวัน หรือกรณีช่วงเช้ามีครูสายตรง/ผู้ฝึกซ้อมเวทีสด/ห้องสอบไม่พอ</span>
+              <strong class="font-heading text-slate-900">เริ่มแข่งขันช่วงเช้าเป็นหลัก (09:00 น. — เช้าทุกวันก่อนบ่าย)</strong>
+              <span class="block text-[11px] text-slate-600">รายการทั้งวัน (เอแม็ท/ครอสเวิร์ด/หุ่นยนต์), วิชาหลัก และงานฝีมือ/ศิลปะ/หนังสือเล่มเล็ก จะเริ่มช่วงเช้าเป็นหลัก (กระจายเช้าวันถัดไปก่อนย้ายลงบ่าย และย้ายไปบ่ายเฉพาะงานเวที/คิวครูน้อยที่เช้าเต็มจริง)</span>
             </span>
           </label>
           <span class="px-2.5 py-1 rounded-md bg-blue-100 text-blue-800 font-heading text-[11px] font-semibold shrink-0 self-start sm:self-center whitespace-nowrap">
@@ -2213,10 +2302,20 @@
               เช็กคิวแข่งรายโรงเรียน
             </button>
           </div>
-          <label class="inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-            <input type="checkbox" id="schedViewActiveOnly" checked class="rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
-            <span>แสดงเฉพาะรายการที่มีการแข่งขันจริง (ตัดรายการบาย)</span>
-          </label>
+          <div id="schedViewStatusFilterGroup" class="flex flex-wrap items-center gap-1.5" role="group" aria-label="ตัวกรองสถานะการแข่งขัน">
+            <button type="button" data-schedule-status="REG_ALL" class="sched-status-filter-btn px-2.5 py-1.5 rounded-lg border border-slate-900 bg-slate-900 text-white font-heading text-xs font-semibold transition cursor-pointer">
+              มีผู้สมัครทั้งหมด (แข่งจริง + ชนะบาย) <span id="schedFilterCountRegAll" class="ml-1 opacity-80">0</span>
+            </button>
+            <button type="button" data-schedule-status="ACTIVE" class="sched-status-filter-btn px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer">
+              แข่งจริงเท่านั้น <span id="schedFilterCountActive" class="ml-1 opacity-75">0</span>
+            </button>
+            <button type="button" data-schedule-status="BYE" class="sched-status-filter-btn px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer">
+              ชนะบายแล้ว (ไม่ต้องแข่งขัน) <span id="schedFilterCountBye" class="ml-1 opacity-75">0</span>
+            </button>
+            <button type="button" data-schedule-status="ALL" class="sched-status-filter-btn px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer">
+              ทั้งหมด (รวมไม่มีผู้สมัคร) <span id="schedFilterCountAll" class="ml-1 opacity-75">0</span>
+            </button>
+          </div>
         </div>
 
         <div id="scheduleSummaryStats" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs"></div>
@@ -2272,7 +2371,7 @@
           <div>
             <span class="inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-heading text-[11px] font-semibold mb-1">เฉพาะแอดมินเห็น (คนทั่วไปไม่เห็นส่วนนี้) · ตัวช่วยจัดสรร</span>
             <h3 class="text-base font-bold font-heading text-slate-900">จัดสรรคณะกรรมการอัตโนมัติ (โหมด A / โหมด B)</h3>
-            <p class="text-xs text-slate-500 mt-0.5">ดึงครูผู้ฝึกสอนมาช่วยเป็นกรรมการโดยเดาจากวิชาเอกหลักก่อน หรือนำเข้าไฟล์ .xlsx/.csv ที่มีวิชาเอกจริง พร้อมเช็กเวลาทับซ้อนและข้ามรายการที่ล็อกไว้ให้ 100%</p>
+            <p class="text-xs text-slate-500 mt-0.5">ดึงครูผู้ฝึกสอนมาช่วยเป็นกรรมการโดยเดาจากวิชาเอกหลักก่อน หรือดาวน์โหลดแม่แบบ / โยนไฟล์ .xlsx/.csv รูปแบบใดก็ได้ให้ระบบวิเคราะห์จับคู่คอลัมน์และวิชาเอกให้อัตโนมัติ</p>
           </div>
           <div id="autoJudgeTeacherPoolBadge" class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-800 font-heading text-xs font-medium shrink-0">
             คลังครู: คำนวณจากผู้ฝึกสอนในระบบ
@@ -2280,14 +2379,20 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
-          <div class="lg:col-span-5">
+          <div class="lg:col-span-4">
             <label for="autoJudgeModeSelect" class="block text-xs font-medium text-slate-700 mb-1">โหมดการจัดสรร</label>
             <select id="autoJudgeModeSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs sm:text-sm">
               <option value="B" selected>โหมด B — ผ่อนปรน (ครูผู้ฝึกสอนช่วยตัดสินได้ แต่งดให้คะแนน รร.ตัวเอง)</option>
               <option value="A">โหมด A — เคร่งครัด สพฐ. (ห้ามครูตัดสินรายการที่ รร.ตัวเองแข่ง)</option>
             </select>
           </div>
-          <div class="lg:col-span-7 flex flex-wrap items-center gap-2">
+          <div class="lg:col-span-8 flex flex-wrap items-center gap-2">
+            <button type="button" id="btnAutoJudgeDownloadTemplate" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-heading text-xs font-medium transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>ดาวน์โหลดแม่แบบ (.xlsx)</span>
+            </button>
             <input type="file" id="autoJudgeTeacherFileInput" accept=".xlsx,.csv" class="hidden" />
             <button type="button" id="btnAutoJudgeImportTeachers" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium transition cursor-pointer">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
