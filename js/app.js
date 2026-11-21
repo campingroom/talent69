@@ -62,15 +62,17 @@
     operationTimeline: null,
     schedulePlan: cloneDeep ? null : null,
     featureVisibility: {
-      schedule: 'hidden',
+      schedule: 'disabled',
       venue: 'hidden',
-      judges: 'auto',
+      judges: 'disabled',
+      judge_certs: 'disabled',
       results: 'auto',
       certificates: 'auto',
       id_cards: 'open',
       substitution_form: 'hidden'
     },
-    idCardsDefaultMigratedV1: true
+    idCardsDefaultMigratedV1: true,
+    nonHostDefaultsMigratedV1: true
   };
 
   const FEATURE_MILESTONES = {
@@ -104,6 +106,10 @@
       openDateStr: '2026-11-25T00:00:00+07:00',
       dateLabel: '25 พฤศจิกายน 2569 (วันสรุปผลการแข่งขัน)'
     },
+    judge_certs: {
+      key: 'judge_certs',
+      name: 'เกียรติบัตรคณะกรรมการตัดสิน'
+    },
     id_cards: {
       key: 'id_cards',
       name: 'ปุ่มพิมพ์บัตรประจำตัว'
@@ -122,7 +128,10 @@
     if (featureKey === 'id_cards') {
       return 'open';
     }
-    if (featureKey === 'venue' || featureKey === 'substitution_form' || featureKey === 'schedule') {
+    if (featureKey === 'schedule' || featureKey === 'judges' || featureKey === 'judge_certs') {
+      return 'disabled';
+    }
+    if (featureKey === 'venue' || featureKey === 'substitution_form') {
       return 'hidden';
     }
     return 'auto';
@@ -130,6 +139,14 @@
 
   function isScheduleModeDisabled() {
     return getFeatureVisibilitySetting('schedule') === 'disabled';
+  }
+
+  function isJudgesModeDisabled() {
+    return getFeatureVisibilitySetting('judges') === 'disabled';
+  }
+
+  function isJudgeCertificatesEnabled() {
+    return getFeatureVisibilitySetting('judge_certs') === 'open';
   }
 
   function isIdCardsPrintingEnabled() {
@@ -155,6 +172,9 @@
 
   function canUserAccessFeature(featureKey) {
     if (featureKey === 'schedule' && isScheduleModeDisabled()) {
+      return false;
+    }
+    if (featureKey === 'judges' && isJudgesModeDisabled()) {
       return false;
     }
     if (isEffectiveAdmin()) return true;
@@ -382,7 +402,8 @@
     pendingScheduleHighlightCompId: '',
     scheduleHistory: [],
     pendingScheduleRegenNote: null,
-    adminSettingsCategory: 'ALL',
+    adminSettingsCategory: 'control',
+    adminSettingsSearchQuery: '',
     resultSubview: 'by-comp',
     certNumeralMode: 'both', // 'thai' | 'arabic' | 'both'
     lastAddedRegId: null,
@@ -1147,6 +1168,14 @@
           state.config.idCardsDefaultMigratedV1 = true;
           saveState();
         }
+        if (!parsed.config || !parsed.config.nonHostDefaultsMigratedV1) {
+          state.config.featureVisibility.schedule = 'disabled';
+          state.config.featureVisibility.venue = 'hidden';
+          state.config.featureVisibility.judges = 'disabled';
+          state.config.featureVisibility.judge_certs = 'disabled';
+          state.config.nonHostDefaultsMigratedV1 = true;
+          saveState();
+        }
         // Auto-migrate school SCH-13 subdistrict and default signer name if outdated
         state.schools = normalizeSchoolsList(state.schools);
         if (!state.config.certSignerName || state.config.certSignerName === 'นายวิทยา มโนการณ์') {
@@ -1626,7 +1655,13 @@
       if (banner) {
         if (effAdmin) {
           banner.classList.remove('hidden');
-          if (isPublic) {
+          if (setting === 'disabled') {
+            banner.innerHTML =
+              '<div class="p-3 rounded-xl bg-slate-100 border border-slate-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-slate-800 mb-4 shadow-2xs">' +
+                '<span><strong>ระบบ' + escapeHtml(meta.name) + 'ถูกปิดไว้</strong> (สำหรับกรณีโรงเรียนเจ้าภาพดำเนินการเอง)</span>' +
+                '<button type="button" data-banner-feature="' + key + '" data-action="hidden" class="px-3 py-1 rounded-md bg-slate-900 text-white font-heading text-[11px] font-medium cursor-pointer shrink-0">เปิดใช้งานเฉพาะแอดมิน</button>' +
+              '</div>';
+          } else if (isPublic) {
             banner.innerHTML =
               '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-emerald-900 mb-4 shadow-2xs">' +
                 '<div class="flex items-center gap-2">' +
@@ -1690,7 +1725,10 @@
       // 5. Badges & Toggle Buttons in Settings
       const badgeVis = document.getElementById(ids.badgeVisId);
       if (badgeVis) {
-        if (setting === 'open') {
+        if (setting === 'disabled') {
+          badgeVis.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700';
+          badgeVis.textContent = 'ปิดระบบ (ไม่ใช้งาน)';
+        } else if (setting === 'open') {
           badgeVis.className = 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-100 text-emerald-800';
           badgeVis.textContent = 'เปิดทันที (สาธารณะ)';
         } else if (setting === 'hidden') {
@@ -1837,6 +1875,121 @@
 
     const idCardsEnabled = isIdCardsPrintingEnabled();
     const subFormEnabled = isSubstitutionFormEnabled();
+    const judgesDisabled = isJudgesModeDisabled();
+    const judgeCertsEnabled = isJudgeCertificatesEnabled();
+
+    const quickJumpSchedBtn = document.getElementById('btnSettingsQuickJumpSchedule');
+    if (quickJumpSchedBtn) quickJumpSchedBtn.classList.toggle('hidden', isSchedDisabled);
+    const quickJumpJudgesBtn = document.getElementById('btnSettingsQuickJumpJudges');
+    if (quickJumpJudgesBtn) quickJumpJudgesBtn.classList.toggle('hidden', judgesDisabled);
+    const hostVenueWrapper = document.getElementById('settingsHostVenueWrapper');
+    if (hostVenueWrapper) hostVenueWrapper.classList.toggle('hidden', isSchedDisabled);
+
+    const badgeHostModeEl = document.getElementById('badgeHostOperationMode');
+    const btnPresetNonHost = document.getElementById('btnPresetNonHostMode');
+    const btnPresetFullHost = document.getElementById('btnPresetFullHostMode');
+    const isNonHostMode = isSchedDisabled && judgesDisabled;
+    if (badgeHostModeEl) {
+      badgeHostModeEl.textContent = isNonHostMode
+        ? 'โหมดรับสมัคร+ผล+เกียรติบัตร (ปิดสถานที่/กรรมการ)'
+        : 'โหมดเจ้าภาพจัดงานเอง (เปิดสถานที่/กรรมการ)';
+      badgeHostModeEl.className = isNonHostMode
+        ? 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-900 text-white'
+        : 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-100 text-emerald-800';
+    }
+    if (btnPresetNonHost && btnPresetFullHost) {
+      btnPresetNonHost.className = isNonHostMode
+        ? 'px-3 py-1.5 rounded-lg border border-slate-900 bg-slate-900 text-white font-heading text-xs font-semibold transition cursor-pointer'
+        : 'px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium transition cursor-pointer';
+      btnPresetFullHost.className = !isNonHostMode
+        ? 'px-3 py-1.5 rounded-lg border border-slate-900 bg-slate-900 text-white font-heading text-xs font-semibold transition cursor-pointer'
+        : 'px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium transition cursor-pointer';
+    }
+
+    // Live Status Summary Strip in Admin Control Card
+    const pillReg = document.getElementById('adminStatusPillReg');
+    if (pillReg) {
+      const regOpen = isPublicRegistrationOpen();
+      pillReg.textContent = regOpen ? 'รับสมัคร: เปิดอยู่' : 'รับสมัคร: ปิดแล้ว';
+      pillReg.className = regOpen
+        ? 'px-2 py-0.5 rounded-md border bg-emerald-50 text-emerald-800 border-emerald-200 font-medium'
+        : 'px-2 py-0.5 rounded-md border bg-rose-50 text-rose-800 border-rose-200 font-medium';
+    }
+    const pillMode = document.getElementById('adminStatusPillMode');
+    if (pillMode) {
+      pillMode.textContent = isNonHostMode ? 'โหมด: รับสมัคร/ผล/เกียรติบัตร' : 'โหมด: เจ้าภาพจัดสนามเอง';
+      pillMode.className = isNonHostMode
+        ? 'px-2 py-0.5 rounded-md border bg-slate-100 text-slate-800 border-slate-200 font-medium'
+        : 'px-2 py-0.5 rounded-md border bg-blue-50 text-blue-800 border-blue-200 font-medium';
+    }
+    const pillJudges = document.getElementById('adminStatusPillJudges');
+    if (pillJudges) {
+      const jSet = getFeatureVisibilitySetting('judges');
+      pillJudges.textContent = jSet === 'disabled'
+        ? (judgeCertsEnabled ? 'กรรมการ: ปิดจัดสรร (เปิดเกียรติบัตรแล้ว)' : 'กรรมการ: ปิดระบบ')
+        : (jSet === 'open' ? 'กรรมการ: เปิดสาธารณะ' : (jSet === 'hidden' ? 'กรรมการ: เฉพาะแอดมิน' : 'กรรมการ: ตามกำหนดวัน'));
+      pillJudges.className = jSet === 'disabled'
+        ? 'px-2 py-0.5 rounded-md border bg-slate-100 text-slate-700 border-slate-200'
+        : 'px-2 py-0.5 rounded-md border bg-emerald-50 text-emerald-800 border-emerald-200';
+    }
+    const pillResCerts = document.getElementById('adminStatusPillResultsCerts');
+    if (pillResCerts) {
+      const rPub = isFeatureOpenToPublic('results');
+      const cPub = isFeatureOpenToPublic('certificates');
+      pillResCerts.textContent = rPub && cPub
+        ? 'ผล & เกียรติบัตร: เปิดสาธารณะ'
+        : (!rPub && !cPub ? 'ผล & เกียรติบัตร: รอวันเปิด' : 'ผล/เกียรติบัตร: เปิดบางส่วน');
+      pillResCerts.className = rPub || cPub
+        ? 'px-2 py-0.5 rounded-md border bg-emerald-50 text-emerald-800 border-emerald-200'
+        : 'px-2 py-0.5 rounded-md border bg-amber-50 text-amber-800 border-amber-200';
+    }
+    const pillIdCards = document.getElementById('adminStatusPillIdCards');
+    if (pillIdCards) {
+      pillIdCards.textContent = idCardsEnabled ? 'บัตรประจำตัว: เปิดแสดงปุ่ม' : 'บัตรประจำตัว: ซ่อนไว้';
+      pillIdCards.className = idCardsEnabled
+        ? 'px-2 py-0.5 rounded-md border bg-blue-50 text-blue-800 border-blue-200'
+        : 'px-2 py-0.5 rounded-md border bg-slate-100 text-slate-600 border-slate-200';
+    }
+
+    const badgeJudgeCerts = document.getElementById('badgeVisibilityJudgeCerts');
+    if (badgeJudgeCerts) {
+      badgeJudgeCerts.className = judgeCertsEnabled
+        ? 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-emerald-100 text-emerald-800'
+        : 'px-2 py-0.5 rounded text-[10px] font-heading font-semibold bg-slate-200 text-slate-700';
+      badgeJudgeCerts.textContent = judgeCertsEnabled ? 'เปิดใช้งานแล้ว (นำเข้ารายชื่อได้)' : 'ปิดไว้ (เฉพาะนักเรียน/ครู)';
+    }
+    document.querySelectorAll('[data-feature-toggle="judge_certs"]').forEach(function (b) {
+      const action = b.getAttribute('data-action');
+      const norm = judgeCertsEnabled ? 'open' : 'disabled';
+      b.className = action === norm
+        ? 'btn-vis-toggle-judge-certs px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white border border-slate-900 transition cursor-pointer'
+        : 'btn-vis-toggle-judge-certs px-3 py-1.5 rounded-lg font-heading text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition cursor-pointer';
+    });
+    const btnJumpJudgeCerts = document.getElementById('btnSettingsJumpJudgeCerts');
+    if (btnJumpJudgeCerts) btnJumpJudgeCerts.classList.toggle('hidden', !judgeCertsEnabled);
+
+    const btnPreviewSampleEl = document.getElementById('btnPreviewIdCardSamples');
+    if (btnPreviewSampleEl) {
+      btnPreviewSampleEl.textContent = judgesDisabled
+        ? 'ดูตัวอย่างบัตร (2 ประเภท: นักเรียน/ครู)'
+        : 'ดูตัวอย่างบัตร (3 ประเภท)';
+    }
+
+    const certRoleSel = document.getElementById('certRoleFilter');
+    if (certRoleSel) {
+      const judgeOpt = certRoleSel.querySelector('option[value="JUDGE"]');
+      if (judgeOpt) {
+        judgeOpt.hidden = !judgeCertsEnabled;
+        judgeOpt.disabled = !judgeCertsEnabled;
+      }
+      if (!judgeCertsEnabled && certRoleSel.value === 'JUDGE') {
+        certRoleSel.value = 'ALL';
+      }
+    }
+    const adminCertJudgeCard = document.getElementById('adminCertJudgeQuickAddCard');
+    if (adminCertJudgeCard) {
+      adminCertJudgeCard.classList.toggle('hidden', !(effAdmin && judgeCertsEnabled));
+    }
 
     const navShortcutIdCardsEl = document.getElementById('navShortcutIdCards');
     const navBadgeIdCardsEl = document.getElementById('navBadgeIdCards');
@@ -1878,6 +2031,10 @@
       const showDash = isFeatureOpenToPublic('results') || effAdmin;
       if (showDash) {
         dashRow.classList.remove('hidden');
+        const qrImg = document.getElementById('dashQrCodeImg');
+        if (qrImg && !qrImg.getAttribute('src') && qrImg.getAttribute('data-qr-src')) {
+          qrImg.setAttribute('src', qrImg.getAttribute('data-qr-src'));
+        }
       } else {
         dashRow.classList.add('hidden');
       }
@@ -2463,8 +2620,14 @@
     let label = '';
     if (featureKey === 'id_cards' || featureKey === 'substitution_form') {
       label = action === 'open' ? 'เปิดแสดงปุ่มบนหน้าเว็บแล้ว' : 'ปิดซ่อนปุ่มบนหน้าเว็บไว้แล้ว';
+    } else if (featureKey === 'judge_certs') {
+      label = action === 'open'
+        ? 'เปิดเกียรติบัตรกรรมการแล้ว (นำเข้ารายชื่อในหน้าเกียรติบัตรได้เลย)'
+        : 'ปิดเกียรติบัตรกรรมการแล้ว (แสดงเฉพาะนักเรียนและครูผู้ฝึกซ้อม)';
     } else if (action === 'disabled') {
-      label = 'ปิดใช้งานโหมดตารางเวลาแล้ว (ซ่อนเมนูสถานที่และกำหนดการ)';
+      label = featureKey === 'judges'
+        ? 'ปิดใช้งานระบบกรรมการตัดสินและบัตรประจำตัวกรรมการแล้ว'
+        : 'ปิดใช้งานโหมดตารางเวลาแล้ว (ซ่อนเมนูสถานที่และกำหนดการ)';
     } else {
       label = action === 'open' ? 'เปิดให้คนทั่วไปดูทันทีแล้ว' : action === 'hidden' ? 'ซ่อนเฉพาะแอดมินแล้ว' : 'ตั้งค่าตามกำหนดการแข่งขันแล้ว';
     }
@@ -2714,21 +2877,23 @@
       if (prev === 'ALL' || state.schools.some((s) => s.school_name === prev)) el.value = prev;
     });
 
-    const judgeFormSchool = document.getElementById('judgeFormSchool');
-    if (judgeFormSchool) {
-      const prevJS = judgeFormSchool.value || '';
-      judgeFormSchool.innerHTML = state.schools
+    ['judgeFormSchool', 'certJudgeSchoolSelect'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const prevVal = el.value || '';
+      el.innerHTML = state.schools
         .map(function (s) {
           return '<option value="' + escapeHtml(s.school_name) + '">' + escapeHtml(s.school_name) + '</option>';
         })
         .join('');
-      if (prevJS) judgeFormSchool.value = prevJS;
-    }
+      if (prevVal) el.value = prevVal;
+    });
 
-    const judgeFormCompSelect = document.getElementById('judgeFormCompSelect');
-    if (judgeFormCompSelect) {
-      const prevJC = judgeFormCompSelect.value || '';
-      judgeFormCompSelect.innerHTML = state.competitions
+    ['judgeFormCompSelect', 'certJudgeCompSelect'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const prevVal = el.value || '';
+      el.innerHTML = state.competitions
         .map(function (c) {
           return (
             '<option value="' +
@@ -2743,8 +2908,8 @@
           );
         })
         .join('');
-      if (prevJC) judgeFormCompSelect.value = prevJC;
-    }
+      if (prevVal) el.value = prevVal;
+    });
 
     const areas = getLearningAreas();
     const levels = getLevels();
@@ -6534,7 +6699,7 @@
     const roomName = comp.venue_room || 'อาคารเรียนรวม ห้อง 101';
     const compDateStr = comp.comp_date || '24–25 พฤศจิกายน 2569';
     const compTimeStr = comp.comp_time || '09.00 - 12.00 น.';
-    const showVenueSchedule = isFeatureOpenToPublic('venue');
+    const showVenueSchedule = isFeatureOpenToPublic('venue') && !isScheduleModeDisabled();
 
     // 1. Rows for Venue Prep Sheet (ฝ่ายสถานที่ — ไม่มีคะแนน ไม่มีช่องลายเซ็น)
     const venueRowsHtml =
@@ -6670,10 +6835,12 @@
 
     // 3. Rows & Judges for Official Judge Score Sheet (ใบบันทึกคะแนนกรรมการตัดสิน)
     const roleRank = { 'ประธานกรรมการ': 1, 'กรรมการ': 2, 'กรรมการและเลขานุการ': 3 };
-    const compJudges = (state.judges || [])
-      .filter((j) => j.comp_id === compId)
-      .slice()
-      .sort((a, b) => (roleRank[a.role] || 9) - (roleRank[b.role] || 9));
+    const compJudges = isJudgesModeDisabled()
+      ? []
+      : (state.judges || [])
+          .filter((j) => j.comp_id === compId)
+          .slice()
+          .sort((a, b) => (roleRank[a.role] || 9) - (roleRank[b.role] || 9));
 
     const judgeSlotCount = Math.max(3, compJudges.length);
     const judgeSlots = [];
@@ -12031,10 +12198,12 @@
     }
 
     const roleRank = { 'ประธานกรรมการ': 1, 'กรรมการ': 2, 'กรรมการและเลขานุการ': 3 };
-    const compJudges = (state.judges || [])
-      .filter((j) => j.comp_id === compId)
-      .slice()
-      .sort((a, b) => (roleRank[a.role] || 9) - (roleRank[b.role] || 9));
+    const compJudges = isJudgesModeDisabled()
+      ? []
+      : (state.judges || [])
+          .filter((j) => j.comp_id === compId)
+          .slice()
+          .sort((a, b) => (roleRank[a.role] || 9) - (roleRank[b.role] || 9));
     state.scoreModalCompJudges = compJudges;
 
     const maxSavedJLen = regs.reduce(
@@ -12605,25 +12774,27 @@
       });
     });
 
-    (state.judges || []).forEach(function (j, idx) {
-      const jName = j.judge_name || j.full_name || '';
-      entries.push({
-        cert_code: j.cert_code || (prefix + (j.judge_id || ('J' + (idx + 1)))),
-        role_type: 'JUDGE',
-        role_label: 'คณะกรรมการตัดสิน',
-        recipient_name: formatFullNameForPrint(j.prefix, jName),
-        grade_or_pos: j.role || 'กรรมการตัดสิน',
-        school_name: j.school_name || '',
-        comp_id: j.comp_id || '',
-        comp_name: j.comp_name || '',
-        learning_area: j.learning_area || '',
-        level: j.level || '',
-        score: '',
-        medal: 'คณะกรรมการตัดสิน',
-        award_title: 'ปฏิบัติหน้าที่ ' + (j.role || 'กรรมการตัดสิน'),
-        cert_ready: true
+    if (isJudgeCertificatesEnabled()) {
+      (state.judges || []).forEach(function (j, idx) {
+        const jName = j.judge_name || j.full_name || '';
+        entries.push({
+          cert_code: j.cert_code || (prefix + (j.judge_id || ('J' + (idx + 1)))),
+          role_type: 'JUDGE',
+          role_label: 'คณะกรรมการตัดสิน',
+          recipient_name: formatFullNameForPrint(j.prefix, jName),
+          grade_or_pos: j.role || 'กรรมการตัดสิน',
+          school_name: j.school_name || '',
+          comp_id: j.comp_id || '',
+          comp_name: j.comp_name || '',
+          learning_area: j.learning_area || '',
+          level: j.level || '',
+          score: '',
+          medal: 'คณะกรรมการตัดสิน',
+          award_title: 'ปฏิบัติหน้าที่ ' + (j.role || 'กรรมการตัดสิน'),
+          cert_ready: true
+        });
       });
-    });
+    }
 
     return entries;
   }
@@ -14893,7 +15064,7 @@
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
     const logoObecUrl = obecPngUrl || (baseDir + 'assets/logo-obec.svg');
     const cardWatermarkUrl = watermarkPngUrl || (baseDir + 'assets/watermark-hybrid-frameless.svg');
-    const showVenueSchedule = isFeatureOpenToPublic('venue');
+    const showVenueSchedule = isFeatureOpenToPublic('venue') && !isScheduleModeDisabled();
 
     let kanokTilesHtml = '';
     for (let kx = 0; kx < 720; kx += 80) {
@@ -17890,21 +18061,46 @@
   }
 
   function applyAdminSettingsCategoryFilter(cat) {
-    const activeCat = cat || 'ALL';
+    const activeCat = cat || 'control';
     state.adminSettingsCategory = activeCat;
+    const rawQuery = (state.adminSettingsSearchQuery || '').trim().toLowerCase();
+    const hasQuery = rawQuery.length > 0;
+    const isHostToolsHidden = isScheduleModeDisabled() && isJudgesModeDisabled();
+
+    const clearBtn = document.getElementById('btnAdminSettingsSearchClear');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !hasQuery);
+
     document.querySelectorAll('.admin-cat-btn').forEach(function (btn) {
-      const isAct = btn.getAttribute('data-admin-cat-btn') === activeCat;
+      const isAct = !hasQuery && btn.getAttribute('data-admin-cat-btn') === activeCat;
       btn.className = isAct
         ? 'admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white transition cursor-pointer'
         : 'admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer';
     });
+
+    let visibleCount = 0;
     document.querySelectorAll('#tab-settings .admin-setting-card').forEach(function (card) {
       const cCat = card.getAttribute('data-admin-cat') || '';
-      const show = activeCat === 'ALL' || cCat === activeCat;
+      const isHostShortcut = card.id === 'adminCardHostScheduleShortcut';
+      let show = false;
+      if (hasQuery) {
+        const haystack = ((card.getAttribute('data-admin-keywords') || '') + ' ' + (card.textContent || '')).toLowerCase();
+        show = haystack.indexOf(rawQuery) !== -1 && (!isHostShortcut || !isHostToolsHidden);
+      } else {
+        const catMatch = activeCat === 'ALL' || cCat === activeCat;
+        show = catMatch && (!isHostShortcut || !isHostToolsHidden);
+      }
       card.classList.toggle('hidden', !show);
+      if (show) visibleCount += 1;
     });
+
+    const emptyBanner = document.getElementById('adminSettingsEmptySearchBanner');
+    if (emptyBanner) {
+      emptyBanner.classList.toggle('hidden', !(hasQuery && visibleCount === 0));
+    }
+
     const leftCol = document.getElementById('adminSettingsLeftCol');
     const rightCol = document.getElementById('adminSettingsRightCol');
+    const colsGrid = document.getElementById('adminSettingsColumnsGrid');
     if (leftCol && rightCol) {
       const leftVis = Array.from(leftCol.querySelectorAll('.admin-setting-card')).some((el) => !el.classList.contains('hidden'));
       const rightVis = Array.from(rightCol.querySelectorAll('.admin-setting-card')).some((el) => !el.classList.contains('hidden'));
@@ -17914,12 +18110,13 @@
       leftCol.classList.toggle('lg:col-span-12', leftVis && !rightVis);
       rightCol.classList.toggle('lg:col-span-6', leftVis && rightVis);
       rightCol.classList.toggle('lg:col-span-12', !leftVis && rightVis);
+      if (colsGrid) colsGrid.classList.toggle('hidden', !leftVis && !rightVis);
     }
   }
 
   function renderAll() {
     updateAdminAndStatusUI();
-    applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'ALL');
+    applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'control');
     renderDashboardTab();
     renderSchoolViewTab();
     renderCompetitionViewTab();
@@ -19373,10 +19570,36 @@
       });
     }
 
-    // Schedule & Venue Tab Events + Admin Category Organizer Events
+    // Schedule & Venue Tab Events + Admin Category Organizer & Search Events
+    const adminSearchInputEl = document.getElementById('adminSettingsSearchInput');
+    const clearAdminSettingsSearch = function (shouldFocus) {
+      state.adminSettingsSearchQuery = '';
+      if (adminSearchInputEl) {
+        adminSearchInputEl.value = '';
+        if (shouldFocus) adminSearchInputEl.focus();
+      }
+      applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'control');
+    };
+    if (adminSearchInputEl) {
+      adminSearchInputEl.addEventListener('input', function () {
+        state.adminSettingsSearchQuery = (adminSearchInputEl.value || '').trim();
+        applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'control');
+      });
+    }
+    const btnAdminSearchClear = document.getElementById('btnAdminSettingsSearchClear');
+    if (btnAdminSearchClear) {
+      btnAdminSearchClear.addEventListener('click', function () { clearAdminSettingsSearch(true); });
+    }
+    const btnAdminEmptyReset = document.getElementById('btnAdminSettingsEmptyReset');
+    if (btnAdminEmptyReset) {
+      btnAdminEmptyReset.addEventListener('click', function () { clearAdminSettingsSearch(true); });
+    }
+
     document.querySelectorAll('.admin-cat-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        applyAdminSettingsCategoryFilter(btn.getAttribute('data-admin-cat-btn') || 'ALL');
+        state.adminSettingsSearchQuery = '';
+        if (adminSearchInputEl) adminSearchInputEl.value = '';
+        applyAdminSettingsCategoryFilter(btn.getAttribute('data-admin-cat-btn') || 'control');
       });
     });
 
@@ -20058,12 +20281,19 @@
         if (!state.isAdmin) return;
         if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
         if (!state.config.featureVisibility) state.config.featureVisibility = {};
-        state.config.featureVisibility.judges = 'open';
+        if (!isJudgesModeDisabled()) {
+          state.config.featureVisibility.judges = 'open';
+        }
         state.config.featureVisibility.results = 'open';
         state.config.featureVisibility.certificates = 'open';
         saveState();
         renderAll();
-        showToast('เปิดทุกฟีเจอร์จัดการแข่งขันต่อสาธารณะทันทีเรียบร้อยแล้ว', 'success');
+        showToast(
+          isJudgesModeDisabled()
+            ? 'เปิดผลคะแนนและเกียรติบัตรต่อสาธารณะทันทีแล้ว (คงการปิดระบบสถานที่และกรรมการไว้ตามเดิม)'
+            : 'เปิดทุกฟีเจอร์จัดการแข่งขันต่อสาธารณะทันทีเรียบร้อยแล้ว',
+          'success'
+        );
       });
     }
 
@@ -20073,16 +20303,126 @@
         if (!state.isAdmin) return;
         if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
         if (!state.config.featureVisibility) state.config.featureVisibility = {};
+        state.config.featureVisibility.schedule = 'disabled';
         state.config.featureVisibility.venue = 'hidden';
-        state.config.featureVisibility.judges = 'auto';
+        state.config.featureVisibility.judges = 'disabled';
+        state.config.featureVisibility.judge_certs = 'disabled';
         state.config.featureVisibility.results = 'auto';
         state.config.featureVisibility.certificates = 'auto';
         state.config.featureVisibility.id_cards = 'open';
         state.config.featureVisibility.substitution_form = 'hidden';
         state.config.idCardsDefaultMigratedV1 = true;
+        state.config.nonHostDefaultsMigratedV1 = true;
         saveState();
         renderAll();
-        showToast('รีเซ็ตทุกฟีเจอร์เป็นค่ามาตรฐานแล้ว (คงสถานะเปิดพิมพ์บัตร และปิดห้องสอบ/ใบเปลี่ยนตัว)', 'info');
+        showToast('รีเซ็ตเป็นค่าเริ่มต้นเรียบร้อย (เปิดรับสมัคร/พิมพ์บัตร/ผล/เกียรติบัตรนักเรียน-ครู และปิดสถานที่/กรรมการ)', 'info');
+      });
+    }
+
+    const btnPresetNonHostMode = document.getElementById('btnPresetNonHostMode');
+    if (btnPresetNonHostMode) {
+      btnPresetNonHostMode.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        if (!state.config.featureVisibility) state.config.featureVisibility = {};
+        state.config.featureVisibility.schedule = 'disabled';
+        state.config.featureVisibility.venue = 'hidden';
+        state.config.featureVisibility.judges = 'disabled';
+        state.config.featureVisibility.judge_certs = 'disabled';
+        state.config.featureVisibility.id_cards = 'open';
+        state.config.nonHostDefaultsMigratedV1 = true;
+        saveState();
+        renderAll();
+        showToast('เปิดโหมดรับสมัคร+ผล+เกียรติบัตร (ปิดระบบสถานที่และกรรมการเรียบร้อย)', 'success');
+      });
+    }
+
+    const btnPresetFullHostMode = document.getElementById('btnPresetFullHostMode');
+    if (btnPresetFullHostMode) {
+      btnPresetFullHostMode.addEventListener('click', function () {
+        if (!state.isAdmin) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        if (!state.config.featureVisibility) state.config.featureVisibility = {};
+        state.config.featureVisibility.schedule = 'hidden';
+        state.config.featureVisibility.judges = 'auto';
+        state.config.featureVisibility.judge_certs = 'open';
+        state.config.nonHostDefaultsMigratedV1 = true;
+        saveState();
+        renderAll();
+        showToast('เปิดโหมดเจ้าภาพจัดงานเองแล้ว (สามารถจัดตารางเวลา สถานที่ และกรรมการได้จากแถบด้านซ้าย)', 'success');
+      });
+    }
+
+    // Post-Event Judge Certificates Import & Quick Add (inside Tab Certificates)
+    const btnDownloadCertJudgeTemplate = document.getElementById('btnDownloadCertJudgeTemplate');
+    if (btnDownloadCertJudgeTemplate) {
+      btnDownloadCertJudgeTemplate.addEventListener('click', function () {
+        downloadManualJudgeTemplate();
+      });
+    }
+    const btnImportCertJudgesFile = document.getElementById('btnImportCertJudgesFile');
+    const certJudgeFileInput = document.getElementById('certJudgeFileInput');
+    if (btnImportCertJudgesFile && certJudgeFileInput) {
+      btnImportCertJudgesFile.addEventListener('click', function () {
+        certJudgeFileInput.value = '';
+        certJudgeFileInput.click();
+      });
+      certJudgeFileInput.addEventListener('change', async function () {
+        const f = certJudgeFileInput.files && certJudgeFileInput.files[0];
+        if (!f) return;
+        try {
+          await parseManualJudgeExcelFile(f);
+          const importedPlan = state.autoJudgePreviewPlan;
+          if (!importedPlan || !importedPlan.rows || importedPlan.rows.length === 0) return;
+          const countAdded = await applyAutoJudgePlan(false, 'นำเข้ารายชื่อกรรมการเพื่อออกเกียรติบัตรทีหลัง (' + f.name + ')', {
+            skipConfirm: true,
+            silentToast: true
+          });
+          showToast('นำเข้ารายชื่อกรรมการ ' + (countAdded || 0) + ' รายการเข้าหน้าเกียรติบัตรเรียบร้อยแล้ว', 'success');
+        } catch (err) {
+          showToast('นำเข้ารายชื่อกรรมการไม่สำเร็จ: ' + (err.message || err), 'error');
+        }
+      });
+    }
+    const certQuickAddJudgeForm = document.getElementById('certQuickAddJudgeForm');
+    if (certQuickAddJudgeForm) {
+      certQuickAddJudgeForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        if (!state.isAdmin) return;
+        const compId = (document.getElementById('certJudgeCompSelect') || {}).value || '';
+        const prefix = (document.getElementById('certJudgePrefixSelect') || {}).value || 'นาย';
+        const nameEl = document.getElementById('certJudgeNameInput');
+        const name = (nameEl && nameEl.value ? nameEl.value : '').trim();
+        const schoolName = (document.getElementById('certJudgeSchoolSelect') || {}).value || '';
+        const role = (document.getElementById('certJudgeRoleSelect') || {}).value || 'กรรมการ';
+        if (!compId || !name || !schoolName) return;
+
+        const comp = (state.competitions || []).find((c) => c.comp_id === compId) || {};
+        const newJudge = {
+          judge_id: 'JDG-74-' + String((state.judges || []).length + 1).padStart(3, '0') + '-' + Date.now().toString().slice(-3),
+          comp_id: compId,
+          comp_name: comp.comp_name || '',
+          learning_area: comp.learning_area || '',
+          level: comp.level || '',
+          prefix: prefix,
+          judge_name: name,
+          school_name: schoolName,
+          role: role,
+          phone: ''
+        };
+        if (!Array.isArray(state.judges)) state.judges = [];
+        state.judges.push(newJudge);
+        saveState();
+        if (state.gasWebAppUrl) {
+          await postToGoogleSheets({
+            action: 'add_judge',
+            judge: newJudge,
+            admin_pin: state.adminPin
+          });
+        }
+        if (nameEl) nameEl.value = '';
+        renderAll();
+        showToast('เพิ่มรายชื่อกรรมการเข้าหน้าเกียรติบัตรเรียบร้อยแล้ว', 'success');
       });
     }
 
@@ -20381,21 +20721,29 @@
             comp_time: '09.00–12.00 น.',
             venue_room: 'อาคารเรียนหลัก ห้อง 102',
             ref_code: 'WYK74-SAMPLE-T1'
-          }),
-          buildIdCardItem('JUDGE', {
-            person_name: 'นายเกียรติศักดิ์ คิดแม่น',
-            sub_role: 'ประธานกรรมการตัดสิน',
-            school_name: 'โรงเรียนบ้านหนองสระพังโนนสะอาด',
-            learning_area: 'คณิตศาสตร์',
-            comp_name_clean: 'การแข่งขันคิดเลขเร็ว',
-            level_and_type: 'ป.1–ป.3 • ประธานกรรมการ',
-            comp_date: '24–25 พ.ย. 2569',
-            comp_time: '09.00–12.00 น. (ประชุม 23 พ.ย. 13.30 น.)',
-            venue_room: 'อาคารเรียน 2 ห้อง 201',
-            ref_code: 'WYK74-SAMPLE-J1'
           })
         ];
-        openIdCardsPrintWindow('ตัวอย่างบัตรประจำตัวทั้ง 3 ประเภท', sampleCards, { previewByAdmin: true });
+        if (!isJudgesModeDisabled()) {
+          sampleCards.push(
+            buildIdCardItem('JUDGE', {
+              person_name: 'นายเกียรติศักดิ์ คิดแม่น',
+              sub_role: 'ประธานกรรมการตัดสิน',
+              school_name: 'โรงเรียนบ้านหนองสระพังโนนสะอาด',
+              learning_area: 'คณิตศาสตร์',
+              comp_name_clean: 'การแข่งขันคิดเลขเร็ว',
+              level_and_type: 'ป.1–ป.3 • ประธานกรรมการ',
+              comp_date: '24–25 พ.ย. 2569',
+              comp_time: '09.00–12.00 น. (ประชุม 23 พ.ย. 13.30 น.)',
+              venue_room: 'อาคารเรียน 2 ห้อง 201',
+              ref_code: 'WYK74-SAMPLE-J1'
+            })
+          );
+        }
+        openIdCardsPrintWindow(
+          isJudgesModeDisabled() ? 'ตัวอย่างบัตรประจำตัว (ผู้เข้าแข่งขัน • ครูผู้ฝึกสอน)' : 'ตัวอย่างบัตรประจำตัวทั้ง 3 ประเภท',
+          sampleCards,
+          { previewByAdmin: true }
+        );
       });
     }
 
