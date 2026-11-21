@@ -402,8 +402,7 @@
     pendingScheduleHighlightCompId: '',
     scheduleHistory: [],
     pendingScheduleRegenNote: null,
-    adminSettingsCategory: 'control',
-    adminSettingsSearchQuery: '',
+    adminSettingsCategory: 'ALL',
     resultSubview: 'by-comp',
     certNumeralMode: 'both', // 'thai' | 'arabic' | 'both'
     lastAddedRegId: null,
@@ -1376,6 +1375,7 @@
       }
     }
 
+    const sidebarAdminSubmenu = document.getElementById('sidebarAdminSubmenu');
     if (navTabSettings) {
       if (effAdmin) {
         navTabSettings.classList.remove('hidden');
@@ -1384,6 +1384,9 @@
         navTabSettings.classList.add('hidden');
         navTabSettings.classList.remove('flex');
       }
+    }
+    if (sidebarAdminSubmenu) {
+      sidebarAdminSubmenu.classList.toggle('hidden', !effAdmin);
     }
 
     // Dynamic Sample Button State (Smart Toggle: ล้างข้อมูลตัวอย่าง ⇄ สร้างข้อมูลตัวอย่างทดสอบ)
@@ -6323,6 +6326,57 @@
     }
   }
 
+  function renderCompAreaQuickJumpStrip(statusFilteredPool, activeAreaFilter) {
+    const container = document.getElementById('compAreaQuickJumpButtons');
+    if (!container) return;
+
+    const orderedAreas = [];
+    const areaCounts = {};
+    state.competitions.forEach(function (c) {
+      if (!Object.prototype.hasOwnProperty.call(areaCounts, c.learning_area)) {
+        areaCounts[c.learning_area] = 0;
+        orderedAreas.push(c.learning_area);
+      }
+    });
+    statusFilteredPool.forEach(function (c) {
+      areaCounts[c.learning_area] = (areaCounts[c.learning_area] || 0) + 1;
+    });
+
+    const pillHtml = function (areaVal, labelText, countVal, isActive) {
+      const cls = isActive
+        ? 'shrink-0 px-2.5 py-1 rounded-full font-heading text-[11px] font-semibold bg-slate-900 text-white border border-slate-900 transition cursor-pointer'
+        : countVal === 0
+          ? 'shrink-0 px-2.5 py-1 rounded-full font-heading text-[11px] font-medium bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100 transition cursor-pointer'
+          : 'shrink-0 px-2.5 py-1 rounded-full font-heading text-[11px] font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 transition cursor-pointer';
+      return (
+        '<button type="button" data-comp-quick-area="' +
+        escapeHtml(areaVal) +
+        '" class="' +
+        cls +
+        '">' +
+        escapeHtml(labelText) +
+        ' <span class="opacity-75">(' +
+        countVal +
+        ')</span></button>'
+      );
+    };
+
+    const htmlParts = [pillHtml('ALL', 'ทุกหมวด', statusFilteredPool.length, activeAreaFilter === 'ALL')];
+    orderedAreas.forEach(function (area) {
+      htmlParts.push(pillHtml(area, area, areaCounts[area] || 0, activeAreaFilter === area));
+    });
+
+    container.innerHTML = htmlParts.join('');
+    container.querySelectorAll('[data-comp-quick-area]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const targetArea = btn.getAttribute('data-comp-quick-area') || 'ALL';
+        const areaSel = document.getElementById('compViewAreaFilter');
+        if (areaSel) areaSel.value = targetArea;
+        renderCompetitionViewTab();
+      });
+    });
+  }
+
   function renderCompetitionViewTab() {
     const areaFilter = (document.getElementById('compViewAreaFilter') || {}).value || 'ALL';
     const levelFilter = (document.getElementById('compViewLevelFilter') || {}).value || 'ALL';
@@ -6347,8 +6401,14 @@
       roomBannerName.textContent = state.compRoomFilter;
     }
 
-    const baseFiltered = state.competitions.filter(function (c) {
-      if (areaFilter !== 'ALL' && c.learning_area !== areaFilter) return false;
+    const matchesStatusFilter = function (c) {
+      const count = (regByComp[c.comp_id] || []).length;
+      if (state.compStatusFilter === 'REGISTERED') return count > 0;
+      if (state.compStatusFilter === 'EMPTY') return count === 0;
+      return true;
+    };
+
+    const nonAreaFiltered = state.competitions.filter(function (c) {
       if (levelFilter !== 'ALL' && c.level !== levelFilter) return false;
       if (state.compRoomFilter !== 'ALL') {
         const cRoom = (c.venue_room || 'อาคารเรียนรวม ห้อง 101').trim();
@@ -6373,6 +6433,15 @@
       return true;
     });
 
+    renderCompAreaQuickJumpStrip(nonAreaFiltered.filter(matchesStatusFilter), areaFilter);
+
+    const baseFiltered =
+      areaFilter === 'ALL'
+        ? nonAreaFiltered
+        : nonAreaFiltered.filter(function (c) {
+            return c.learning_area === areaFilter;
+          });
+
     const regCount = baseFiltered.filter((c) => (regByComp[c.comp_id] || []).length > 0).length;
     const emptyCount = baseFiltered.length - regCount;
 
@@ -6391,12 +6460,7 @@
       }
     });
 
-    const finalList = baseFiltered.filter(function (c) {
-      const count = (regByComp[c.comp_id] || []).length;
-      if (state.compStatusFilter === 'REGISTERED') return count > 0;
-      if (state.compStatusFilter === 'EMPTY') return count === 0;
-      return true;
-    });
+    const finalList = baseFiltered.filter(matchesStatusFilter);
 
     const container = document.getElementById('competitionListContainer');
     if (!container) return;
@@ -18060,43 +18124,40 @@
     showToast('ส่งออกตารางกำหนดการ (.xlsx) เรียบร้อยแล้ว', 'success');
   }
 
+  const ADMIN_SETTINGS_CAT_LABELS = {
+    ALL: 'ทั้งหมดทุกหมวด',
+    control: '1. ควบคุมระบบ & เปิด-ปิดฟีเจอร์',
+    schedule_ops: '2. กำหนดการ, ไทม์ไลน์ & ห้องสอบ',
+    docs: '3. เกียรติบัตร & ตัวแทนเขตฯ',
+    data: '4. ฐานข้อมูล & เพิ่มรายการ'
+  };
+
   function applyAdminSettingsCategoryFilter(cat) {
-    const activeCat = cat || 'control';
+    const activeCat = cat || 'ALL';
     state.adminSettingsCategory = activeCat;
-    const rawQuery = (state.adminSettingsSearchQuery || '').trim().toLowerCase();
-    const hasQuery = rawQuery.length > 0;
     const isHostToolsHidden = isScheduleModeDisabled() && isJudgesModeDisabled();
 
-    const clearBtn = document.getElementById('btnAdminSettingsSearchClear');
-    if (clearBtn) clearBtn.classList.toggle('hidden', !hasQuery);
-
     document.querySelectorAll('.admin-cat-btn').forEach(function (btn) {
-      const isAct = !hasQuery && btn.getAttribute('data-admin-cat-btn') === activeCat;
+      const isAct = btn.getAttribute('data-admin-cat-btn') === activeCat && state.activeTab === 'settings';
       btn.className = isAct
-        ? 'admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white transition cursor-pointer'
-        : 'admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer';
+        ? 'admin-cat-btn w-full flex items-center gap-2 px-2 py-1 rounded-md text-[11px] font-heading font-semibold bg-[#EBEBEA] text-[#37352F] transition text-left cursor-pointer'
+        : 'admin-cat-btn w-full flex items-center gap-2 px-2 py-1 rounded-md text-[11px] font-heading font-medium text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] transition text-left cursor-pointer';
     });
 
-    let visibleCount = 0;
+    const subHeader = document.getElementById('adminSettingsSubHeader');
+    const subHeaderTitle = document.getElementById('adminSettingsSubHeaderTitle');
+    if (subHeader) subHeader.classList.toggle('hidden', activeCat === 'ALL');
+    if (subHeaderTitle && activeCat !== 'ALL') {
+      subHeaderTitle.textContent = ADMIN_SETTINGS_CAT_LABELS[activeCat] || activeCat;
+    }
+
     document.querySelectorAll('#tab-settings .admin-setting-card').forEach(function (card) {
       const cCat = card.getAttribute('data-admin-cat') || '';
       const isHostShortcut = card.id === 'adminCardHostScheduleShortcut';
-      let show = false;
-      if (hasQuery) {
-        const haystack = ((card.getAttribute('data-admin-keywords') || '') + ' ' + (card.textContent || '')).toLowerCase();
-        show = haystack.indexOf(rawQuery) !== -1 && (!isHostShortcut || !isHostToolsHidden);
-      } else {
-        const catMatch = activeCat === 'ALL' || cCat === activeCat;
-        show = catMatch && (!isHostShortcut || !isHostToolsHidden);
-      }
+      const catMatch = activeCat === 'ALL' || cCat === activeCat;
+      const show = catMatch && (!isHostShortcut || !isHostToolsHidden);
       card.classList.toggle('hidden', !show);
-      if (show) visibleCount += 1;
     });
-
-    const emptyBanner = document.getElementById('adminSettingsEmptySearchBanner');
-    if (emptyBanner) {
-      emptyBanner.classList.toggle('hidden', !(hasQuery && visibleCount === 0));
-    }
 
     const leftCol = document.getElementById('adminSettingsLeftCol');
     const rightCol = document.getElementById('adminSettingsRightCol');
@@ -18116,7 +18177,7 @@
 
   function renderAll() {
     updateAdminAndStatusUI();
-    applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'control');
+    applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'ALL');
     renderDashboardTab();
     renderSchoolViewTab();
     renderCompetitionViewTab();
@@ -18166,7 +18227,11 @@
     // Tab switching
     document.querySelectorAll('.nav-tab-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        switchTab(btn.getAttribute('data-tab'));
+        const targetTab = btn.getAttribute('data-tab');
+        if (targetTab === 'settings') {
+          state.adminSettingsCategory = 'ALL';
+        }
+        switchTab(targetTab);
       });
     });
 
@@ -19570,38 +19635,21 @@
       });
     }
 
-    // Schedule & Venue Tab Events + Admin Category Organizer & Search Events
-    const adminSearchInputEl = document.getElementById('adminSettingsSearchInput');
-    const clearAdminSettingsSearch = function (shouldFocus) {
-      state.adminSettingsSearchQuery = '';
-      if (adminSearchInputEl) {
-        adminSearchInputEl.value = '';
-        if (shouldFocus) adminSearchInputEl.focus();
-      }
-      applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'control');
-    };
-    if (adminSearchInputEl) {
-      adminSearchInputEl.addEventListener('input', function () {
-        state.adminSettingsSearchQuery = (adminSearchInputEl.value || '').trim();
-        applyAdminSettingsCategoryFilter(state.adminSettingsCategory || 'control');
-      });
-    }
-    const btnAdminSearchClear = document.getElementById('btnAdminSettingsSearchClear');
-    if (btnAdminSearchClear) {
-      btnAdminSearchClear.addEventListener('click', function () { clearAdminSettingsSearch(true); });
-    }
-    const btnAdminEmptyReset = document.getElementById('btnAdminSettingsEmptyReset');
-    if (btnAdminEmptyReset) {
-      btnAdminEmptyReset.addEventListener('click', function () { clearAdminSettingsSearch(true); });
-    }
-
+    // Sidebar Admin Sub-menu Navigation Events
     document.querySelectorAll('.admin-cat-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        state.adminSettingsSearchQuery = '';
-        if (adminSearchInputEl) adminSearchInputEl.value = '';
-        applyAdminSettingsCategoryFilter(btn.getAttribute('data-admin-cat-btn') || 'control');
+        const targetCat = btn.getAttribute('data-admin-cat-btn') || 'ALL';
+        state.adminSettingsCategory = targetCat;
+        switchTab('settings');
       });
     });
+    const btnAdminSettingsShowAll = document.getElementById('btnAdminSettingsShowAll');
+    if (btnAdminSettingsShowAll) {
+      btnAdminSettingsShowAll.addEventListener('click', function () {
+        applyAdminSettingsCategoryFilter('ALL');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
 
     document.querySelectorAll('[data-schedule-mode]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -20804,6 +20852,19 @@
     const btnDashMatrixPrint = document.getElementById('btnDashMatrixPrint');
     if (btnDashMatrixPrint) {
       btnDashMatrixPrint.addEventListener('click', printDashboardMatrixReport);
+    }
+
+    // Floating Back To Top Button (shown on scroll > 380px)
+    const btnBackToTop = document.getElementById('btnFloatingBackToTop');
+    if (btnBackToTop) {
+      const syncBackToTopVisibility = function () {
+        btnBackToTop.classList.toggle('hidden', window.scrollY <= 380);
+      };
+      window.addEventListener('scroll', syncBackToTopVisibility, { passive: true });
+      btnBackToTop.addEventListener('click', function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      syncBackToTopVisibility();
     }
   }
 

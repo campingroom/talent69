@@ -179,6 +179,22 @@
           <span class="truncate">จัดการระบบ (แอดมิน)</span>
           <span id="navBadgeSettingsDeletions" class="hidden ml-auto px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold leading-none">0</span>
         </button>
+
+        <!-- Sub-menu children under Admin Settings (Shown when Admin is logged in) -->
+        <div id="sidebarAdminSubmenu" class="hidden ml-3.5 pl-2.5 border-l border-[#E9E9E7] space-y-0.5 mt-1">
+          <button type="button" data-admin-cat-btn="control" class="admin-cat-btn w-full flex items-center gap-2 px-2 py-1 rounded-md text-[11px] font-heading font-medium text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] transition text-left cursor-pointer">
+            <span class="truncate">1. ควบคุมระบบ &amp; ฟีเจอร์</span>
+          </button>
+          <button type="button" data-admin-cat-btn="schedule_ops" title="กำหนดการ, ไทม์ไลน์ &amp; ห้องสอบ" class="admin-cat-btn w-full flex items-center gap-2 px-2 py-1 rounded-md text-[11px] font-heading font-medium text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] transition text-left cursor-pointer">
+            <span class="truncate">2. กำหนดการ &amp; ไทม์ไลน์</span>
+          </button>
+          <button type="button" data-admin-cat-btn="docs" class="admin-cat-btn w-full flex items-center gap-2 px-2 py-1 rounded-md text-[11px] font-heading font-medium text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] transition text-left cursor-pointer">
+            <span class="truncate">3. เกียรติบัตร &amp; ตัวแทนเขตฯ</span>
+          </button>
+          <button type="button" data-admin-cat-btn="data" class="admin-cat-btn w-full flex items-center gap-2 px-2 py-1 rounded-md text-[11px] font-heading font-medium text-[#787774] hover:bg-[#EBEBEA] hover:text-[#37352F] transition text-left cursor-pointer">
+            <span class="truncate">4. ฐานข้อมูล &amp; เพิ่มรายการ</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -289,7 +305,7 @@
   <!-- Top Milestones Announcement Bar (Modern Pill Strip, Natural Horizontal Swipe on Mobile) -->
   <div id="topMilestonesBar" class="bg-amber-50/90 border-b border-amber-200/80 py-1.5 px-4 sm:px-6">
     <div class="max-w-7xl mx-auto flex items-center justify-between gap-2 text-[11px] sm:text-xs font-heading">
-      <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto whitespace-nowrap scrollbar-none py-0.5 w-full lg:w-auto">
+      <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto whitespace-nowrap scrollbar-none py-0.5 min-w-0 flex-1">
         <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-bold text-[10px] shrink-0 shadow-2xs">
           กำหนดการสำคัญ
         </span>
@@ -2026,6 +2042,12 @@
             <input type="search" id="compViewSearch" placeholder="พิมพ์ชื่อรายการ เช่น คิดเลขเร็ว, ปั้นดินน้ำมัน..." class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-slate-900 focus:outline-none" />
           </div>
         </div>
+
+        <!-- Learning Area Quick Jump Pill Strip -->
+        <div id="compAreaQuickJumpStrip" class="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-start gap-2">
+          <span class="text-[11px] font-heading font-semibold text-slate-500 shrink-0 sm:pt-1">เลือกด่วนตามหมวด:</span>
+          <div id="compAreaQuickJumpButtons" class="flex items-center gap-1.5 overflow-x-auto sm:flex-wrap pb-1 sm:pb-0 w-full"></div>
+        </div>
       </div>
 
       <!-- Venue Map & Building/Room Directory Section -->
@@ -2928,60 +2950,22 @@
     <!-- ==========================================
          TAB 8: ADMIN SETTINGS & TOOLS (แสดงเฉพาะแอดมิน)
          ========================================== -->
-    <section id="tab-settings" class="tab-panel hidden space-y-5">
-      <!-- Admin Quick Category Switcher Bar + Live Search -->
-      <div id="adminSettingsCatBar" class="sticky top-12 z-20 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 p-2.5 flex flex-col xl:flex-row xl:items-center justify-between gap-2 shadow-2xs">
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button type="button" data-admin-cat-btn="control" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white transition cursor-pointer">
-            1. ควบคุมระบบ &amp; เปิด-ปิดฟีเจอร์
-          </button>
-          <button type="button" data-admin-cat-btn="schedule_ops" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-            2. กำหนดการ, ไทม์ไลน์ &amp; ห้องสอบ
-          </button>
-          <button type="button" data-admin-cat-btn="docs" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-            3. เกียรติบัตร &amp; ตัวแทนเขตฯ
-          </button>
-          <button type="button" data-admin-cat-btn="data" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-            4. ฐานข้อมูล &amp; เพิ่มรายการ
-          </button>
-          <button type="button" data-admin-cat-btn="ALL" class="admin-cat-btn px-3 py-1.5 rounded-lg font-heading text-xs font-medium text-slate-600 hover:bg-slate-100 transition cursor-pointer">
-            ดูทั้งหมด
-          </button>
+    <section id="tab-settings" class="tab-panel hidden space-y-5 min-w-0">
+      <!-- Slim Sub-section Filter Indicator (Shown only when filtered to sub-menu 1..4) -->
+      <div id="adminSettingsSubHeader" class="hidden bg-white rounded-xl border border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+        <div class="text-xs font-heading text-slate-600">
+          <span>กำลังแสดงหมวด:</span>
+          <strong id="adminSettingsSubHeaderTitle" class="text-slate-900 ml-1">-</strong>
         </div>
-        <div class="flex flex-wrap items-center gap-1.5 shrink-0">
-          <div class="relative flex-1 sm:w-64 xl:w-60 min-w-[200px]">
-            <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input type="search" id="adminSettingsSearchInput" placeholder="ค้นหาตั้งค่า (ลายเซ็น, รหัส, สคริปต์, ลบ...)" class="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-7 py-1.5 text-xs focus:border-slate-900 focus:outline-none" />
-            <button type="button" id="btnAdminSettingsSearchClear" title="ล้างคำค้นหา" class="hidden absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-400 hover:text-slate-700 cursor-pointer">
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <button type="button" id="btnSettingsQuickJumpSchedule" data-hero-tab="schedule" class="px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 font-heading text-xs font-medium transition cursor-pointer">
-            จัดสถานที่ &amp; เวลา →
-          </button>
-          <button type="button" id="btnSettingsQuickJumpJudges" data-hero-tab="judges" class="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-heading text-xs font-medium transition cursor-pointer">
-            จัดกรรมการ →
-          </button>
-        </div>
-      </div>
-
-      <!-- Empty Search State for Admin Settings -->
-      <div id="adminSettingsEmptySearchBanner" class="hidden bg-white rounded-xl border border-slate-200 p-6 text-center space-y-2">
-        <p class="text-sm font-heading font-semibold text-slate-800">ไม่พบหัวข้อตั้งค่าที่ตรงกับคำค้นหา</p>
-        <p class="text-xs text-slate-500">ลองพิมพ์คำสั้นลง เช่น รหัส, ลายเซ็น, เกียรติบัตร, ตาราง, ชีต หรือโรงเรียน</p>
-        <button type="button" id="btnAdminSettingsEmptyReset" class="mt-1 px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 font-heading text-xs font-medium cursor-pointer">
-          ล้างคำค้นหา
+        <button type="button" id="btnAdminSettingsShowAll" class="px-3 py-1 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-800 font-heading text-xs font-medium transition cursor-pointer">
+          แสดงทั้งหมดทุกหมวด →
         </button>
       </div>
 
       <!-- Top Row: Admin Control Center -->
-      <div data-admin-cat="control" data-admin-keywords="เปิด ปิด รับสมัคร สลับสถานะ csv เกียรติบัตร เวลาไทย sheets ล้างข้อมูลตัวอย่าง รหัสผ่าน pin ลบพลาด" class="admin-setting-card bg-white rounded-xl border border-slate-200 border-l-4 border-l-amber-500 p-5 space-y-4">
+      <div data-admin-cat="control" class="admin-setting-card bg-white rounded-xl border border-slate-200 border-l-4 border-l-amber-500 p-5 space-y-4 min-w-0">
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-100 pb-4">
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <span class="inline-block px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-heading text-xs font-semibold mb-1">
               โหมดผู้ดูแลระบบ (เฉพาะแอดมินเห็น)
             </span>
@@ -2996,7 +2980,7 @@
               <span id="adminStatusPillIdCards" class="px-2 py-0.5 rounded-md border bg-blue-50 text-blue-800 border-blue-200">บัตรประจำตัว: เปิดอยู่</span>
             </div>
           </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 shrink-0 w-full lg:w-[460px]">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 shrink-0 w-full lg:w-[400px] xl:w-[440px]">
             <button type="button" id="btnToggleRegistrationOpen" class="w-full px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer text-center">
               สลับสถานะเปิด/ปิดรับสมัคร
             </button>
@@ -3291,7 +3275,7 @@
 
       <div id="adminSettingsColumnsGrid" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <!-- Left 6 cols: Schedule, Reports & Connection -->
-        <div id="adminSettingsLeftCol" class="lg:col-span-6 space-y-6">
+        <div id="adminSettingsLeftCol" class="lg:col-span-6 space-y-6 min-w-0">
 
           <!-- Shortcut Card: Schedule & Bulk Room Manager (Auto-hidden in Non-Host mode unless searching) -->
           <div id="adminCardHostScheduleShortcut" data-admin-cat="schedule_ops" class="admin-setting-card bg-white rounded-xl border border-blue-200 p-5 space-y-3">
@@ -3615,7 +3599,7 @@
         </div>
 
         <!-- Right 6 cols: Certificate Customizer, Official Documents & Add Items -->
-        <div id="adminSettingsRightCol" class="lg:col-span-6 space-y-6">
+        <div id="adminSettingsRightCol" class="lg:col-span-6 space-y-6 min-w-0">
 
           <!-- Card 4: Certificate & Canva Template Customizer -->
           <div data-admin-cat="docs" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-4">
@@ -3846,10 +3830,10 @@
           <!-- Card 7: Add New School -->
           <div data-admin-cat="data" class="admin-setting-card bg-white rounded-xl border border-slate-200 p-5 space-y-3">
             <h3 class="text-base font-bold font-heading text-slate-900">เพิ่มรายชื่อโรงเรียนเพิ่มเติม (เฉพาะแอดมิน)</h3>
-            <form id="addSchoolForm" class="flex flex-col sm:flex-row gap-2">
-              <input type="text" id="newSchoolName" required placeholder="พิมพ์ชื่อโรงเรียน" class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-              <input type="text" id="newSchoolSubdistrict" placeholder="ตำบล (เช่น ต.วังยาว)" class="sm:w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-              <button type="submit" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium shrink-0 transition">
+            <form id="addSchoolForm" class="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+              <input type="text" id="newSchoolName" required placeholder="พิมพ์ชื่อโรงเรียน" class="flex-1 min-w-[160px] rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <input type="text" id="newSchoolSubdistrict" placeholder="ตำบล (เช่น ต.วังยาว)" class="sm:w-36 min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <button type="submit" class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium shrink-0 transition cursor-pointer">
                 + เพิ่มโรงเรียน
               </button>
             </form>
@@ -3869,6 +3853,14 @@
   </footer>
 
   </div><!-- end #notionMainArea -->
+
+  <!-- Floating Back To Top Button (Shown when scrolled down > 380px) -->
+  <button type="button" id="btnFloatingBackToTop" title="เลื่อนกลับขึ้นด้านบนและช่องค้นหา" aria-label="กลับด้านบน" class="hidden fixed bottom-5 right-5 z-40 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-slate-900 hover:bg-slate-800 text-white border border-slate-700/60 shadow-lg font-heading text-xs font-semibold transition cursor-pointer no-print">
+    <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.25">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+    </svg>
+    <span>กลับด้านบน</span>
+  </button>
 
   <script src="js/mock-data.js"></script>
   <script src="js/app.js"></script>
