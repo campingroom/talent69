@@ -265,6 +265,51 @@
     return r.score !== '' && r.score !== null && r.score !== undefined && !Number.isNaN(Number(r.score));
   }
 
+  function isRegistrationByeRep(r) {
+    if (!r) return false;
+    const m = String(r.medal || '').trim();
+    const a = String(r.award_title || '').trim();
+    return m === 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)' || a === 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)';
+  }
+
+  function isRegistrationEvaluated(r) {
+    if (!r) return false;
+    return Boolean(hasValidScore(r) || isRegistrationAbsent(r) || isRegistrationByeRep(r));
+  }
+
+  function getCompetitionResultStats(comp, regsInput) {
+    const compId = comp && comp.comp_id ? comp.comp_id : '';
+    const regs = Array.isArray(regsInput)
+      ? regsInput
+      : compId
+      ? state.registrations.filter((r) => r.comp_id === compId)
+      : [];
+    const total = regs.length;
+    let evaluatedCount = 0;
+    regs.forEach(function (r) {
+      if (isRegistrationEvaluated(r)) evaluatedCount++;
+    });
+    const missingCount = Math.max(0, total - evaluatedCount);
+    const hasAnyEvaluated = evaluatedCount > 0;
+    const isComplete = total > 0 && missingCount === 0;
+    const rawPublished = Boolean(comp && comp.result_status === 'ประกาศผลแล้ว');
+    const isStalePublished = Boolean(rawPublished && !hasAnyEvaluated);
+    const isAnnounced = Boolean(rawPublished && hasAnyEvaluated);
+    return {
+      total: total,
+      evaluatedCount: evaluatedCount,
+      missingCount: missingCount,
+      hasAnyEvaluated: hasAnyEvaluated,
+      isComplete: isComplete,
+      isStalePublished: isStalePublished,
+      isAnnounced: isAnnounced
+    };
+  }
+
+  function isCompetitionResultAnnounced(comp, regsInput) {
+    return getCompetitionResultStats(comp, regsInput).isAnnounced;
+  }
+
   function getCompetitionTieStats(compId) {
     const regs = state.registrations.filter((r) => r.comp_id === compId && hasValidScore(r));
     const scoreCounts = {};
@@ -369,7 +414,11 @@
     userX:
       '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"/></svg>',
     building:
-      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>'
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>',
+    info:
+      '<svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+    shield:
+      '<svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>'
   };
 
   let state = {
@@ -409,6 +458,7 @@
     gasWebAppUrl: '',
     isAdmin: false,
     previewAsPublic: false,
+    localSandboxWriteUnlocked: false,
     adminQuickDeleteEnabled: false,
     adminShowScoresInLists: false,
     adminPin: '',
@@ -1364,6 +1414,7 @@
     if (adminPublicPreviewBanner) {
       adminPublicPreviewBanner.classList.toggle('hidden', !(state.isAdmin && state.previewAsPublic));
     }
+    renderLocalSandboxBanner();
 
     if (headerSheetLink) {
       if (effAdmin) {
@@ -2696,8 +2747,56 @@
     }
   }
 
+  function isLocalPreviewHost() {
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname) || '';
+    return /^(localhost|127\.0\.0\.1)$/i.test(host);
+  }
+
+  function isLocalSandboxWriteBlocked() {
+    return Boolean(isLocalPreviewHost() && !state.localSandboxWriteUnlocked);
+  }
+
+  function renderLocalSandboxBanner() {
+    const banner = document.getElementById('localSandboxGuardBanner');
+    if (!banner) return;
+    if (!isLocalPreviewHost()) {
+      banner.classList.add('hidden');
+      return;
+    }
+    banner.classList.remove('hidden');
+    const textEl = document.getElementById('localSandboxGuardText');
+    const btnEl = document.getElementById('btnToggleLocalSandboxWrite');
+    if (state.localSandboxWriteUnlocked) {
+      banner.className = 'bg-amber-900 text-amber-50 py-2 px-4 sm:px-6 text-xs font-heading border-b border-amber-700 no-print';
+      if (textEl) {
+        textEl.innerHTML =
+          '<strong>ปลดล็อกโหมดทดสอบในเครื่องแล้ว</strong> — การบันทึกจาก localhost ในเซสชันนี้จะส่งเข้า Google Sheets จริง (รีเฟรชหน้าเว็บเพื่อกลับสู่โหมดปลอดภัย)';
+      }
+      if (btnEl) {
+        btnEl.textContent = 'ล็อกกลับเป็นโหมดปลอดภัย (แนะนำ)';
+        btnEl.className =
+          'px-3 py-1 rounded-md bg-amber-300 hover:bg-amber-200 text-slate-950 font-semibold text-xs transition cursor-pointer shrink-0';
+      }
+    } else {
+      banner.className = 'bg-indigo-950 text-indigo-50 py-2 px-4 sm:px-6 text-xs font-heading border-b border-indigo-800 no-print';
+      if (textEl) {
+        textEl.innerHTML =
+          '<strong>โหมดทดสอบในเครื่อง (Local Sandbox)</strong> — อ่านข้อมูลจาก Google Sheets ได้ปกติ แต่ระบบบล็อกการเขียนทับฐานข้อมูลจริงอัตโนมัติ';
+      }
+      if (btnEl) {
+        btnEl.textContent = 'ปลดล็อกเขียนลง Sheets จริงชั่วคราว';
+        btnEl.className =
+          'px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 border border-indigo-400/50 text-white font-semibold text-xs transition cursor-pointer shrink-0';
+      }
+    }
+  }
+
   async function postToGoogleSheets(payload) {
     if (!state.gasWebAppUrl) return { ok: true, localOnly: true };
+    const isReadOnlyAction = Boolean(payload && payload.action === 'verify_admin');
+    if (!isReadOnlyAction && isLocalSandboxWriteBlocked()) {
+      return { ok: true, localOnly: true, localSandboxBlocked: true };
+    }
     try {
       const res = await fetch(state.gasWebAppUrl, {
         method: 'POST',
@@ -4565,11 +4664,13 @@
     // Score Announcement Progress & Medal Tally Card
     let announcedActiveCount = 0;
     let announcedTotalCount = 0;
+    const dashRegsByComp = {};
+    state.registrations.forEach(function (r) {
+      if (!dashRegsByComp[r.comp_id]) dashRegsByComp[r.comp_id] = [];
+      dashRegsByComp[r.comp_id].push(r);
+    });
     state.competitions.forEach(function (c) {
-      const hasEvaluated = state.registrations.some(function (r) {
-        return r.comp_id === c.comp_id && (hasValidScore(r) || isRegistrationAbsent(r));
-      });
-      const isPublished = c.result_status === 'ประกาศผลแล้ว' || hasEvaluated;
+      const isPublished = isCompetitionResultAnnounced(c, dashRegsByComp[c.comp_id] || []);
       if (isPublished) {
         announcedTotalCount++;
         if ((compRegMap[c.comp_id] || 0) > 0) announcedActiveCount++;
@@ -11266,8 +11367,7 @@
     let unresolvedTieCount = 0;
     activeCompsAll.forEach(function (c) {
       const regs = regsByComp[c.comp_id] || [];
-      const hasEvaluated = regs.some((r) => hasValidScore(r) || isRegistrationAbsent(r));
-      if (c.result_status === 'ประกาศผลแล้ว' || hasEvaluated) announcedActiveCount++;
+      if (isCompetitionResultAnnounced(c, regs)) announcedActiveCount++;
       if (getCompetitionTieStats(c.comp_id).hasUnresolvedTie) unresolvedTieCount++;
     });
     const pendingActiveCount = Math.max(0, activeCompsAll.length - announcedActiveCount);
@@ -11342,8 +11442,7 @@
 
     const filteredComps = state.competitions.filter(function (c) {
       const regs = regsByComp[c.comp_id] || [];
-      const hasEvaluated = regs.some((r) => hasValidScore(r) || isRegistrationAbsent(r));
-      const isAnnounced = c.result_status === 'ประกาศผลแล้ว' || hasEvaluated;
+      const isAnnounced = isCompetitionResultAnnounced(c, regs);
       const tieInfo = getCompetitionTieStats(c.comp_id);
 
       if (resArea !== 'ALL' && c.learning_area !== resArea) return false;
@@ -11386,14 +11485,24 @@
               }
               return 0;
             });
-            const hasEvaluated = regs.some((r) => hasValidScore(r) || isRegistrationAbsent(r));
-            const isAnnounced = c.result_status === 'ประกาศผลแล้ว' || hasEvaluated;
+            const resStats = getCompetitionResultStats(c, regs);
+            const isAnnounced = resStats.isAnnounced;
             const tieInfo = getCompetitionTieStats(c.comp_id);
 
+            const incompleteWarnBadge =
+              isAnnounced && resStats.missingCount > 0 && isEffectiveAdmin()
+                ? `<span class="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-heading text-[11px] font-medium">ยังขาด ${resStats.missingCount} ทีม</span>`
+                : '';
+
+            const staleSyncHintBadge =
+              resStats.isStalePublished && isEffectiveAdmin()
+                ? `<span class="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 font-heading text-[11px] font-medium" title="สถานะใน Google Sheets ค้างคำว่า ประกาศผลแล้ว ทั้งที่ไม่มีคะแนนใด ๆ — กดปุ่ม บันทึก/แก้ไขคะแนน แล้วกดบันทึกเพื่อเคลียร์สถานะ">สถานะใน Sheets ค้างประกาศผล — กดบันทึกเพื่อล้างสถานะ</span>`
+                : '';
+
             const statusBadge = isAnnounced
-              ? `<span class="px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-heading text-xs font-semibold">ประกาศผลแล้ว</span>`
+              ? `<span class="px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-heading text-xs font-semibold">ประกาศผลแล้ว</span>${incompleteWarnBadge}`
               : regs.length > 0
-              ? `<span class="px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-heading text-xs font-medium">รอบันทึกผล (${regs.length} ทีม)</span>`
+              ? `<span class="px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-heading text-xs font-medium">รอบันทึกผล (${regs.length} ทีม)</span>${staleSyncHintBadge}`
               : `<span class="px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-500 font-heading text-xs">ไม่มีทีมสมัคร</span>`;
 
             const tieBadge = tieInfo.hasUnresolvedTie
@@ -11689,6 +11798,103 @@
       '<th class="py-2.5 px-3 w-44 text-center">อันดับ / รางวัล (ชี้ขาดได้)</th>';
   }
 
+  function collectScoreModalState() {
+    const tbody = document.getElementById('scoreModalTableBody');
+    const rowEls = tbody ? Array.from(tbody.querySelectorAll('tr[data-score-reg-id]')) : [];
+    const entries = rowEls.map(function (tr) {
+      const regId = tr.getAttribute('data-score-reg-id');
+      const schoolName = tr.getAttribute('data-school-name') || '';
+      const attSel = tr.querySelector('.score-attendance-select');
+      const attVal = attSel ? attSel.value : 'PRESENT';
+      const isAbsent = attVal === 'ABSENT';
+      const isByeRep = attVal === 'BYE_REP';
+      const scoreInp = tr.querySelector('.score-input-field');
+      const valStr = scoreInp ? scoreInp.value.trim() : '';
+      const num =
+        !isAbsent && !isByeRep && valStr !== '' && !Number.isNaN(Number(valStr))
+          ? Math.min(100, Math.max(0, Number(valStr)))
+          : '';
+      const isComplete = Boolean(isAbsent || isByeRep || num !== '');
+      const rankSel = tr.querySelector('.score-rank-select');
+      const manualRank =
+        !isAbsent && !isByeRep && tr.dataset.rankOverridden === 'true' && rankSel && rankSel.value !== ''
+          ? Number(rankSel.value)
+          : null;
+      const fields = Array.from(tr.querySelectorAll('.score-judge-field'));
+      const judgeScores = fields.map(function (el) {
+        if (el.getAttribute('data-abstain') === 'true') return '';
+        return el.value.trim() !== '' ? Number(el.value.trim()) : '';
+      });
+      const judgeAbstains = fields.map(function (el) {
+        return el.getAttribute('data-abstain') === 'true';
+      });
+      return {
+        tr: tr,
+        reg_id: regId,
+        school_name: schoolName,
+        attVal: attVal,
+        isAbsent: isAbsent,
+        isByeRep: isByeRep,
+        score: num,
+        isComplete: isComplete,
+        manualRank: manualRank,
+        judgeScores: judgeScores,
+        judgeAbstains: judgeAbstains
+      };
+    });
+
+    let scoredCount = 0;
+    let absentCount = 0;
+    let byeCount = 0;
+    const incompleteRows = [];
+    entries.forEach(function (item) {
+      if (item.isAbsent) absentCount++;
+      else if (item.isByeRep) byeCount++;
+      else if (item.score !== '') scoredCount++;
+      else incompleteRows.push(item);
+    });
+    const total = entries.length;
+    const completedCount = total - incompleteRows.length;
+    return {
+      total: total,
+      completedCount: completedCount,
+      scoredCount: scoredCount,
+      absentCount: absentCount,
+      byeCount: byeCount,
+      incompleteRows: incompleteRows,
+      entries: entries
+    };
+  }
+
+  function focusScoreModalRowInput(tr) {
+    if (!tr) return;
+    const inp = tr.querySelector('.score-input-field:not(:disabled)') || tr.querySelector('.score-attendance-select');
+    if (inp) {
+      if (typeof inp.scrollIntoView === 'function') {
+        inp.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+      inp.focus();
+      if (typeof inp.select === 'function') inp.select();
+    }
+  }
+
+  function hideScoreModalValidationAlert() {
+    const valAlertEl = document.getElementById('scoreModalValidationAlert');
+    if (valAlertEl) {
+      valAlertEl.classList.add('hidden');
+      valAlertEl.innerHTML = '';
+      valAlertEl.dataset.mode = '';
+    }
+  }
+
+  function showScoreModalValidationAlert(mode, htmlBody) {
+    const valAlertEl = document.getElementById('scoreModalValidationAlert');
+    if (!valAlertEl) return;
+    valAlertEl.dataset.mode = mode || '';
+    valAlertEl.className = 'p-3 rounded-xl border border-rose-300 bg-rose-50 text-rose-900 text-xs flex items-start gap-2.5';
+    valAlertEl.innerHTML = ICONS.warning + '<div class="min-w-0 leading-relaxed">' + htmlBody + '</div>';
+  }
+
   function recalculateScoreModalPreview() {
     const tbody = document.getElementById('scoreModalTableBody');
     if (!tbody) return;
@@ -11704,6 +11910,11 @@
       const jFields = tr.querySelectorAll('.score-judge-field');
       const jAbstainBtns = tr.querySelectorAll('.score-abstain-btn');
       const rankSel = tr.querySelector('.score-rank-select');
+
+      if (inp) {
+        inp.classList.remove('ring-2', 'ring-rose-500', 'border-rose-500', 'border-amber-400', 'bg-amber-50/40');
+        inp.classList.add('border-slate-300');
+      }
 
       if (isAbsent || isByeRep) {
         if (inp) {
@@ -11761,12 +11972,15 @@
 
     const finalRankCounts = {};
     const tiedScoresList = Object.keys(scoreFreq).filter((k) => scoreFreq[k] > 1);
+    const modalState = collectScoreModalState();
+    const hasPartialMissing = modalState.completedCount > 0 && modalState.incompleteRows.length > 0;
 
     rowEls.forEach(function (tr) {
       const attSel = tr.querySelector('.score-attendance-select');
       const attVal = attSel ? attSel.value : 'PRESENT';
       const isAbsent = attVal === 'ABSENT';
       const isByeRep = attVal === 'BYE_REP';
+      const inp = tr.querySelector('.score-input-field');
       const medalCell = tr.querySelector('.score-preview-medal');
       const rankSel = tr.querySelector('.score-rank-select');
       const awardEl = tr.querySelector('.score-award-preview');
@@ -11796,7 +12010,11 @@
           rankSel.value = '';
           rankSel.disabled = true;
         }
-        if (awardEl) awardEl.textContent = 'รอระบุคะแนน';
+        if (awardEl) awardEl.textContent = 'ยังไม่กรอกคะแนน / โปรดระบุ "ขาดสอบ"';
+        if (hasPartialMissing && inp) {
+          inp.classList.remove('border-slate-300');
+          inp.classList.add('border-amber-400', 'bg-amber-50/40');
+        }
         return;
       }
 
@@ -11849,6 +12067,90 @@
           '<div><strong>คะแนนเท่ากัน (' +
           tiedScoresList.join(', ') +
           ' คะแนน) ได้รับการชี้ขาดอันดับครบถ้วนแล้ว</strong> (อันดับไม่ซ้ำกัน พร้อมบันทึก)</div>';
+      }
+    }
+
+    // Completeness Checklist Bar & Publish Checkbox Guard
+    const compBarEl = document.getElementById('scoreModalCompletenessBar');
+    if (compBarEl) {
+      if (modalState.total > 0 && modalState.completedCount === modalState.total) {
+        const parts = ['กรอกคะแนน ' + modalState.scoredCount + ' ทีม'];
+        if (modalState.absentCount > 0) parts.push('ขาดสอบ ' + modalState.absentCount + ' ทีม');
+        if (modalState.byeCount > 0) parts.push('ตัวแทน (บาย) ' + modalState.byeCount + ' ทีม');
+        compBarEl.className =
+          'p-3 rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2';
+        compBarEl.innerHTML =
+          '<div class="flex items-start sm:items-center gap-2">' +
+          ICONS.check +
+          '<div><strong>เช็กลิสต์ความครบถ้วน: ครบทุกทีมแล้ว (' +
+          modalState.total +
+          ' / ' +
+          modalState.total +
+          ' ทีม)</strong> — ' +
+          escapeHtml(parts.join(' • ')) +
+          ' (พร้อมบันทึกผล)</div></div>';
+      } else if (hasPartialMissing) {
+        const missingNames = modalState.incompleteRows.slice(0, 4).map((x) => escapeHtml(x.school_name));
+        const extraCount = modalState.incompleteRows.length - missingNames.length;
+        const missingSummary = missingNames.join(', ') + (extraCount > 0 ? ' และอีก ' + extraCount + ' โรงเรียน' : '');
+        compBarEl.className =
+          'p-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2';
+        compBarEl.innerHTML =
+          '<div class="flex items-start gap-2 min-w-0">' +
+          ICONS.warning +
+          '<div class="min-w-0 leading-relaxed"><strong>กรอกผลยังไม่ครบทุกทีม:</strong> ทำรายการแล้ว ' +
+          modalState.completedCount +
+          ' / ' +
+          modalState.total +
+          ' ทีม (ยังขาดอีก ' +
+          modalState.incompleteRows.length +
+          ' ทีม: ' +
+          missingSummary +
+          ') — กรุณากรอกคะแนนหรือเลือก "ขาดสอบ" ให้ครบทุกทีมก่อนบันทึก</div></div>' +
+          '<button type="button" id="btnScoreModalFocusNextMissing" class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-heading text-xs font-semibold shrink-0 cursor-pointer">ไปทีมถัดไปที่ยังว่าง</button>';
+        const focusMissingBtn = document.getElementById('btnScoreModalFocusNextMissing');
+        if (focusMissingBtn && modalState.incompleteRows[0]) {
+          focusMissingBtn.addEventListener('click', function () {
+            focusScoreModalRowInput(modalState.incompleteRows[0].tr);
+          });
+        }
+      } else {
+        compBarEl.className =
+          'p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2';
+        compBarEl.innerHTML =
+          '<div class="flex items-start sm:items-center gap-2">' +
+          ICONS.info +
+          '<div><strong>ยังไม่มีคะแนนในรายการนี้ (0 / ' +
+          modalState.total +
+          ' ทีม)</strong> — หากลบคะแนนออกหมดแล้วกดบันทึก ระบบจะถามยืนยันเพื่อปรับสถานะกลับเป็น "รอประกาศผล"</div></div>';
+      }
+    }
+
+    const pubCheck = document.getElementById('scoreModalPublishCheck');
+    const pubLabel = document.getElementById('scoreModalPublishCheckLabel');
+    if (pubCheck) {
+      if (modalState.completedCount === 0) {
+        pubCheck.checked = false;
+        pubCheck.disabled = true;
+        if (pubLabel) {
+          pubLabel.textContent = 'ยังไม่สามารถประกาศผลได้ (คะแนนว่างทุกทีม — เมื่อบันทึกจะปรับเป็น "รอประกาศผล")';
+        }
+      } else {
+        pubCheck.disabled = false;
+        if (pubCheck.dataset.userUnchecked !== 'true') {
+          pubCheck.checked = true;
+        }
+        if (pubLabel) {
+          pubLabel.textContent = 'เปลี่ยนสถานะรายการนี้เป็น "ประกาศผลแล้ว" ทันทีหลังบันทึก';
+        }
+      }
+    }
+
+    const valAlertEl = document.getElementById('scoreModalValidationAlert');
+    if (valAlertEl && !valAlertEl.classList.contains('hidden')) {
+      const mode = valAlertEl.dataset.mode || '';
+      if (modalState.incompleteRows.length === 0 || (mode === 'empty' && modalState.completedCount > 0)) {
+        hideScoreModalValidationAlert();
       }
     }
   }
@@ -12228,8 +12530,22 @@
       (r) => Array.isArray(r.judge_scores) && r.judge_scores.some((v) => v !== '' && v !== null && v !== undefined)
     );
     const toggle3J = document.getElementById('scoreModal3JudgesToggle');
-    if (toggle3J && (hasAnyJudgeScores || compJudges.length > 3)) {
-      toggle3J.checked = true;
+    if (toggle3J) {
+      toggle3J.checked = Boolean(hasAnyJudgeScores || compJudges.length > 3);
+    }
+
+    hideScoreModalValidationAlert();
+    const pubCheck = document.getElementById('scoreModalPublishCheck');
+    if (pubCheck) {
+      const hasAnyEval = regs.some(isRegistrationEvaluated);
+      if (hasAnyEval) {
+        const isPub = comp.result_status === 'ประกาศผลแล้ว';
+        pubCheck.checked = isPub;
+        pubCheck.dataset.userUnchecked = isPub ? '' : 'true';
+      } else {
+        pubCheck.checked = true;
+        pubCheck.dataset.userUnchecked = '';
+      }
     }
 
     // Bye Notice Banner
@@ -12281,52 +12597,127 @@
     modal.classList.remove('flex');
   }
 
+  function clearAllScoresInModal() {
+    const compId = document.getElementById('scoreModalCompId').value;
+    if (!compId) return;
+    const regs = state.registrations.filter((r) => r.comp_id === compId);
+    const judgeCount = state.scoreModalJudgeCount || 5;
+    const emptyDraftMap = {};
+    regs.forEach(function (r) {
+      emptyDraftMap[r.reg_id] = {
+        attVal: 'PRESENT',
+        netScore: '',
+        rankVal: '',
+        judgeScores: new Array(judgeCount).fill(''),
+        judgeAbstains: new Array(judgeCount).fill(false)
+      };
+    });
+    const pubCheck = document.getElementById('scoreModalPublishCheck');
+    if (pubCheck) {
+      pubCheck.dataset.userUnchecked = '';
+    }
+    hideScoreModalValidationAlert();
+    renderScoreModalRows(compId, regs, state.scoreModalCompJudges || [], judgeCount, emptyDraftMap);
+    showToast(
+      'เคลียร์ช่องคะแนนทั้งหมดในหน้าต่างแล้ว — กด "บันทึกและปิด" เพื่อยืนยันการล้างผลและปรับสถานะกลับเป็น รอประกาศผล',
+      'info'
+    );
+  }
+
   async function saveScoreModalData(options) {
     if (!state.isAdmin) return false;
     const opts = options || { closeAfter: true, goNextPending: false };
 
     const compId = document.getElementById('scoreModalCompId').value;
-    const publishNow = document.getElementById('scoreModalPublishCheck').checked;
-    const tbody = document.getElementById('scoreModalTableBody');
-    const rowEls = Array.from(tbody.querySelectorAll('tr[data-score-reg-id]'));
+    const pubCheck = document.getElementById('scoreModalPublishCheck');
+    const publishNow = Boolean(pubCheck && pubCheck.checked);
+    const modalState = collectScoreModalState();
+    const entries = modalState.entries;
 
-    const entries = rowEls.map(function (tr) {
-      const regId = tr.getAttribute('data-score-reg-id');
-      const attSel = tr.querySelector('.score-attendance-select');
-      const attVal = attSel ? attSel.value : 'PRESENT';
-      const isAbsent = attVal === 'ABSENT';
-      const isByeRep = attVal === 'BYE_REP';
-      const valStr = tr.querySelector('.score-input-field').value.trim();
-      const num =
-        !isAbsent && !isByeRep && valStr !== '' && !Number.isNaN(Number(valStr))
-          ? Math.min(100, Math.max(0, Number(valStr)))
-          : '';
-      const rankSel = tr.querySelector('.score-rank-select');
-      const manualRank =
-        !isAbsent && !isByeRep && tr.dataset.rankOverridden === 'true' && rankSel && rankSel.value !== ''
-          ? Number(rankSel.value)
-          : null;
-      const fields = Array.from(tr.querySelectorAll('.score-judge-field'));
-      const judgeScores = fields.map(function (el) {
-        if (el.getAttribute('data-abstain') === 'true') return '';
-        return el.value.trim() !== '' ? Number(el.value.trim()) : '';
-      });
-      const judgeAbstains = fields.map(function (el) {
-        return el.getAttribute('data-abstain') === 'true';
-      });
-      return {
-        reg_id: regId,
-        isAbsent: isAbsent,
-        isByeRep: isByeRep,
-        score: num,
-        manualRank: manualRank,
-        judgeScores: judgeScores,
-        judgeAbstains: judgeAbstains
-      };
+    const comp = state.competitions.find((c) => c.comp_id === compId);
+    const currentCompRegs = state.registrations.filter((r) => r.comp_id === compId);
+    const hadSavedEvalOrPublished = Boolean(
+      (comp && comp.result_status === 'ประกาศผลแล้ว') || currentCompRegs.some(isRegistrationEvaluated)
+    );
+
+    // Clear previous red validation highlights before re-checking
+    entries.forEach(function (item) {
+      const inp = item.tr && item.tr.querySelector('.score-input-field');
+      if (inp) inp.classList.remove('ring-2', 'ring-rose-500', 'border-rose-500');
     });
 
+    // Strict Case A: Partial entry (some teams entered, some still blank) -> Block save & show checklist
+    if (modalState.completedCount > 0 && modalState.incompleteRows.length > 0) {
+      const missingCount = modalState.incompleteRows.length;
+      const missingListText = modalState.incompleteRows.map((x) => escapeHtml(x.school_name)).join(' • ');
+      showScoreModalValidationAlert(
+        'partial',
+        '<strong>ไม่สามารถบันทึกผลได้: ยังกรอกคะแนนไม่ครบทุกทีม (ทำรายการแล้ว ' +
+          modalState.completedCount +
+          ' / ' +
+          modalState.total +
+          ' ทีม • ยังขาด ' +
+          missingCount +
+          ' ทีม)</strong><br>' +
+          'กรุณากรอกคะแนน (0–100) หรือเปลี่ยนสถานะเข้าแข่งเป็น <em>"ขาดสอบ"</em> ให้ครบทีมที่เหลือ: <strong>' +
+          missingListText +
+          '</strong>'
+      );
+      modalState.incompleteRows.forEach(function (item) {
+        const inp = item.tr && item.tr.querySelector('.score-input-field');
+        if (inp) {
+          inp.classList.remove('border-slate-300', 'border-amber-400');
+          inp.classList.add('ring-2', 'ring-rose-500', 'border-rose-500');
+        }
+      });
+      if (modalState.incompleteRows[0]) {
+        focusScoreModalRowInput(modalState.incompleteRows[0].tr);
+      }
+      showToast(
+        'กรอกผลยังไม่ครบทุกทีม (ยังขาด ' + missingCount + ' ทีม) กรุณากรอกคะแนนหรือเลือก "ขาดสอบ" ให้ครบก่อนบันทึก',
+        'error'
+      );
+      return false;
+    }
+
+    // Case B: All rows empty (0 / N)
+    let isClearingAllResults = false;
+    if (modalState.completedCount === 0) {
+      if (!hadSavedEvalOrPublished) {
+        showScoreModalValidationAlert(
+          'empty',
+          '<strong>ยังไม่ได้กรอกคะแนนหรือระบุสถานะเข้าแข่งของทีมใดเลย (0 / ' +
+            modalState.total +
+            ' ทีม)</strong> — กรุณากรอกคะแนนหรือเลือก "ขาดสอบ" ให้ครบทุกทีมก่อนบันทึก (หรือกด "ยกเลิก" เพื่อปิดหน้าต่าง)'
+        );
+        if (entries[0]) focusScoreModalRowInput(entries[0].tr);
+        showToast('ยังไม่ได้กรอกคะแนนหรือระบุสถานะทีมใดเลย', 'warning');
+        return false;
+      }
+
+      const confirmMsg =
+        'ยืนยันการล้างผลคะแนนทั้งหมดของรายการ [' +
+        compId +
+        '] ' +
+        (comp ? comp.comp_name : '') +
+        '?\n\n' +
+        '• ระบบจะเคลียร์คะแนน เหรียญรางวัล และอันดับของทั้ง ' +
+        modalState.total +
+        ' ทีมออกทั้งหมด\n' +
+        '• สถานะรายการจะถูกปรับกลับเป็น "รอประกาศผล" (และซ่อนจากเกียรติบัตรออนไลน์)\n' +
+        '• รายชื่อนักเรียนและครูผู้เข้าแข่งขันที่ลงทะเบียนไว้จะไม่ถูกลบ';
+      if (!window.confirm(confirmMsg)) {
+        return false;
+      }
+      isClearingAllResults = true;
+    }
+
+    hideScoreModalValidationAlert();
+
     // Calculate auto-rank for non-absent scored entries
-    const valid = entries.filter((x) => !x.isAbsent && !x.isByeRep && x.score !== '').sort((a, b) => b.score - a.score);
+    const valid = entries
+      .filter((x) => !x.isAbsent && !x.isByeRep && x.score !== '')
+      .sort((a, b) => b.score - a.score);
     let currentRank = 1;
     for (let i = 0; i < valid.length; i++) {
       if (i > 0 && valid[i].score < valid[i - 1].score) {
@@ -12339,8 +12730,8 @@
     entries.forEach(function (item, idx) {
       const reg = state.registrations.find((r) => r.reg_id === item.reg_id);
       if (!reg) return;
-      reg.judge_scores = item.judgeScores;
-      reg.judge_abstains = item.judgeAbstains;
+      reg.judge_scores = isClearingAllResults ? [] : item.judgeScores;
+      reg.judge_abstains = isClearingAllResults ? [] : item.judgeAbstains;
 
       if (item.isAbsent) {
         reg.score = '';
@@ -12383,29 +12774,37 @@
       });
     });
 
-    const comp = state.competitions.find((c) => c.comp_id === compId);
+    const effectiveResultStatus = isClearingAllResults
+      ? 'รอประกาศผล'
+      : publishNow
+      ? 'ประกาศผลแล้ว'
+      : 'รอประกาศผล';
+
     if (comp) {
-      comp.result_status = publishNow ? 'ประกาศผลแล้ว' : 'รอประกาศผล';
+      comp.result_status = effectiveResultStatus;
     }
 
     saveState();
     renderAll();
 
-    await postToGoogleSheets({
+    const postRes = await postToGoogleSheets({
       action: 'save_scores_batch',
       comp_id: compId,
-      result_status: publishNow ? 'ประกาศผลแล้ว' : 'รอประกาศผล',
+      result_status: effectiveResultStatus,
       scores: batchPayload,
       admin_pin: state.adminPin
     });
+    const sandboxSuffix =
+      postRes && postRes.localSandboxBlocked
+        ? ' (โหมดทดสอบในเครื่อง — ไม่ได้เขียนลง Google Sheets จริง)'
+        : '';
 
     if (opts.goNextPending) {
       const queue = getScoreQueueCompetitions();
       const curIdx = queue.findIndex((c) => c.comp_id === compId);
       const isCompPending = function (c) {
         const cRegs = state.registrations.filter((r) => r.comp_id === c.comp_id);
-        const hasEval = cRegs.some((r) => hasValidScore(r) || isRegistrationAbsent(r));
-        return c.result_status !== 'ประกาศผลแล้ว' && !hasEval;
+        return !isCompetitionResultAnnounced(c, cRegs);
       };
       let nextComp = queue.slice(curIdx + 1).find(isCompPending);
       if (!nextComp) nextComp = queue.slice(0, Math.max(0, curIdx)).find(isCompPending);
@@ -12413,11 +12812,25 @@
         nextComp = queue[curIdx + 1];
       }
       if (nextComp && nextComp.comp_id !== compId) {
-        showToast('บันทึก [' + compId + '] แล้ว — เปิดรายการถัดไป [' + nextComp.comp_id + ']', 'success');
+        showToast(
+          (isClearingAllResults
+            ? 'ล้างผล [' + compId + '] กลับเป็น "รอประกาศผล" แล้ว'
+            : 'บันทึก [' + compId + '] แล้ว') +
+            ' — เปิดรายการถัดไป [' +
+            nextComp.comp_id +
+            ']' +
+            sandboxSuffix,
+          'success'
+        );
         openScoreEntryModal(nextComp.comp_id);
       } else {
         closeScoreEntryModal();
-        showToast('บันทึกคะแนนครบทุกรายการที่มีทีมแข่งขันแล้ว', 'success');
+        showToast(
+          (isClearingAllResults
+            ? 'ล้างผลคะแนนและปรับสถานะกลับเป็น "รอประกาศผล" เรียบร้อยแล้ว'
+            : 'บันทึกคะแนนครบทุกรายการที่มีทีมแข่งขันแล้ว') + sandboxSuffix,
+          'success'
+        );
       }
       return true;
     }
@@ -12425,7 +12838,12 @@
     if (opts.closeAfter) {
       closeScoreEntryModal();
     }
-    showToast('บันทึกคะแนนและคำนวณเหรียญรางวัลเรียบร้อยแล้ว', 'success');
+    showToast(
+      (isClearingAllResults
+        ? 'ล้างผลคะแนนและปรับสถานะรายการ [' + compId + '] กลับเป็น "รอประกาศผล" เรียบร้อยแล้ว'
+        : 'บันทึกคะแนนและคำนวณเหรียญรางวัลเรียบร้อยแล้ว') + sandboxSuffix,
+      'success'
+    );
     return true;
   }
 
@@ -12730,7 +13148,7 @@
       // Never generate certificates for absent / no-show teams
       if (isRegistrationAbsent(r)) return;
       const compObj = state.competitions.find((c) => c.comp_id === r.comp_id);
-      const isPublished = !compObj || compObj.result_status === 'ประกาศผลแล้ว';
+      const isPublished = Boolean(compObj && compObj.result_status === 'ประกาศผลแล้ว');
       const hasScore = hasValidScore(r);
       const certReady = Boolean(hasScore && isPublished);
       const medal = certReady ? r.medal || calculateMedalFromScore(r.score) : 'รอประกาศผล';
@@ -18302,6 +18720,27 @@
       });
     }
 
+    const btnToggleLocalSandboxWrite = document.getElementById('btnToggleLocalSandboxWrite');
+    if (btnToggleLocalSandboxWrite) {
+      btnToggleLocalSandboxWrite.addEventListener('click', function () {
+        if (!isLocalPreviewHost()) return;
+        if (!state.localSandboxWriteUnlocked) {
+          const okUnlock = window.confirm(
+            'ต้องการปลดล็อกการบันทึกข้อมูลลง Google Sheets จริงจาก localhost ชั่วคราวใช่หรือไม่?\n\n' +
+              'คำเตือน: หลังปลดล็อก การบันทึกคะแนน/แก้ไขข้อมูลจะเขียนลงฐานข้อมูล Google Sheets จริงทันที (หากแค่ทดลองใช้ ให้กด "ยกเลิก")'
+          );
+          if (!okUnlock) return;
+          state.localSandboxWriteUnlocked = true;
+          renderLocalSandboxBanner();
+          showToast('ปลดล็อกการบันทึกข้อมูลลง Google Sheets จริงจาก localhost ชั่วคราวแล้ว', 'warning');
+        } else {
+          state.localSandboxWriteUnlocked = false;
+          renderLocalSandboxBanner();
+          showToast('ล็อกโหมดทดสอบในเครื่อง (Local Sandbox) กลับเป็นปลอดภัยแล้ว', 'info');
+        }
+      });
+    }
+
     const btnCloseAdminModal = document.getElementById('btnCloseAdminModal');
     const btnCancelAdminModal = document.getElementById('btnCancelAdminModal');
     if (btnCloseAdminModal) btnCloseAdminModal.addEventListener('click', closeAdminModal);
@@ -20000,6 +20439,18 @@
       btnScoreModalPrintSheet.addEventListener('click', function () {
         const curId = document.getElementById('scoreModalCompId').value;
         if (curId) printCompetitionJudgeScoreSheet(curId);
+      });
+    }
+
+    const btnScoreModalClearAll = document.getElementById('btnScoreModalClearAll');
+    if (btnScoreModalClearAll) {
+      btnScoreModalClearAll.addEventListener('click', clearAllScoresInModal);
+    }
+
+    const scoreModalPublishCheck = document.getElementById('scoreModalPublishCheck');
+    if (scoreModalPublishCheck) {
+      scoreModalPublishCheck.addEventListener('change', function () {
+        scoreModalPublishCheck.dataset.userUnchecked = scoreModalPublishCheck.checked ? '' : 'true';
       });
     }
 

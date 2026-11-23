@@ -322,7 +322,17 @@ function handleRegister_(ss, body, isAdmin) {
 function handleSaveScores_(ss, body) {
   const compId = String(body.comp_id || '').trim();
   const entries = Array.isArray(body.scores) ? body.scores : (Array.isArray(body.entries) ? body.entries : []);
-  const resultStatus = String(body.result_status || 'ประกาศผลแล้ว');
+  let resultStatus = String(body.result_status || 'ประกาศผลแล้ว');
+  const hasAnyEvaluatedEntry = entries.some(function(item) {
+    if (!item) return false;
+    const hasScore = item.score !== '' && item.score !== null && item.score !== undefined;
+    const hasMedal = String(item.medal || '').trim() !== '';
+    const hasAward = String(item.award_title || '').trim() !== '';
+    return hasScore || hasMedal || hasAward;
+  });
+  if (entries.length > 0 && !hasAnyEvaluatedEntry) {
+    resultStatus = 'รอประกาศผล';
+  }
 
   const regSheet = ss.getSheetByName('Registrations');
   const regData = regSheet.getDataRange().getValues();
