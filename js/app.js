@@ -5401,6 +5401,12 @@
     showToast('ดาวน์โหลดตารางติดตาม 13 โรงเรียน (.xlsx) เรียบร้อยแล้ว', 'success');
   }
 
+  const OFFICIAL_THAI_FONT = '"TH Sarabun New", "TH Sarabun PSK", "Sarabun", sans-serif';
+  const OFFICIAL_PRINT_FONT_LINKS =
+    '<link rel="preconnect" href="https://fonts.googleapis.com">' +
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">';
+
   function printDashboardMatrixReport() {
     const data = getFilteredDashboardMatrixData();
     if (data.groups.length === 0) {
@@ -5486,31 +5492,33 @@
 <head>
   <meta charset="UTF-8" />
   <title>รายงานสรุปการส่งรายชื่อ 13 โรงเรียน × รายการย่อย (ผู้บริหาร)</title>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  ${OFFICIAL_PRINT_FONT_LINKS}
   <style>
     @page { size: A4 landscape; margin: 10mm 9mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Sarabun', sans-serif; font-size: 11px; color: #0f172a; margin: 0; padding: 14px; background: #fff; }
-    .no-print { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 8px; margin-bottom: 12px; }
+    body { font-family: ${OFFICIAL_THAI_FONT}; font-size: 12pt; line-height: 1.25; color: #000; margin: 0; padding: 14px; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 8px; margin-bottom: 12px; font-family: sans-serif; font-size: 13px; }
     .no-print button { background: #10b981; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; cursor: pointer; font-family: inherit; }
     .doc-hdr { text-align: center; margin-bottom: 8px; }
-    .doc-hdr h1 { font-size: 15px; margin: 0 0 2px 0; }
-    .doc-hdr p { font-size: 11px; color: #475569; margin: 0; }
+    .doc-hdr h1 { font-size: 18pt; font-weight: 700; margin: 0 0 2px 0; }
+    .doc-hdr p { font-size: 16pt; font-weight: 700; color: #000; margin: 0; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th, td { border: 1px solid #cbd5e1; padding: 3px 4px; vertical-align: middle; }
-    thead th { background: #f1f5f9; font-weight: 700; font-size: 9.5px; text-align: center; word-break: break-word; }
-    .group-hdr-row td { background: #e2e8f0; font-weight: 700; font-size: 11px; color: #0f172a; padding: 4px 6px; }
-    .code-col { font-family: monospace; font-size: 9.5px; text-align: center; }
-    .lvl { font-size: 9.5px; color: #64748b; }
-    .cell-yes { text-align: center; font-weight: 700; color: #047857; background: #ecfdf5; }
-    .cell-no { text-align: center; color: #cbd5e1; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th, td { border: 1px solid #000; padding: 3px 4px; vertical-align: middle; }
+    thead th { background: #f2f2f2; font-weight: 700; font-size: 10.5pt; text-align: center; overflow-wrap: anywhere; word-break: break-word; }
+    .group-hdr-row td { background: #e5e7eb; font-weight: 700; font-size: 12.5pt; color: #000; padding: 4px 6px; }
+    .code-col { font-size: 10.5pt; text-align: center; font-weight: 600; }
+    .lvl { font-size: 10.5pt; color: #000; }
+    .cell-yes { text-align: center; font-weight: 700; color: #000; background: #f0fdf4; }
+    .cell-no { text-align: center; color: #666; }
     .text-center { text-align: center; }
     .font-bold { font-weight: 700; }
-    tfoot td { background: #f8fafc; font-weight: 700; }
+    tfoot td { background: #f2f2f2; font-weight: 700; }
     @media print {
-      body { padding: 0; }
+      body { padding: 0; margin: 0; }
       .no-print { display: none !important; }
-      .cell-yes, thead th, .group-hdr-row td { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      .cell-yes, thead th, .group-hdr-row td, tfoot td { background-color: inherit; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
   </style>
 </head>
@@ -6213,33 +6221,34 @@
 <head>
   <meta charset="UTF-8" />
   <title>ตารางสถานที่ห้องสอบ ใบฝ่ายสถานที่ และป้ายหน้าห้อง - งานศิลปหัตถกรรม ครั้งที่ 74</title>
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@600;700;800&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  ${OFFICIAL_PRINT_FONT_LINKS}
   <style>
     @page { size: A4 landscape; margin: 10mm 14mm; }
     * { box-sizing: border-box; }
-    body { font-family: "TH Sarabun New", "Sarabun", sans-serif; color: #0f172a; margin: 0; background: #f8fafc; font-size: 15pt; }
-    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; font-family: 'Prompt', sans-serif; font-size: 13px; }
+    body { font-family: ${OFFICIAL_THAI_FONT}; color: #000; margin: 0; background: #f8fafc; font-size: 16pt; line-height: 1.35; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; font-family: sans-serif; font-size: 13px; }
     .no-print-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .no-print button { background: #ffffff; color: #0f172a; border: none; padding: 7px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: 'Prompt', sans-serif; font-size: 12px; }
+    .no-print button { background: #ffffff; color: #0f172a; border: none; padding: 7px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 12px; }
     .no-print button.prep-btn { background: #dbeafe; color: #1e3a8a; }
     .no-print button.primary { background: #f59e0b; }
-    .wrap { width: 277mm; margin: 14px auto; background: #fff; padding: 12mm; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .wrap { max-width: 269mm; margin: 14px auto; background: #fff; padding: 12mm; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
     .page-break { page-break-before: always; }
     .title { text-align: center; margin-bottom: 10px; }
-    .title h1 { font-family: 'Prompt', sans-serif; font-size: 18pt; margin: 0 0 2px; }
-    .title h2 { font-size: 15pt; margin: 0; font-weight: 600; color: #334155; }
-    .prep-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; border: 1px solid #cbd5e1; background: #f8fafc; padding: 6px 12px; border-radius: 6px; margin-bottom: 8px; font-size: 14.5pt; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14pt; }
-    th, td { border: 1px solid #334155; padding: 5px 7px; vertical-align: top; }
-    th { background: #f1f5f9; font-weight: 700; text-align: center; }
+    .title h1 { font-size: 19pt; font-weight: 700; margin: 0 0 2px; line-height: 1.25; }
+    .title h2 { font-size: 17pt; font-weight: 700; margin: 0; color: #000; line-height: 1.25; }
+    .prep-summary { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; border: 1px solid #000; background: #f8fafc; padding: 6px 12px; margin-bottom: 8px; font-size: 15.5pt; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 15pt; }
+    thead { display: table-header-group; }
+    th, td { border: 1px solid #000; padding: 5px 7px; vertical-align: top; }
+    th { background: #f2f2f2; font-weight: 700; text-align: center; }
     tr { page-break-inside: avoid; }
-    .door-sign-page { width: 277mm; min-height: 185mm; margin: 16px auto; background: #fff; padding: 14mm; border: 2px solid #0f172a; border-radius: 8px; page-break-before: always; display: flex; flex-direction: column; justify-content: space-between; }
-    .door-header { text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 10px; }
-    .door-event { font-size: 14pt; color: #334155; font-weight: 600; }
-    .door-room-title { font-family: 'Prompt', sans-serif; font-size: 28pt; font-weight: 800; color: #0f172a; margin: 4px 0; }
-    .door-building { font-size: 16pt; font-weight: 700; color: #1e40af; }
-    .door-table { font-size: 15pt; }
-    .door-footer { margin-top: 12px; padding-top: 8px; border-top: 1px dashed #64748b; text-align: center; font-size: 13pt; color: #475569; }
+    .door-sign-page { max-width: 269mm; min-height: 185mm; margin: 16px auto; background: #fff; padding: 14mm; border: 2px solid #000; page-break-before: always; display: flex; flex-direction: column; justify-content: space-between; }
+    .door-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
+    .door-event { font-size: 16pt; color: #000; font-weight: 700; }
+    .door-room-title { font-size: 32pt; font-weight: 700; color: #000; margin: 4px 0; }
+    .door-building { font-size: 17pt; font-weight: 700; color: #000; }
+    .door-table { font-size: 16pt; }
+    .door-footer { margin-top: 12px; padding-top: 8px; border-top: 1px dashed #000; text-align: center; font-size: 14.5pt; color: #000; }
     body.only-summary #venuePrepSection,
     body.only-summary .door-sign-page { display: none; }
     body.only-prep #summarySection,
@@ -6248,11 +6257,11 @@
     body.only-doors #summarySection,
     body.only-doors #venuePrepSection { display: none; }
     @media print {
-      body { background: #fff; }
+      body { background: #fff; margin: 0; padding: 0; }
       .no-print { display: none !important; }
-      .wrap { width: 100%; margin: 0; padding: 0; box-shadow: none; }
-      .door-sign-page { width: 100%; margin: 0; box-shadow: none; }
-      th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+      .wrap { max-width: 100%; width: 100%; margin: 0; padding: 0; box-shadow: none; }
+      .door-sign-page { max-width: 100%; width: 100%; margin: 0; box-shadow: none; }
+      th { background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
@@ -6820,21 +6829,10 @@
       })
       .join('');
 
-    let checkinBlankRowsHtml = '';
-    if (regs.length < 3) {
-      for (let b = regs.length + 1; b <= 3; b++) {
-        checkinBlankRowsHtml +=
-          '<tr class="blank-row">' +
-          '<td class="text-center">' +
-          b +
-          '</td>' +
-          '<td></td>' +
-          '<td><div class="row-subitem">1. ....................................................</div></td>' +
-          '<td><div class="row-subitem sig-cell">ลงชื่อ ....................................................</div></td>' +
-          '<td><div class="row-subitem">1. ....................................................</div></td>' +
-          '</tr>';
-      }
-    }
+    const checkinBlankRowsHtml =
+      regs.length === 0
+        ? '<tr><td colspan="5" class="text-center">ยังไม่มีโรงเรียนลงทะเบียนในรายการนี้</td></tr>'
+        : '';
 
     // 3. Rows & Judges for Official Judge Score Sheet (ใบบันทึกคะแนนกรรมการตัดสิน)
     const roleRank = { 'ประธานกรรมการ': 1, 'กรรมการ': 2, 'กรรมการและเลขานุการ': 3 };
@@ -6845,49 +6843,53 @@
           .slice()
           .sort((a, b) => (roleRank[a.role] || 9) - (roleRank[b.role] || 9));
 
-    const judgeSlotCount = Math.max(3, compJudges.length);
+    const hasAssignedJudges = compJudges.length > 0;
+    const judgeSlotCount = hasAssignedJudges ? Math.max(3, compJudges.length) : 5;
     const judgeSlots = [];
     for (let ji = 0; ji < judgeSlotCount; ji++) {
       judgeSlots.push(compJudges[ji] || null);
     }
 
-    function buildJudgeSignatureRowsHtml(slots) {
-      const rows = [];
-      for (let start = 0; start < slots.length; start += 3) {
-        const chunk = slots.slice(start, start + 3);
-        const cells = chunk
-          .map(function (j, offset) {
-            const globalIdx = start + offset;
-            if (j) {
-              const jName = formatFullNameForPrint(j.prefix, j.judge_name || j.full_name || '');
-              const jRole = j.role || 'กรรมการตัดสิน';
-              return (
-                '<td>ลงชื่อ ............................................................<br/>( ' +
-                escapeHtml(jName) +
-                ' )<br/>' +
-                escapeHtml(jRole) +
-                '</td>'
-              );
-            }
+    function buildJudgeSignaturesHtml(slots) {
+      const itemsHtml = slots
+        .map(function (j, globalIdx) {
+          if (j) {
+            const jName = formatFullNameForPrint(j.prefix, j.judge_name || j.full_name || '');
+            const jRole = j.role || 'กรรมการตัดสิน';
             return (
-              '<td>ลงชื่อ ............................................................<br/>( ............................................................ )<br/>' +
-              (globalIdx === 0 ? 'ประธานกรรมการ' : globalIdx === 2 ? 'กรรมการและเลขานุการ' : 'กรรมการตัดสิน') +
-              '</td>'
+              '<div class="judge-sig-item">ลงชื่อ ....................................................<br/>( ' +
+              escapeHtml(jName) +
+              ' )<br/>' +
+              escapeHtml(jRole) +
+              '</div>'
             );
-          })
-          .join('');
-        rows.push('<tr>' + cells + '</tr>');
-      }
-      return rows.join('');
+          }
+          const blankRole =
+            globalIdx === 0
+              ? 'ประธานกรรมการ'
+              : globalIdx === slots.length - 1
+                ? 'กรรมการและเลขานุการ'
+                : 'กรรมการตัดสิน';
+          return (
+            '<div class="judge-sig-item">ลงชื่อ ....................................................<br/>( .................................................... )<br/>' +
+            blankRole +
+            '</div>'
+          );
+        })
+        .join('');
+      const gridClass = slots.length === 4 ? 'judges-grid judges-grid-2col' : 'judges-grid';
+      return '<div class="' + gridClass + '">' + itemsHtml + '</div>';
     }
-    const judgeCellsHtml = buildJudgeSignatureRowsHtml(judgeSlots);
+    const judgeCellsHtml = buildJudgeSignaturesHtml(judgeSlots);
+    const isWideScoreTable = judgeSlotCount >= 5;
 
     let scoreSectionHtml = '';
     if (allowScoreSheet) {
       const emptyJudgeScoreCols = Array(judgeSlotCount).fill('<td></td>').join('');
+      const judgeColWidth = isWideScoreTable ? '58px' : '70px';
       const judgeScoreHeadersHtml = judgeSlots
         .map(function (_j, idx) {
-          return '<th style="width:70px;">กรรมการ<br/>คนที่ ' + (idx + 1) + ' (100)</th>';
+          return '<th style="width:' + judgeColWidth + ';">กรรมการ<br/>คนที่ ' + (idx + 1) + ' (100)</th>';
         })
         .join('');
 
@@ -6928,17 +6930,10 @@
         })
         .join('');
 
-      let scoreBlankRowsHtml = '';
-      if (regs.length < 3) {
-        for (let b = regs.length + 1; b <= 3; b++) {
-          scoreBlankRowsHtml +=
-            '<tr><td class="text-center">' +
-            b +
-            '</td><td></td><td></td>' +
-            emptyJudgeScoreCols +
-            '<td></td><td></td><td></td><td></td></tr>';
-        }
-      }
+      const scoreBlankRowsHtml =
+        regs.length === 0
+          ? '<tr><td colspan="' + (7 + judgeSlotCount) + '" class="text-center">ยังไม่มีโรงเรียนลงทะเบียนในรายการนี้</td></tr>'
+          : '';
 
       scoreSectionHtml =
         '<div id="docJudgeScoreSheet" class="doc-section">' +
@@ -6975,19 +6970,33 @@
             ')</div>' +
             '</div>'
           : '') +
-        '<table class="official-table score-table">' +
+        '<table class="official-table score-table' +
+        (isWideScoreTable ? ' score-table-wide' : '') +
+        '">' +
         '<thead>' +
         '<tr>' +
-        '<th style="width:36px;">ที่</th>' +
-        '<th style="width:170px;">โรงเรียน</th>' +
+        '<th style="width:' +
+        (isWideScoreTable ? '30px' : '36px') +
+        ';">ที่</th>' +
+        '<th style="width:' +
+        (isWideScoreTable ? '150px' : '170px') +
+        ';">โรงเรียน</th>' +
         '<th>รายชื่อนักเรียนผู้เข้าแข่งขัน</th>' +
         judgeScoreHeadersHtml +
-        '<th style="width:72px;">คะแนนรวม<br/>(' +
-        judgeSlotCount * 100 +
-        ')</th>' +
-        '<th style="width:78px;">คะแนนเฉลี่ย<br/>(100)</th>' +
-        '<th style="width:105px;">เหรียญ /<br/>อันดับที่ได้</th>' +
-        '<th style="width:105px;">หมายเหตุ<br/>(ขาดสอบ/งดคะแนน)</th>' +
+        '<th style="width:' +
+        (isWideScoreTable ? '62px' : '72px') +
+        ';">' +
+        (hasAssignedJudges ? 'คะแนนรวม<br/>(' + judgeSlotCount * 100 + ')' : 'คะแนนรวม') +
+        '</th>' +
+        '<th style="width:' +
+        (isWideScoreTable ? '68px' : '78px') +
+        ';">คะแนนเฉลี่ย<br/>(100)</th>' +
+        '<th style="width:' +
+        (isWideScoreTable ? '90px' : '105px') +
+        ';">เหรียญ /<br/>อันดับที่ได้</th>' +
+        '<th style="width:' +
+        (isWideScoreTable ? '88px' : '105px') +
+        ';">หมายเหตุ<br/>(ขาดสอบ/งดคะแนน)</th>' +
         '</tr>' +
         '</thead>' +
         '<tbody>' +
@@ -6998,11 +7007,10 @@
         '<div class="criteria-note">' +
         '<strong>เกณฑ์เหรียญรางวัล (คะแนนเต็ม 100):</strong> ร้อยละ 80.00–100.00 = เหรียญทอง • 70.00–79.99 = เหรียญเงิน • 60.00–69.99 = เหรียญทองแดง • ต่ำกว่า 60.00 = เข้าร่วม • ' +
         '<strong>หมายเหตุ:</strong> กรณีกรรมการงดให้คะแนนโรงเรียนตนเอง ให้ขีด "-" และคิดค่าเฉลี่ยเฉพาะกรรมการที่ลงคะแนนจริง (เทียบเป็นเต็ม 100)' +
+        (!hasAssignedJudges ? ' • รองรับกรรมการ 3–5 ท่าน (ช่องที่ไม่มีกรรมการให้ขีด "-")' : '') +
         '</div>' +
         '<div class="judges-section">' +
-        '<table class="judges-table">' +
         judgeCellsHtml +
-        '</table>' +
         '</div>' +
         '</div>';
     }
@@ -7041,7 +7049,7 @@
       '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
       '<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">' +
       '<style>' +
-      '@page { size: A4 landscape; margin: 10mm 14mm; }' +
+      '@page { size: A4 landscape; margin: 8mm 14mm; }' +
       '* { box-sizing: border-box; }' +
       'body { font-family: "TH Sarabun New", "TH Sarabun PSK", "Sarabun", sans-serif; font-size: 16pt; line-height: 1.35; color: #000; background: #fff; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
       '.no-print { padding: 10px 16px; background: #0f172a; color: #fff; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; font-family: "Prompt", "Sarabun", sans-serif; font-size: 12px; }' +
@@ -7054,7 +7062,7 @@
       'body[data-mode="checkin"] #docCheckinSheet { display: block; }' +
       'body[data-mode="scoresheet"] #docJudgeScoreSheet { display: block; }' +
       '@media print { .no-print { display: none !important; } .doc-section { padding: 0; } }' +
-      '.header-title { text-align: center; margin-bottom: 10px; }' +
+      '.header-title { text-align: center; margin-bottom: 6px; }' +
       '.title-1 { font-size: 19pt; font-weight: bold; line-height: 1.25; }' +
       '.title-2 { font-size: 17pt; font-weight: bold; line-height: 1.25; }' +
       '.title-3 { font-size: 18pt; font-weight: bold; margin-top: 2px; text-decoration: underline; }' +
@@ -7062,17 +7070,19 @@
       '.venue-summary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid #334155; background: #f8fafc; padding: 5px 12px; margin-top: 6px; font-size: 15.5pt; }' +
       'table.official-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 16pt; }' +
       'table.official-table.score-table { font-size: 14.5pt; margin-top: 6px; }' +
-      'table.official-table th { border: 1px solid #000; padding: 6px 6px; background-color: #f2f2f2; font-weight: bold; text-align: center; vertical-align: middle; }' +
-      'table.official-table td { border: 1px solid #000; padding: 6px 6px; vertical-align: top; min-height: 30px; }' +
+      'table.official-table.score-table.score-table-wide { font-size: 13.5pt; }' +
+      'table.official-table th { border: 1px solid #000; padding: 5px 6px; background-color: #f2f2f2; font-weight: bold; text-align: center; vertical-align: middle; }' +
+      'table.official-table td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; min-height: 24px; }' +
       '.text-center { text-align: center; }' +
       '.font-bold { font-weight: bold; }' +
-      '.row-subitem { min-height: 26px; line-height: 26px; }' +
+      '.row-subitem { min-height: 22px; line-height: 22px; }' +
       '.sig-cell { color: #444; text-align: center; white-space: nowrap; }' +
-      '.criteria-note { font-size: 13.5pt; margin-top: 6px; padding: 5px 8px; border: 1px solid #999; background: #fafafa; }' +
-      '.judges-section { margin-top: 18px; page-break-inside: avoid; }' +
-      '.judges-title { font-size: 16pt; font-weight: bold; margin-bottom: 6px; }' +
-      'table.judges-table { width: 100%; border: none; font-size: 15.5pt; border-collapse: collapse; }' +
-      'table.judges-table td { border: none; text-align: center; width: 33.33%; padding: 4px; vertical-align: top; line-height: 1.55; }' +
+      '.criteria-note { font-size: 13pt; margin-top: 5px; padding: 4px 8px; border: 1px solid #999; background: #fafafa; }' +
+      '.judges-section { margin-top: 10px; page-break-inside: avoid; }' +
+      '.judges-title { font-size: 15.5pt; font-weight: bold; margin-bottom: 4px; }' +
+      '.judges-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 8px; font-size: 14.5pt; }' +
+      '.judge-sig-item { flex: 0 0 32%; max-width: 33.33%; text-align: center; padding: 2px 4px; line-height: 1.38; }' +
+      '.judges-grid.judges-grid-2col .judge-sig-item { flex: 0 0 46%; max-width: 48%; }' +
       '.footer-note { font-size: 13pt; color: #555; margin-top: 8px; }' +
       '</style>' +
       '</head>' +
@@ -7206,9 +7216,7 @@
       '</table>' +
       '<div class="judges-section">' +
       '<div class="judges-title">กรรมการตัดสิน</div>' +
-      '<table class="judges-table">' +
       judgeCellsHtml +
-      '</table>' +
       '</div>' +
       '</div>' +
       scoreSectionHtml +
@@ -12213,7 +12221,8 @@
       (mx, r) => Math.max(mx, Array.isArray(r.judge_scores) ? r.judge_scores.length : 0),
       0
     );
-    state.scoreModalJudgeCount = Math.min(7, Math.max(3, compJudges.length, maxSavedJLen));
+    const defaultJudgeCols = compJudges.length > 0 ? Math.max(3, compJudges.length) : 5;
+    state.scoreModalJudgeCount = Math.min(7, Math.max(defaultJudgeCols, maxSavedJLen));
 
     const hasAnyJudgeScores = regs.some(
       (r) => Array.isArray(r.judge_scores) && r.judge_scores.some((v) => v !== '' && v !== null && v !== undefined)
@@ -13716,18 +13725,18 @@
         return `
           <tr>
             <td style="text-align:center; vertical-align:top;">${idx + 1}</td>
-            <td style="text-align:center; vertical-align:top; font-family:'Prompt',sans-serif; font-weight:600;">${escapeHtml(r.comp_id)}</td>
+            <td style="text-align:center; vertical-align:top; font-weight:700;">${escapeHtml(r.comp_id)}</td>
             <td style="vertical-align:top;">
               <strong>${escapeHtml(r.comp_name)}</strong><br/>
-              <span style="font-size:12px; color:#475569;">${escapeHtml(r.learning_area || '')} • ชั้น${escapeHtml(r.level || '')} • ${escapeHtml(r.team_type || '')}</span>
+              <span style="font-size:13pt; color:#000;">${escapeHtml(r.learning_area || '')} • ชั้น${escapeHtml(r.level || '')} • ${escapeHtml(r.team_type || '')}</span>
             </td>
-            <td style="vertical-align:top; font-weight:600;">${escapeHtml(r.school_name)}</td>
-            <td style="vertical-align:top; font-size:13px; line-height:1.4;">${stuText}</td>
-            <td style="vertical-align:top; font-size:13px; line-height:1.4;">${teaText}</td>
-            <td style="text-align:center; vertical-align:top; font-weight:600;">${scoreText}</td>
+            <td style="vertical-align:top; font-weight:700;">${escapeHtml(r.school_name)}</td>
+            <td style="vertical-align:top; line-height:1.35;">${stuText}</td>
+            <td style="vertical-align:top; line-height:1.35;">${teaText}</td>
+            <td style="text-align:center; vertical-align:top; font-weight:700;">${scoreText}</td>
             <td style="text-align:center; vertical-align:top;">
-              <span style="font-weight:600; color:#b45309;">${escapeHtml(medalText)}</span><br/>
-              <span style="font-size:11px; color:#15803d; font-weight:700;">${escapeHtml(repAward)} (ตัวแทน)</span>
+              <span style="font-weight:700;">${escapeHtml(medalText)}</span><br/>
+              <span style="font-size:13pt; font-weight:700;">${escapeHtml(repAward)} (ตัวแทน)</span>
             </td>
           </tr>
         `;
@@ -13739,27 +13748,30 @@
 <head>
   <meta charset="UTF-8" />
   <title>บัญชีรายชื่อตัวแทนกลุ่มโรงเรียน - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ระดับเขต</title>
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  ${OFFICIAL_PRINT_FONT_LINKS}
   <style>
     @page { size: A4 landscape; margin: 12mm 10mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Sarabun', sans-serif; color: #0f172a; margin: 0; background: #f8fafc; font-size: 14px; }
-    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: 'Prompt', sans-serif; }
+    body { font-family: ${OFFICIAL_THAI_FONT}; color: #000; margin: 0; background: #fff; font-size: 16pt; line-height: 1.35; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif; font-size: 13px; }
     .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-    .report-wrap { width: 277mm; margin: 15px auto; background: #fff; padding: 15mm 12mm; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    .report-title { text-align: center; margin-bottom: 12px; }
-    .report-title h1 { font-family: 'Prompt', sans-serif; font-size: 18px; font-weight: 700; margin: 0 0 4px 0; }
-    .report-title h2 { font-family: 'Prompt', sans-serif; font-size: 15px; font-weight: 600; color: #334155; margin: 0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; }
-    th { background: #f1f5f9; font-family: 'Prompt', sans-serif; font-weight: 700; font-size: 13px; text-align: center; }
-    .sign-section { margin-top: 30px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
-    .sign-box { text-align: center; width: 340px; font-size: 14px; line-height: 1.6; }
+    .report-wrap { max-width: 277mm; margin: 12px auto; background: #fff; padding: 10mm 12mm; }
+    .report-title { text-align: center; margin-bottom: 10px; }
+    .report-title h1 { font-size: 19pt; font-weight: 700; margin: 0 0 2px 0; line-height: 1.25; }
+    .report-title h2 { font-size: 17pt; font-weight: 700; color: #000; margin: 0; line-height: 1.25; }
+    .report-submeta { font-size: 14.5pt; color: #000; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14.5pt; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th, td { border: 1px solid #000; padding: 5px 6px; }
+    th { background: #f2f2f2; font-weight: 700; text-align: center; }
+    .sign-section { margin-top: 26px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+    .sign-box { text-align: center; width: 380px; font-size: 16pt; line-height: 1.5; }
     @media print {
-      body { background: #fff; font-size: 13px; }
+      body { background: #fff; margin: 0; padding: 0; }
       .no-print { display: none !important; }
-      .report-wrap { width: 100%; margin: 0; padding: 0; box-shadow: none; }
-      th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+      .report-wrap { max-width: 100%; width: 100%; margin: 0; padding: 0; }
+      th { background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
@@ -13772,35 +13784,35 @@
     <div class="report-title">
       <h1>บัญชีรายชื่อตัวแทนนักเรียนและครูผู้ฝึกสอน กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</h1>
       <h2>เข้าร่วมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ระดับสำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</h2>
-      <div style="font-size:12px; color:#64748b; margin-top:4px;">แข่งขันระหว่างวันที่ 23–24 ธันวาคม 2569 • เอกสารแนบส่ง สพป.มหาสารคาม เขต 3 • เกณฑ์คัดเลือก: ${escapeHtml(criteriaLabel)}</div>
+      <div class="report-submeta">แข่งขันระหว่างวันที่ 23–24 ธันวาคม 2569 • เอกสารแนบส่ง สพป.มหาสารคาม เขต 3 • เกณฑ์คัดเลือก: ${escapeHtml(criteriaLabel)}</div>
     </div>
     <table>
       <thead>
         <tr>
-          <th style="width:35px;">ที่</th>
-          <th style="width:75px;">รหัส</th>
-          <th>กิจกรรมการแข่งขัน</th>
-          <th style="width:170px;">โรงเรียนตัวแทน</th>
-          <th style="width:200px;">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
-          <th style="width:190px;">รายชื่อครูผู้ฝึกซ้อม</th>
-          <th style="width:65px;">คะแนน</th>
-          <th style="width:110px;">เหรียญ / ผล</th>
+          <th style="width:4%;">ที่</th>
+          <th style="width:7%;">รหัส</th>
+          <th style="width:17%;">กิจกรรมการแข่งขัน</th>
+          <th style="width:15%;">โรงเรียนตัวแทน</th>
+          <th style="width:20%;">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
+          <th style="width:17%;">รายชื่อครูผู้ฝึกซ้อม</th>
+          <th style="width:7%;">คะแนน</th>
+          <th style="width:13%;">เหรียญ / ผล</th>
         </tr>
       </thead>
       <tbody>
         ${rowsHtml}
       </tbody>
     </table>
-    <div style="margin-top:10px; font-size:13px; font-weight:600; color:#334155;">
+    <div style="margin-top:10px; font-size:16pt; font-weight:700; color:#000;">
       รวมตัวแทนทั้งสิ้น ${list.length} รายการ
     </div>
     <div class="sign-section">
       <div class="sign-box">
         <div>ขอรับรองว่าเป็นรายชื่อตัวแทนกลุ่มโรงเรียนถูกต้องจริง</div>
-        <div style="height:50px;"></div>
+        <div style="height:44px;"></div>
         <div>(ลงชื่อ)....................................................................</div>
         <div>(${signerName ? escapeHtml(signerName) : '....................................................................'})</div>
-        <div style="font-weight:600;">${escapeHtml(signerPos)}</div>
+        <div style="font-weight:700;">${escapeHtml(signerPos)}</div>
         <div>วันที่ ............ เดือน ................................. พ.ศ. 2569</div>
       </div>
     </div>
@@ -13814,7 +13826,7 @@
       win.document.write(html);
       win.document.close();
     } else {
-      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์รายงานตัวแทน', 'warning');
     }
   }
 
@@ -13882,30 +13894,32 @@
 <head>
   <meta charset="UTF-8" />
   <title>แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74</title>
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  ${OFFICIAL_PRINT_FONT_LINKS}
   <style>
     @page { size: A4 portrait; margin: 15mm 15mm 12mm 15mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Sarabun', sans-serif; color: #000; margin: 0; background: #f8fafc; font-size: 15px; line-height: 1.5; }
-    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: 'Prompt', sans-serif; }
+    body { font-family: ${OFFICIAL_THAI_FONT}; color: #000; margin: 0; background: #fff; font-size: 16pt; line-height: 1.42; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif; font-size: 13px; }
     .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-    .form-wrap { width: 190mm; margin: 15px auto; background: #fff; padding: 12mm 15mm; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-    .form-title { text-align: center; margin-bottom: 16px; }
-    .form-title h1 { font-family: 'Prompt', sans-serif; font-size: 19px; font-weight: 700; margin: 0 0 4px 0; }
-    .form-title h2 { font-size: 15px; font-weight: 600; margin: 0; }
-    .form-meta { text-align: right; margin: 12px 0 16px 0; }
-    table { width: 100%; border-collapse: collapse; margin: 8px 0 14px 0; font-size: 14px; }
-    th, td { border: 1px solid #333; padding: 5px 8px; }
-    th { background: #f1f5f9; font-weight: 700; text-align: center; }
-    .rule-note { font-size: 12.5px; color: #475569; margin: 4px 0 12px 0; }
-    .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 18px; page-break-inside: avoid; }
-    .sign-box { text-align: center; font-size: 14px; line-height: 1.6; }
-    .approval-box { margin-top: 16px; border: 1.5px solid #000; padding: 10px 14px; border-radius: 4px; page-break-inside: avoid; }
+    .form-wrap { max-width: 180mm; margin: 12px auto; background: #fff; padding: 10mm 12mm; }
+    .form-title { text-align: center; margin-bottom: 12px; }
+    .form-title h1 { font-size: 19pt; font-weight: 700; margin: 0 0 2px 0; line-height: 1.25; }
+    .form-title h2 { font-size: 17pt; font-weight: 700; margin: 0; line-height: 1.25; }
+    .form-meta { text-align: right; margin: 10px 0 12px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0 12px 0; font-size: 15pt; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+    th { background: #f2f2f2; font-weight: 700; text-align: center; }
+    .rule-note { font-size: 14pt; color: #000; margin: 4px 0 10px 0; }
+    .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; page-break-inside: avoid; }
+    .sign-box { text-align: center; font-size: 15.5pt; line-height: 1.5; }
+    .approval-box { margin-top: 14px; border: 1.5px solid #000; padding: 10px 14px; page-break-inside: avoid; }
     @media print {
-      body { background: #fff; }
+      body { background: #fff; margin: 0; padding: 0; }
       .no-print { display: none !important; }
-      .form-wrap { width: 100%; margin: 0; padding: 0; box-shadow: none; }
-      th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+      .form-wrap { max-width: 100%; width: 100%; margin: 0; padding: 0; }
+      th { background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
 </head>
@@ -13926,24 +13940,24 @@
       วันที่ .......... เดือน ................................. พ.ศ. 2569
     </div>
 
-    <div style="margin-bottom: 10px;">
+    <div style="margin-bottom: 8px;">
       <strong>เรื่อง</strong> ขออนุมัติเปลี่ยนตัวผู้เข้าแข่งขัน / ครูผู้ฝึกสอน<br/>
       <strong>เรียน</strong> ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง
     </div>
 
     <div style="text-indent: 2.5em; text-align: justify; margin-bottom: 8px;">
-      ด้วย โรงเรียน<strong>${escapeHtml(schoolName)}</strong> ได้ส่งนักเรียนเข้าร่วมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ในกิจกรรม <strong>${compText}</strong> มีความจำเป็นต้องขออนุมัติเปลี่ยนแปลงตัว เนื่องจาก (ระบุเหตุผลความจำเป็น เช่น ป่วย/ติดภารกิจสำคัญ) ....................................................................................................................................................................................................................
+      ด้วย โรงเรียน<strong>${escapeHtml(schoolName)}</strong> ได้ส่งนักเรียนเข้าร่วมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ในกิจกรรม <strong>${compText}</strong> มีความจำเป็นต้องขออนุมัติเปลี่ยนแปลงตัว เนื่องจาก (ระบุเหตุผลความจำเป็น เช่น ป่วย/ติดภารกิจสำคัญ) ........................................................................................................................
     </div>
 
-    <div style="font-weight:700; margin-top:10px;">1. รายการขอเปลี่ยนตัวนักเรียนผู้เข้าแข่งขัน:</div>
+    <div style="font-weight:700; margin-top:8px;">1. รายการขอเปลี่ยนตัวนักเรียนผู้เข้าแข่งขัน:</div>
     <table>
       <thead>
         <tr>
-          <th style="width:30px;">ที่</th>
-          <th style="width:190px;">รายชื่อเดิมที่ลงทะเบียนไว้</th>
-          <th style="width:190px;">รายชื่อผู้ขอเปลี่ยนตัวแทน (พร้อมระบุชั้น)</th>
-          <th style="width:80px;">เลขประจำตัว/รหัส</th>
-          <th>เหตุผลความจำเป็น</th>
+          <th style="width:5%;">ที่</th>
+          <th style="width:26%;">รายชื่อเดิมที่ลงทะเบียนไว้</th>
+          <th style="width:27%;">รายชื่อผู้ขอเปลี่ยนตัวแทน (พร้อมระบุชั้น)</th>
+          <th style="width:14%;">เลขประจำตัว/รหัส</th>
+          <th style="width:28%;">เหตุผลความจำเป็น</th>
         </tr>
       </thead>
       <tbody>
@@ -13955,11 +13969,11 @@
     <table>
       <thead>
         <tr>
-          <th style="width:30px;">ที่</th>
-          <th style="width:190px;">รายชื่อครูเดิม</th>
-          <th style="width:190px;">รายชื่อครูผู้สอนท่านใหม่</th>
-          <th style="width:100px;">เบอร์โทรศัพท์</th>
-          <th>เหตุผลความจำเป็น</th>
+          <th style="width:5%;">ที่</th>
+          <th style="width:26%;">รายชื่อครูเดิม</th>
+          <th style="width:27%;">รายชื่อครูผู้สอนท่านใหม่</th>
+          <th style="width:14%;">เบอร์โทรศัพท์</th>
+          <th style="width:28%;">เหตุผลความจำเป็น</th>
         </tr>
       </thead>
       <tbody>
@@ -13985,12 +13999,12 @@
     </div>
 
     <div class="approval-box">
-      <div style="font-weight:700; font-family:'Prompt',sans-serif; margin-bottom:6px;">ผลการพิจารณาของคณะกรรมการกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง:</div>
-      <div style="display:flex; gap:30px; margin-bottom:8px;">
+      <div style="font-weight:700; margin-bottom:6px;">ผลการพิจารณาของคณะกรรมการกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง:</div>
+      <div style="display:flex; flex-wrap:wrap; gap:24px; margin-bottom:8px;">
         <label><input type="checkbox" style="vertical-align:middle; margin-right:4px;" /> อนุมัติให้เปลี่ยนตัวตามคำร้อง</label>
-        <label><input type="checkbox" style="vertical-align:middle; margin-right:4px;" /> ไม่อนุมัติ เนื่องจาก ................................................................</label>
+        <label><input type="checkbox" style="vertical-align:middle; margin-right:4px;" /> ไม่อนุมัติ เนื่องจาก ...................................................</label>
       </div>
-      <div style="text-align:center; margin-top:16px;">
+      <div style="text-align:center; margin-top:14px;">
         <div>(ลงชื่อ).................................................................... ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
         <div>วันที่ .......... / .................... / 2569</div>
       </div>
@@ -15932,43 +15946,83 @@
       })
       .join('');
 
+    const cfg = state.config || DEFAULT_CONFIG;
+    const signerName = cfg.certSignerName || '';
+    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+
     const html = `<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
   <title>ประกาศผลการแข่งขัน ${escapeHtml(comp.comp_id)}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+  ${OFFICIAL_PRINT_FONT_LINKS}
   <style>
-    body { font-family: 'Sarabun', sans-serif; padding: 24px; color: #111827; }
-    h1 { font-size: 18px; margin: 0 0 4px; text-align: center; }
-    h2 { font-size: 15px; margin: 0 0 14px; text-align: center; font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
-    th, td { border: 1px solid #1f2937; padding: 7px 8px; vertical-align: top; }
-    th { background: #f3f4f6; }
-    @media print { .no-print { display: none; } }
+    @page { size: A4 landscape; margin: 12mm 14mm; }
+    * { box-sizing: border-box; }
+    body { font-family: ${OFFICIAL_THAI_FONT}; font-size: 16pt; line-height: 1.35; color: #000; background: #fff; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { padding: 10px 16px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 10px; font-family: sans-serif; font-size: 13px; }
+    .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 7px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+    .doc-wrap { max-width: 269mm; margin: 0 auto; padding: 12px 16px; }
+    .header-title { text-align: center; margin-bottom: 10px; }
+    .title-1 { font-size: 19pt; font-weight: 700; line-height: 1.25; }
+    .title-2 { font-size: 17pt; font-weight: 700; line-height: 1.25; }
+    .title-3 { font-size: 18pt; font-weight: 700; margin-top: 2px; text-decoration: underline; }
+    .meta-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 16pt; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 15pt; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th, td { border: 1px solid #000; padding: 6px 7px; vertical-align: top; }
+    th { background: #f2f2f2; font-weight: 700; text-align: center; }
+    .sign-section { margin-top: 24px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+    .sign-box { text-align: center; min-width: 320px; font-size: 16pt; line-height: 1.5; }
+    @media print {
+      body { padding: 0; margin: 0; }
+      .no-print { display: none !important; }
+      .doc-wrap { max-width: 100%; padding: 0; }
+      th { background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   </style>
 </head>
 <body>
-  <div class="no-print" style="margin-bottom:14px;text-align:right;">
-    <button onclick="window.print()" style="padding:8px 16px;font-weight:700;cursor:pointer;">สั่งพิมพ์ใบประกาศผล</button>
+  <div class="no-print">
+    <div>ประกาศผลการแข่งขันรายการ [${escapeHtml(comp.comp_id)}] ${escapeHtml(comp.comp_name)} (A4 แนวนอน • TH Sarabun New 16pt)</div>
+    <button onclick="window.print()">สั่งพิมพ์ใบประกาศผล (A4 แนวนอน)</button>
   </div>
-  <h1>ประกาศผลการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</h1>
-  <h2>กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (สพป.มหาสารคาม เขต 3)<br/>
-  รายการ: [${escapeHtml(comp.comp_id)}] ${escapeHtml(comp.comp_name)} • ระดับชั้น ${escapeHtml(comp.level)}</h2>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:70px;">อันดับ</th>
-        <th style="width:170px;">โรงเรียน</th>
-        <th>นักเรียนผู้เข้าแข่งขัน</th>
-        <th>ครูผู้ฝึกซ้อม</th>
-        <th style="width:80px;">คะแนน</th>
-        <th style="width:100px;">ระดับเหรียญ</th>
-        <th style="width:150px;">รางวัล</th>
-      </tr>
-    </thead>
-    <tbody>${rowsHtml}</tbody>
-  </table>
+  <div class="doc-wrap">
+    <div class="header-title">
+      <div class="title-1">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>
+      <div class="title-2">ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>
+      <div class="title-3">ประกาศผลการแข่งขัน</div>
+    </div>
+    <div class="meta-row">
+      <div><strong>รายการ:</strong> [${escapeHtml(comp.comp_id)}] ${escapeHtml(comp.comp_name)}</div>
+      <div><strong>หมวด:</strong> ${escapeHtml(comp.learning_area)} • <strong>ระดับ:</strong> ${escapeHtml(comp.level)} (${escapeHtml(comp.team_type)})</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:7%;">อันดับ</th>
+          <th style="width:18%;">โรงเรียน</th>
+          <th style="width:26%;">นักเรียนผู้เข้าแข่งขัน</th>
+          <th style="width:20%;">ครูผู้ฝึกซ้อม</th>
+          <th style="width:8%;">คะแนน</th>
+          <th style="width:10%;">ระดับเหรียญ</th>
+          <th style="width:11%;">รางวัล</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    <div class="sign-section">
+      <div class="sign-box">
+        <div>ขอรับรองผลการแข่งขันถูกต้อง</div>
+        <div style="height:40px;"></div>
+        <div>(ลงชื่อ)............................................................</div>
+        <div>(${signerName ? escapeHtml(signerName) : '............................................................'})</div>
+        <div style="font-weight:700;">${escapeHtml(signerPos)}</div>
+        <div>วันที่ .......... เดือน ................................. พ.ศ. 2569</div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>`;
 
@@ -15978,7 +16032,7 @@
       win.document.write(html);
       win.document.close();
     } else {
-      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์ใบประกาศผล', 'warning');
     }
   }
 
@@ -17998,16 +18052,31 @@
     }
     w.document.open();
     w.document.write(
-      '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>กำหนดการแข่งขัน - ศิลปหัตถกรรม ครั้งที่ 74</title><style>' +
-        "@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');" +
-        "@page { size: A4 portrait; margin: 16mm; } body { font-family: 'TH Sarabun New', 'Sarabun', sans-serif; font-size: 14pt; color: #000; }" +
-        'h2 { text-align: center; margin: 0 0 10px; font-size: 16pt; } table { width: 100%; border-collapse: collapse; }' +
-        'th, td { border: 1px solid #444; padding: 4px 6px; vertical-align: top; } th { background: #f1f5f9; }' +
-        '@media print { .no-print { display: none; } }' +
+      '<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>กำหนดการแข่งขัน - ศิลปหัตถกรรม ครั้งที่ 74</title>' +
+        OFFICIAL_PRINT_FONT_LINKS +
+        '<style>' +
+        '@page { size: A4 landscape; margin: 10mm 14mm; }' +
+        '* { box-sizing: border-box; }' +
+        'body { font-family: ' + OFFICIAL_THAI_FONT + '; font-size: 16pt; line-height: 1.35; color: #000; background: #fff; margin: 0; padding: 14px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
+        '.no-print { text-align: right; margin-bottom: 10px; font-family: sans-serif; font-size: 13px; }' +
+        '.no-print button { background: #0f172a; color: #fff; border: none; padding: 7px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; }' +
+        '.header-title { text-align: center; margin-bottom: 10px; }' +
+        '.title-1 { font-size: 19pt; font-weight: 700; line-height: 1.25; }' +
+        '.title-2 { font-size: 17pt; font-weight: 700; line-height: 1.25; }' +
+        '.title-3 { font-size: 18pt; font-weight: 700; margin-top: 2px; text-decoration: underline; }' +
+        'table { width: 100%; border-collapse: collapse; font-size: 15pt; margin-top: 8px; }' +
+        'thead { display: table-header-group; }' +
+        'tr { page-break-inside: avoid; }' +
+        'th, td { border: 1px solid #000; padding: 5px 7px; vertical-align: top; } th { background: #f2f2f2; font-weight: 700; text-align: center; }' +
+        '@media print { body { padding: 0; margin: 0; } .no-print { display: none !important; } th { background: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }' +
         '</style></head><body>' +
-        '<div class="no-print" style="text-align:right;margin-bottom:10px;"><button onclick="window.print()" style="padding:6px 14px;cursor:pointer;">พิมพ์ / บันทึก PDF</button></div>' +
-        '<h2>กำหนดการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 • กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</h2>' +
-        '<table><thead><tr><th style="width:45px;">ที่</th><th style="width:20%;">หมวดกิจกรรม</th><th>รายการแข่งขัน</th><th style="width:23%;">วันและเวลา</th><th style="width:20%;">สถานที่ / ห้องสอบ</th></tr></thead><tbody>' +
+        '<div class="no-print"><button onclick="window.print()">พิมพ์ / บันทึก PDF (A4 แนวนอน)</button></div>' +
+        '<div class="header-title">' +
+        '<div class="title-1">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>' +
+        '<div class="title-2">ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3</div>' +
+        '<div class="title-3">กำหนดการและสถานที่จัดการแข่งขัน</div>' +
+        '</div>' +
+        '<table><thead><tr><th style="width:5%;">ที่</th><th style="width:20%;">หมวดกิจกรรม</th><th style="width:35%;">รายการแข่งขัน</th><th style="width:20%;">วันและเวลา</th><th style="width:20%;">สถานที่ / ห้องสอบ</th></tr></thead><tbody>' +
         rowsHtml +
         '</tbody></table></body></html>'
     );
