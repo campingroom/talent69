@@ -1277,6 +1277,10 @@
     return Boolean(state.isAdmin || isPublicRegistrationOpen());
   }
 
+  function canCurrentViewEditRegistration() {
+    return Boolean(isEffectiveAdmin() || isPublicRegistrationOpen());
+  }
+
   function updateAdminAndStatusUI() {
     // 1. Registration Open/Closed Pill & Form Banner (always reflects real public state)
     const badge = document.getElementById('regOpenStatusBadge');
@@ -2106,11 +2110,11 @@
     }
     const btnSubSchoolEl = document.getElementById('btnPrintSubstitutionFormSchool');
     if (btnSubSchoolEl) {
-      btnSubSchoolEl.classList.toggle('hidden', !subFormEnabled);
+      btnSubSchoolEl.classList.toggle('hidden', !subFormEnabled && !effAdmin);
     }
     const btnSubCompEl = document.getElementById('btnPrintSubstitutionFormComp');
     if (btnSubCompEl) {
-      btnSubCompEl.classList.toggle('hidden', !subFormEnabled);
+      btnSubCompEl.classList.toggle('hidden', !subFormEnabled && !effAdmin);
     }
 
     [
@@ -3405,7 +3409,7 @@
         submitBtn.textContent = 'บันทึกการแก้ไขรายชื่อเดิม';
       }
       if (delInEditBtn) {
-        const canShowDel = state.isAdmin || state.registrationOpen;
+        const canShowDel = canCurrentViewEditRegistration();
         delInEditBtn.classList.toggle('hidden', !canShowDel);
       }
       existingToLoad.students.forEach(function (st, idx) {
@@ -3483,6 +3487,15 @@
           .map((t, i) => (i + 1) + '. ' + formatResponsiveNameHtml(t.prefix, t.name))
           .join('<br/>');
 
+        const canEditRow = canCurrentViewEditRegistration();
+        const editBtnHtml = canEditRow
+          ? '<button type="button" data-edit-reg="' +
+            escapeHtml(reg.reg_id) +
+            '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-slate-300 hover:bg-[#F1F1EF] text-[#37352F] font-heading font-medium shrink-0">' +
+            ICONS.edit +
+            '<span>แก้ไข</span></button>'
+          : '';
+
         return (
           '<div class="p-3.5 rounded-lg bg-[#F7F7F5] border ' +
           isHighlighted +
@@ -3501,11 +3514,7 @@
           escapeHtml(reg.comp_name) +
           '</div>' +
           '</div>' +
-          '<button type="button" data-edit-reg="' +
-          escapeHtml(reg.reg_id) +
-          '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-slate-300 hover:bg-[#F1F1EF] text-[#37352F] font-heading font-medium shrink-0">' +
-          ICONS.edit +
-          '<span>แก้ไข</span></button>' +
+          editBtnHtml +
           '</div>' +
           '<div class="text-slate-700 pt-1 border-t border-slate-200/70"><strong>นักเรียน (' +
           (reg.students || []).length +
@@ -3609,6 +3618,10 @@
   }
 
   function requestEditRegistration(regId) {
+    if (!canCurrentViewEditRegistration()) {
+      showToast('ขณะนี้ปิดรับสมัครส่งรายชื่อแล้ว หากต้องการแก้ไขหรือเปลี่ยนตัว กรุณาติดต่อแอดมินกลุ่มโรงเรียน', 'error');
+      return;
+    }
     const reg = state.registrations.find((r) => r.reg_id === regId);
     if (!reg) return;
 
@@ -4024,7 +4037,7 @@
     }
 
     // Applicant / teacher self-service delete safeguards
-    if (!state.registrationOpen) {
+    if (!isPublicRegistrationOpen()) {
       showToast('ขณะนี้ปิดรับสมัครแล้ว ไม่สามารถลบข้อมูลเองได้ กรุณาติดต่อแอดมินกลุ่มโรงเรียน', 'error');
       return;
     }
@@ -5068,6 +5081,19 @@
                   '<span>ลบ</span></button>'
                 : '';
 
+            const editBtnHtml = canCurrentViewEditRegistration()
+              ? '<button type="button" data-dash-edit="' +
+                escapeHtml(r.reg_id) +
+                '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] text-xs font-heading">' +
+                ICONS.edit +
+                '<span>แก้ไข</span></button>'
+              : '';
+
+            const rowActionCellHtml =
+              editBtnHtml || deleteBtnHtml
+                ? editBtnHtml + deleteBtnHtml
+                : '<span class="text-[11px] text-[#787774]">ปิดรับสมัคร</span>';
+
             return (
               '<tr class="hover:bg-[#F7F7F5] transition ' +
               (r.reg_id === state.lastAddedRegId ? 'row-new-highlight' : '') +
@@ -5101,12 +5127,7 @@
               tchHtml +
               '</td>' +
               '<td class="py-2.5 px-2 text-right whitespace-nowrap space-x-1">' +
-              '<button type="button" data-dash-edit="' +
-              escapeHtml(r.reg_id) +
-              '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] text-xs font-heading">' +
-              ICONS.edit +
-              '<span>แก้ไข</span></button>' +
-              deleteBtnHtml +
+              rowActionCellHtml +
               '</td>' +
               '</tr>'
             );
@@ -5841,6 +5862,23 @@
             '<span>บัตร</span></button>'
           : '';
 
+        const canShowSubFormBtn = Boolean(isSubstitutionFormEnabled() || isEffectiveAdmin());
+        const subFormBtnHtml = canShowSubFormBtn
+          ? '<button type="button" data-sch-sub-form="' +
+            escapeHtml(r.reg_id) +
+            '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-heading cursor-pointer" title="สร้าง/พิมพ์แบบคำร้องขอเปลี่ยนตัวทีมนี้">' +
+            ICONS.fileText +
+            '<span>ใบเปลี่ยนตัว</span></button>'
+          : '';
+
+        const schEditBtnHtml = canCurrentViewEditRegistration()
+          ? '<button type="button" data-sch-edit="' +
+            escapeHtml(r.reg_id) +
+            '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] text-xs font-heading">' +
+            ICONS.edit +
+            '<span>แก้ไข</span></button>'
+          : '';
+
         return (
           '<tr class="hover:bg-[#F7F7F5]">' +
           '<td class="py-3 px-3 font-heading text-[#787774]">' +
@@ -5879,11 +5917,8 @@
           '<td class="py-3 px-2 text-right whitespace-nowrap no-print space-x-1">' +
           photoBtnHtml +
           cardBtnHtml +
-          '<button type="button" data-sch-edit="' +
-          escapeHtml(r.reg_id) +
-          '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] text-xs font-heading">' +
-          ICONS.edit +
-          '<span>แก้ไข</span></button>' +
+          subFormBtnHtml +
+          schEditBtnHtml +
           deleteBtnHtml +
           '</td>' +
           '</tr>'
@@ -5907,6 +5942,11 @@
     tbody.querySelectorAll('[data-sch-cards]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         printRegistrationIdCards(btn.getAttribute('data-sch-cards'));
+      });
+    });
+    tbody.querySelectorAll('[data-sch-sub-form]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openSubstitutionFormModal({ regId: btn.getAttribute('data-sch-sub-form') });
       });
     });
     tbody.querySelectorAll('[data-sch-edit]').forEach(function (btn) {
@@ -6600,6 +6640,25 @@
                 const scoreTdHtml = showScores
                   ? '<td class="py-2 px-2 text-center">' + scoreHtml + '</td>'
                   : '';
+                const compSubFormBtnHtml =
+                  isSubstitutionFormEnabled() || isEffectiveAdmin()
+                    ? '<button type="button" data-comp-sub-form="' +
+                      escapeHtml(r.reg_id) +
+                      '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-heading cursor-pointer" title="สร้าง/พิมพ์แบบคำร้องขอเปลี่ยนตัวทีมนี้">' +
+                      ICONS.fileText +
+                      '<span>ใบเปลี่ยนตัว</span></button>'
+                    : '';
+                const compEditBtnHtml = canCurrentViewEditRegistration()
+                  ? '<button type="button" data-comp-edit-reg="' +
+                    escapeHtml(r.reg_id) +
+                    '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] font-heading">' +
+                    ICONS.edit +
+                    '<span>แก้ไข</span></button>'
+                  : '';
+                const compRowActionHtml =
+                  compSubFormBtnHtml || compEditBtnHtml
+                    ? compSubFormBtnHtml + compEditBtnHtml
+                    : '<span class="text-[11px] text-[#787774]">ปิดรับสมัคร</span>';
                 return (
                   '<tr>' +
                   '<td class="py-2 px-3 font-heading text-[#787774]">' +
@@ -6615,12 +6674,8 @@
                   tchText +
                   '</td>' +
                   scoreTdHtml +
-                  '<td class="py-2 px-2 text-right">' +
-                  '<button type="button" data-comp-edit-reg="' +
-                  escapeHtml(r.reg_id) +
-                  '" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#F1F1EF] hover:bg-[#E9E9E7] text-[#37352F] font-heading">' +
-                  ICONS.edit +
-                  '<span>แก้ไข</span></button>' +
+                  '<td class="py-2 px-2 text-right whitespace-nowrap space-x-1">' +
+                  compRowActionHtml +
                   '</td>' +
                   '</tr>'
                 );
@@ -6752,6 +6807,12 @@
     container.querySelectorAll('[data-comp-edit-reg]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         requestEditRegistration(btn.getAttribute('data-comp-edit-reg'));
+      });
+    });
+
+    container.querySelectorAll('[data-comp-sub-form]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openSubstitutionFormModal({ regId: btn.getAttribute('data-comp-sub-form') });
       });
     });
 
@@ -14248,64 +14309,480 @@
     }
   }
 
-  // Print Official Substitution Request Form (A4 Portrait)
-  function printSubstitutionForm(optRegId) {
-    let reg = null;
-    if (optRegId) {
-      reg = state.registrations.find((r) => r.reg_id === optRegId);
+  // Smart Substitution Request Form Modal State & Handlers
+  const subFormModalState = {
+    mode: 'smart',
+    schoolName: '',
+    regId: '',
+    reasonPreset: 'none',
+    otherReason: '',
+    showBlankTeacherTable: false,
+    stuSwaps: {},
+    tchSwaps: {}
+  };
+
+  function ensureSubModalSwapEntry(group, regId, idx) {
+    if (!subFormModalState[group][regId]) subFormModalState[group][regId] = {};
+    if (!subFormModalState[group][regId][idx]) {
+      subFormModalState[group][regId][idx] = {
+        checked: false,
+        newName: '',
+        newGrade: '',
+        idCode: '',
+        phone: '',
+        reason: ''
+      };
+    }
+    return subFormModalState[group][regId][idx];
+  }
+
+  function syncSubModalModeUI() {
+    const isSmart = subFormModalState.mode !== 'blank';
+    const btnSmart = document.getElementById('btnSubModalModeSmart');
+    const btnBlank = document.getElementById('btnSubModalModeBlank');
+    const smartPanel = document.getElementById('subModalSmartPanel');
+    const blankNotice = document.getElementById('subModalBlankNotice');
+
+    if (btnSmart) {
+      btnSmart.className = isSmart
+        ? 'px-3 py-2 rounded-xl border font-heading text-xs font-semibold transition cursor-pointer bg-slate-900 text-white border-slate-900'
+        : 'px-3 py-2 rounded-xl border font-heading text-xs font-medium transition cursor-pointer bg-white text-slate-700 border-slate-300 hover:bg-slate-50';
+    }
+    if (btnBlank) {
+      btnBlank.className = !isSmart
+        ? 'px-3 py-2 rounded-xl border font-heading text-xs font-semibold transition cursor-pointer bg-slate-900 text-white border-slate-900'
+        : 'px-3 py-2 rounded-xl border font-heading text-xs font-medium transition cursor-pointer bg-white text-slate-700 border-slate-300 hover:bg-slate-50';
+    }
+    if (smartPanel) smartPanel.classList.toggle('hidden', !isSmart);
+    if (blankNotice) blankNotice.classList.toggle('hidden', isSmart);
+  }
+
+  function renderSubModalChecklists() {
+    const reg = state.registrations.find((r) => r.reg_id === subFormModalState.regId);
+    const stuListEl = document.getElementById('subModalStuList');
+    const tchListEl = document.getElementById('subModalTchList');
+    const stuBadgeEl = document.getElementById('subModalStuBadge');
+    const tchBadgeEl = document.getElementById('subModalTchBadge');
+    const blankTchWrap = document.getElementById('subModalBlankTchToggleWrap');
+    if (!stuListEl || !tchListEl) return;
+
+    if (!reg) {
+      stuListEl.innerHTML =
+        '<div class="p-3 rounded-lg border border-dashed border-slate-200 text-xs text-slate-500 text-center">ยังไม่มีรายการลงทะเบียน — กดพิมพ์เพื่อใช้แบบฟอร์มเปล่าหรือเลือกโรงเรียนอื่น</div>';
+      tchListEl.innerHTML = '';
+      if (stuBadgeEl) stuBadgeEl.textContent = '0 คน';
+      if (tchBadgeEl) tchBadgeEl.textContent = '0 คน';
+      if (blankTchWrap) blankTchWrap.classList.add('hidden');
+      return;
+    }
+
+    const students = Array.isArray(reg.students) ? reg.students : [];
+    const teachers = Array.isArray(reg.teachers) ? reg.teachers : [];
+
+    let stuCheckedCount = 0;
+    stuListEl.innerHTML = students
+      .map(function (s, idx) {
+        const sw = ensureSubModalSwapEntry('stuSwaps', reg.reg_id, idx);
+        if (sw.checked) stuCheckedCount++;
+        const fullLabel = (idx + 1) + '. ' + formatFullNameForPrint(s.prefix, s.name) + (s.grade ? ' (' + s.grade + ')' : '');
+        const inputsHtml = sw.checked
+          ? '<div class="pl-6 pt-2 mt-2 border-t border-slate-200/80 space-y-1.5">' +
+            '<div class="text-[11px] text-slate-500">ไม่บังคับกรอก — เว้นว่างไว้เขียนด้วยปากกาได้</div>' +
+            '<div class="grid grid-cols-1 sm:grid-cols-4 gap-1.5">' +
+            '<input type="text" data-sub-stu-field="newName" data-idx="' + idx + '" value="' + escapeHtml(sw.newName) + '" placeholder="ชื่อ-สกุลคนใหม่ (เว้นว่างได้)" class="sm:col-span-2 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900" />' +
+            '<input type="text" data-sub-stu-field="newGrade" data-idx="' + idx + '" value="' + escapeHtml(sw.newGrade) + '" placeholder="ชั้น เช่น ป.5" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900" />' +
+            '<input type="text" data-sub-stu-field="idCode" data-idx="' + idx + '" value="' + escapeHtml(sw.idCode) + '" placeholder="เลขประจำตัว (ถ้ามี)" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900" />' +
+            '</div>' +
+            '<input type="text" data-sub-stu-field="reason" data-idx="' + idx + '" value="' + escapeHtml(sw.reason) + '" placeholder="เหตุผลความจำเป็น (เว้นว่างได้)" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900" />' +
+            '</div>'
+          : '';
+        return (
+          '<div class="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">' +
+          '<label class="flex items-start gap-2 cursor-pointer text-xs">' +
+          '<input type="checkbox" data-sub-stu-check="' + idx + '"' + (sw.checked ? ' checked' : '') + ' class="mt-0.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" />' +
+          '<span class="font-heading font-medium text-slate-900">' + escapeHtml(fullLabel) + '</span>' +
+          '</label>' +
+          inputsHtml +
+          '</div>'
+        );
+      })
+      .join('');
+
+    if (stuBadgeEl) {
+      stuBadgeEl.textContent =
+        stuCheckedCount > 0 ? 'เลือกเปลี่ยน ' + stuCheckedCount + ' / ' + students.length + ' คน' : 'ไม่ติ๊ก (ใช้ตารางว่าง)';
+    }
+
+    let tchCheckedCount = 0;
+    tchListEl.innerHTML = teachers
+      .map(function (t, idx) {
+        const sw = ensureSubModalSwapEntry('tchSwaps', reg.reg_id, idx);
+        if (sw.checked) tchCheckedCount++;
+        const fullLabel = (idx + 1) + '. ' + formatFullNameForPrint(t.prefix, t.name);
+        const inputsHtml = sw.checked
+          ? '<div class="pl-6 pt-2 mt-2 border-t border-slate-200/80 space-y-1.5">' +
+            '<div class="text-[11px] text-slate-500">ไม่บังคับกรอก — เว้นว่างไว้เขียนด้วยปากกาได้</div>' +
+            '<div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">' +
+            '<input type="text" data-sub-tch-field="newName" data-idx="' + idx + '" value="' + escapeHtml(sw.newName) + '" placeholder="ชื่อครูท่านใหม่ (เว้นว่างได้)" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900" />' +
+            '<input type="text" data-sub-tch-field="phone" data-idx="' + idx + '" value="' + escapeHtml(sw.phone) + '" placeholder="เบอร์โทร (เว้นว่างได้)" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900" />' +
+            '<input type="text" data-sub-tch-field="reason" data-idx="' + idx + '" value="' + escapeHtml(sw.reason) + '" placeholder="เหตุผล (เว้นว่างได้)" class="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900" />' +
+            '</div>' +
+            '</div>'
+          : '';
+        return (
+          '<div class="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">' +
+          '<label class="flex items-start gap-2 cursor-pointer text-xs">' +
+          '<input type="checkbox" data-sub-tch-check="' + idx + '"' + (sw.checked ? ' checked' : '') + ' class="mt-0.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900" />' +
+          '<span class="font-heading font-medium text-slate-900">' + escapeHtml(fullLabel) + '</span>' +
+          '</label>' +
+          inputsHtml +
+          '</div>'
+        );
+      })
+      .join('');
+
+    if (tchBadgeEl) {
+      tchBadgeEl.textContent =
+        tchCheckedCount > 0 ? 'เลือกเปลี่ยน ' + tchCheckedCount + ' / ' + teachers.length + ' คน' : 'ไม่เปลี่ยนครู';
+    }
+    if (blankTchWrap) {
+      blankTchWrap.classList.toggle('hidden', !(stuCheckedCount > 0 && tchCheckedCount === 0));
+    }
+
+    stuListEl.querySelectorAll('[data-sub-stu-check]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        const idx = Number(cb.getAttribute('data-sub-stu-check'));
+        ensureSubModalSwapEntry('stuSwaps', reg.reg_id, idx).checked = cb.checked;
+        renderSubModalChecklists();
+      });
+    });
+    stuListEl.querySelectorAll('[data-sub-stu-field]').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        const idx = Number(inp.getAttribute('data-idx'));
+        const field = inp.getAttribute('data-sub-stu-field');
+        ensureSubModalSwapEntry('stuSwaps', reg.reg_id, idx)[field] = inp.value;
+      });
+    });
+    tchListEl.querySelectorAll('[data-sub-tch-check]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        const idx = Number(cb.getAttribute('data-sub-tch-check'));
+        ensureSubModalSwapEntry('tchSwaps', reg.reg_id, idx).checked = cb.checked;
+        renderSubModalChecklists();
+      });
+    });
+    tchListEl.querySelectorAll('[data-sub-tch-field]').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        const idx = Number(inp.getAttribute('data-idx'));
+        const field = inp.getAttribute('data-sub-tch-field');
+        ensureSubModalSwapEntry('tchSwaps', reg.reg_id, idx)[field] = inp.value;
+      });
+    });
+  }
+
+  function populateSubModalRegOptions(schoolName, preferredRegId) {
+    const regSel = document.getElementById('subModalRegSelect');
+    if (!regSel) return;
+    const schoolRegs = state.registrations.filter((r) => r.school_name === schoolName);
+    if (schoolRegs.length === 0) {
+      regSel.innerHTML = '<option value="">-- โรงเรียนนี้ยังไม่มีรายการลงทะเบียน --</option>';
+      subFormModalState.regId = '';
+      renderSubModalChecklists();
+      return;
+    }
+    regSel.innerHTML = schoolRegs
+      .map(function (r) {
+        const stuCnt = (r.students || []).length;
+        const tchCnt = (r.teachers || []).length;
+        return (
+          '<option value="' +
+          escapeHtml(r.reg_id) +
+          '">[' +
+          escapeHtml(r.comp_id) +
+          '] ' +
+          escapeHtml(r.comp_name) +
+          ' (' +
+          escapeHtml(r.level) +
+          ') • นร. ' +
+          stuCnt +
+          ' / ครู ' +
+          tchCnt +
+          '</option>'
+        );
+      })
+      .join('');
+    const chosen =
+      preferredRegId && schoolRegs.some((r) => r.reg_id === preferredRegId)
+        ? preferredRegId
+        : schoolRegs[0].reg_id;
+    regSel.value = chosen;
+    subFormModalState.regId = chosen;
+    renderSubModalChecklists();
+  }
+
+  function openSubstitutionFormModal(options) {
+    const opts = options || {};
+    const modal = document.getElementById('substitutionFormModal');
+    const schoolSel = document.getElementById('subModalSchoolSelect');
+    if (!modal || !schoolSel) {
+      printSubstitutionForm(opts.regId || '');
+      return;
+    }
+
+    const regBySchool = {};
+    state.registrations.forEach(function (r) {
+      if (r.school_name) regBySchool[r.school_name] = true;
+    });
+    const activeSchools = state.schools.filter((s) => regBySchool[s.school_name]);
+    const schoolChoices = activeSchools.length > 0 ? activeSchools : state.schools;
+
+    schoolSel.innerHTML = schoolChoices
+      .map((s) => '<option value="' + escapeHtml(s.school_name) + '">' + escapeHtml(s.school_name) + '</option>')
+      .join('');
+
+    subFormModalState.reasonPreset = 'none';
+    subFormModalState.otherReason = '';
+    subFormModalState.showBlankTeacherTable = false;
+    subFormModalState.stuSwaps = {};
+    subFormModalState.tchSwaps = {};
+
+    document.querySelectorAll('input[name="subModalReasonPreset"]').forEach(function (radio) {
+      radio.checked = radio.value === 'none';
+    });
+    const otherInp = document.getElementById('subModalOtherReasonInput');
+    if (otherInp) {
+      otherInp.value = '';
+      otherInp.classList.add('hidden');
+    }
+    const blankTchChk = document.getElementById('subModalShowBlankTeacherTable');
+    if (blankTchChk) blankTchChk.checked = false;
+
+    const targetReg = opts.regId ? state.registrations.find((r) => r.reg_id === opts.regId) : null;
+    if (targetReg) {
+      subFormModalState.mode = 'smart';
+      subFormModalState.schoolName = targetReg.school_name;
+      schoolSel.value = targetReg.school_name;
+      populateSubModalRegOptions(targetReg.school_name, targetReg.reg_id);
+    } else if (opts.schoolName && regBySchool[opts.schoolName]) {
+      subFormModalState.mode = 'smart';
+      subFormModalState.schoolName = opts.schoolName;
+      schoolSel.value = opts.schoolName;
+      populateSubModalRegOptions(opts.schoolName, '');
+    } else if (activeSchools.length > 0) {
+      subFormModalState.mode = 'smart';
+      const fallbackSchool =
+        (document.getElementById('schoolViewSelect') || {}).value || activeSchools[0].school_name;
+      const chosenSchool = regBySchool[fallbackSchool] ? fallbackSchool : activeSchools[0].school_name;
+      subFormModalState.schoolName = chosenSchool;
+      schoolSel.value = chosenSchool;
+      populateSubModalRegOptions(chosenSchool, '');
+    } else {
+      subFormModalState.mode = 'blank';
+      subFormModalState.schoolName = schoolChoices[0] ? schoolChoices[0].school_name : '';
+      subFormModalState.regId = '';
+      renderSubModalChecklists();
+    }
+
+    syncSubModalModeUI();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function closeSubstitutionFormModal() {
+    const modal = document.getElementById('substitutionFormModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+
+  // Print Official Substitution Request Form (A4 Portrait, TH Sarabun New 16pt)
+  function printSubstitutionForm(arg) {
+    let cfg = null;
+    if (typeof arg === 'string' && arg.trim()) {
+      cfg = {
+        mode: 'smart',
+        regId: arg.trim(),
+        reasonPreset: 'none',
+        otherReason: '',
+        showBlankTeacherTable: false,
+        stuSwaps: {},
+        tchSwaps: {}
+      };
+    } else if (arg && typeof arg === 'object') {
+      cfg = {
+        mode: arg.mode === 'blank' ? 'blank' : 'smart',
+        regId: arg.regId || '',
+        reasonPreset: arg.reasonPreset || 'none',
+        otherReason: arg.otherReason || '',
+        showBlankTeacherTable: Boolean(arg.showBlankTeacherTable),
+        stuSwaps: arg.stuSwaps || {},
+        tchSwaps: arg.tchSwaps || {}
+      };
     } else {
       const schoolSelect = document.getElementById('schoolViewSelect');
       const schoolVal = schoolSelect ? schoolSelect.value : '';
+      let autoReg = null;
       if (schoolVal) {
         const schoolRegs = state.registrations.filter((r) => r.school_name === schoolVal);
-        if (schoolRegs.length === 1) {
-          reg = schoolRegs[0];
-        }
+        if (schoolRegs.length === 1) autoReg = schoolRegs[0];
       }
+      cfg = {
+        mode: autoReg ? 'smart' : 'blank',
+        regId: autoReg ? autoReg.reg_id : '',
+        reasonPreset: 'none',
+        otherReason: '',
+        showBlankTeacherTable: false,
+        stuSwaps: {},
+        tchSwaps: {}
+      };
     }
 
-    const schoolName = reg
-      ? reg.school_name
-      : '................................................................................';
-    const compText = reg
-      ? `[${reg.comp_id}] ${reg.comp_name} (${reg.level})`
-      : '....................................................................................................................................';
-    const originalStudents = reg && reg.students ? reg.students : [];
-    const originalTeachers = reg && reg.teachers ? reg.teachers : [];
+    const reg = cfg.mode !== 'blank' && cfg.regId
+      ? state.registrations.find((r) => r.reg_id === cfg.regId)
+      : null;
+    const isBlank = cfg.mode === 'blank' || !reg;
 
-    const stuRows = [0, 1, 2, 3]
-      .map(function (idx) {
-        const orig = originalStudents[idx];
-        const origText = orig ? `${orig.prefix || ''}${orig.name} (${orig.grade || '-'})` : '';
-        return `
-          <tr>
-            <td style="text-align:center;">${idx + 1}</td>
-            <td>${escapeHtml(origText)}</td>
-            <td></td>
-            <td></td>
-            <td></td>
-          </tr>
-        `;
-      })
-      .join('');
+    const schoolName = !isBlank ? reg.school_name : '';
+    const schoolDisplay = isBlank
+      ? '<span class="dotted-line" style="min-width:190px;">&nbsp;</span>'
+      : '<strong>' + escapeHtml(schoolName) + '</strong>';
+    const schoolSignDisplay = isBlank
+      ? '................................................'
+      : escapeHtml(String(schoolName || '').replace(/^โรงเรียน/, ''));
+    const compDisplay = isBlank
+      ? '<span class="dotted-line" style="min-width:290px;">&nbsp;</span> ระดับชั้น <span class="dotted-line" style="min-width:75px;">&nbsp;</span>'
+      : '<strong>[' +
+        escapeHtml(reg.comp_id) +
+        '] ' +
+        escapeHtml(reg.comp_name) +
+        '</strong> ระดับชั้น <strong>' +
+        escapeHtml(reg.level) +
+        '</strong>' +
+        (reg.team_type ? ' (ประเภท' + escapeHtml(reg.team_type) + ')' : '');
 
-    const teaRows = [0, 1]
-      .map(function (idx) {
-        const orig = originalTeachers[idx];
-        const origText = orig
-          ? `${orig.prefix || ''}${orig.name}${orig.phone ? ' (' + orig.phone + ')' : ''}`
-          : '';
-        return `
-          <tr>
-            <td style="text-align:center;">${idx + 1}</td>
-            <td>${escapeHtml(origText)}</td>
-            <td></td>
-            <td></td>
-            <td></td>
-          </tr>
-        `;
-      })
-      .join('');
+    const originalStudents = !isBlank && Array.isArray(reg.students) ? reg.students : [];
+    const originalTeachers = !isBlank && Array.isArray(reg.teachers) ? reg.teachers : [];
+
+    const selectedStu = [];
+    if (!isBlank) {
+      originalStudents.forEach(function (s, idx) {
+        const sw = cfg.stuSwaps[idx];
+        if (sw && sw.checked) selectedStu.push({ orig: s, sw: sw });
+      });
+    }
+
+    const selectedTch = [];
+    if (!isBlank) {
+      originalTeachers.forEach(function (t, idx) {
+        const sw = cfg.tchSwaps[idx];
+        if (sw && sw.checked) selectedTch.push({ orig: t, sw: sw });
+      });
+    }
+
+    const useBlankAllInSmart = !isBlank && selectedStu.length === 0 && selectedTch.length === 0;
+
+    let stuRows = '';
+    if (isBlank || selectedStu.length === 0) {
+      for (let i = 1; i <= 3; i++) {
+        stuRows +=
+          '<tr style="height: 32px;">' +
+          '<td style="text-align:center;">' + i + '</td>' +
+          '<td></td><td></td><td></td><td></td>' +
+          '</tr>';
+      }
+    } else {
+      stuRows = selectedStu
+        .map(function (row, i) {
+          const origName = (row.orig.prefix || '') + (row.orig.name || '') + (row.orig.grade ? ' (' + row.orig.grade + ')' : '');
+          const newNameHtml = row.sw.newName
+            ? '<strong>' +
+              escapeHtml(row.sw.newName) +
+              '</strong>' +
+              (row.sw.newGrade ? ' (' + escapeHtml(row.sw.newGrade) + ')' : '')
+            : '';
+          return (
+            '<tr style="height: 32px;">' +
+            '<td style="text-align:center;">' + (i + 1) + '</td>' +
+            '<td>' + escapeHtml(origName) + '</td>' +
+            '<td>' + newNameHtml + '</td>' +
+            '<td style="text-align:center;">' + escapeHtml(row.sw.idCode || '') + '</td>' +
+            '<td>' + escapeHtml(row.sw.reason || '') + '</td>' +
+            '</tr>'
+          );
+        })
+        .join('');
+    }
+
+    const showTeacherTable =
+      isBlank || useBlankAllInSmart || selectedTch.length > 0 || Boolean(cfg.showBlankTeacherTable);
+    let teaRows = '';
+    if (isBlank || selectedTch.length === 0) {
+      for (let i = 1; i <= 2; i++) {
+        teaRows +=
+          '<tr style="height: 30px;">' +
+          '<td style="text-align:center;">' + i + '</td>' +
+          '<td></td><td></td><td></td><td></td>' +
+          '</tr>';
+      }
+    } else {
+      teaRows = selectedTch
+        .map(function (row, i) {
+          const origName = (row.orig.prefix || '') + (row.orig.name || '');
+          const newNameHtml = row.sw.newName ? '<strong>' + escapeHtml(row.sw.newName) + '</strong>' : '';
+          return (
+            '<tr style="height: 30px;">' +
+            '<td style="text-align:center;">' + (i + 1) + '</td>' +
+            '<td>' + escapeHtml(origName) + '</td>' +
+            '<td>' + newNameHtml + '</td>' +
+            '<td style="text-align:center;">' + escapeHtml(row.sw.phone || '') + '</td>' +
+            '<td>' + escapeHtml(row.sw.reason || '') + '</td>' +
+            '</tr>'
+          );
+        })
+        .join('');
+    }
+
+    const cSick = !isBlank && cfg.reasonPreset === 'sick';
+    const cDuty = !isBlank && cfg.reasonPreset === 'duty';
+    const cOther = !isBlank && cfg.reasonPreset === 'other';
+    const otherTextHtml = cOther && cfg.otherReason ? escapeHtml(cfg.otherReason) : '&nbsp;';
+
+    const refBadgeHtml = isBlank
+      ? '<div style="border:1px solid #000; padding:2px 6px; font-size:12.5pt; line-height:1.15; text-align:left;">' +
+        '<div><strong>รหัส:</strong> ..................</div>' +
+        '<div><strong>สำหรับ:</strong> กองอำนวยการ</div>' +
+        '</div>'
+      : '<div style="border:1px solid #000; padding:2px 6px; font-size:12.5pt; line-height:1.15; text-align:left;">' +
+        '<div><strong>รหัส:</strong> ' + escapeHtml(reg.comp_id) + '</div>' +
+        '<div><strong>ทีม:</strong> ' + escapeHtml(reg.reg_id) + '</div>' +
+        '</div>';
+
+    const signerName = (state.config && state.config.certSignerName) || 'นายกิจภูมิ บุญอบ';
+    const signerPos = (state.config && state.config.certSignerPos) || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+
+    const stuHeaderMetaHtml =
+      !isBlank && selectedStu.length > 0
+        ? ' <span style="font-weight:400; font-size:14.5pt;">(ขอเปลี่ยนตัว ' +
+          selectedStu.length +
+          ' คน จากทีมทั้งหมด ' +
+          originalStudents.length +
+          ' คน)</span>'
+        : '';
+
+    const teacherSectionHtml = showTeacherTable
+      ? '<div style="font-weight:700; margin-top:4px; margin-bottom:2px;">2. รายการขอเปลี่ยนแปลงตัวครูผู้ฝึกสอน</div>' +
+        '<table>' +
+        '<thead><tr>' +
+        '<th style="width:6%;">ที่</th>' +
+        '<th style="width:28%;">รายชื่อครูผู้ฝึกสอนเดิม</th>' +
+        '<th style="width:30%;">ขอเปลี่ยนตัวเป็นครูท่านใหม่</th>' +
+        '<th style="width:14%;">เบอร์โทรศัพท์</th>' +
+        '<th style="width:22%;">เหตุผลความจำเป็น</th>' +
+        '</tr></thead>' +
+        '<tbody>' + teaRows + '</tbody>' +
+        '</table>'
+      : '<div style="margin:4px 0 6px 0; font-size:15pt;"><strong>2. รายการขอเปลี่ยนแปลงตัวครูผู้ฝึกสอน:</strong> &nbsp;ไม่มีการเปลี่ยนแปลงตัวครูผู้ฝึกสอน (คงเดิมทั้ง ' +
+        originalTeachers.length +
+        ' ท่าน)</div>';
 
     const html = `<!DOCTYPE html>
 <html lang="th">
@@ -14314,25 +14791,22 @@
   <title>แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74</title>
   ${OFFICIAL_PRINT_FONT_LINKS}
   <style>
-    @page { size: A4 portrait; margin: 15mm 15mm 12mm 15mm; }
+    @page { size: A4 portrait; margin: 11mm 13mm 10mm 15mm; }
     * { box-sizing: border-box; }
-    body { font-family: ${OFFICIAL_THAI_FONT}; color: #000; margin: 0; background: #fff; font-size: 16pt; line-height: 1.42; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: ${OFFICIAL_THAI_FONT}; color: #000; margin: 0; background: #fff; font-size: 16pt; line-height: 1.24; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif; font-size: 13px; }
     .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-    .form-wrap { max-width: 180mm; margin: 12px auto; background: #fff; padding: 10mm 12mm; }
-    .form-title { text-align: center; margin-bottom: 12px; }
-    .form-title h1 { font-size: 19pt; font-weight: 700; margin: 0 0 2px 0; line-height: 1.25; }
-    .form-title h2 { font-size: 17pt; font-weight: 700; margin: 0; line-height: 1.25; }
-    .form-meta { text-align: right; margin: 10px 0 12px 0; }
-    table { width: 100%; border-collapse: collapse; margin: 6px 0 12px 0; font-size: 15pt; }
+    .form-wrap { max-width: 182mm; margin: 10px auto; background: #fff; padding: 6mm 8mm; }
+    table { width: 100%; border-collapse: collapse; margin: 4px 0 8px 0; font-size: 14.5pt; line-height: 1.2; }
     thead { display: table-header-group; }
     tr { page-break-inside: avoid; }
-    th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
-    th { background: #f2f2f2; font-weight: 700; text-align: center; }
-    .rule-note { font-size: 14pt; color: #000; margin: 4px 0 10px 0; }
-    .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; page-break-inside: avoid; }
-    .sign-box { text-align: center; font-size: 15.5pt; line-height: 1.5; }
-    .approval-box { margin-top: 14px; border: 1.5px solid #000; padding: 10px 14px; page-break-inside: avoid; }
+    th, td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; color: #000; }
+    th { background: #f2f2f2; font-weight: 700; text-align: center; vertical-align: middle; }
+    .official-checkbox { display: inline-block; width: 10px; height: 10px; border: 1.2px solid #000; margin-right: 4px; vertical-align: -1px; position: relative; background: #fff; }
+    .official-checkbox.checked::after { content: ""; position: absolute; left: 2px; top: 0px; width: 4px; height: 7px; border: solid #000; border-width: 0 1.8px 1.8px 0; transform: rotate(45deg); }
+    .dotted-line { display: inline-block; border-bottom: 1px dotted #000; min-width: 80px; padding: 0 4px; line-height: 1.05; }
+    .sign-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 10px; margin-bottom: 10px; text-align: center; font-size: 15pt; line-height: 1.32; page-break-inside: avoid; }
+    .approval-box { border: 1.5px solid #000; padding: 7px 12px 8px 12px; font-size: 15pt; line-height: 1.28; page-break-inside: avoid; }
     @media print {
       body { background: #fff; margin: 0; padding: 0; }
       .no-print { display: none !important; }
@@ -14343,39 +14817,51 @@
 </head>
 <body>
   <div class="no-print">
-    <div>แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน (A4 แนวตั้ง ตามระเบียบ สพฐ.)</div>
+    <div>แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน (A4 แนวตั้ง 1 หน้า — TH Sarabun New 16pt)</div>
     <button onclick="window.print()">สั่งพิมพ์แบบคำร้อง (A4 แนวตั้ง)</button>
   </div>
   <div class="form-wrap">
-    <div class="form-title">
-      <h1>แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน</h1>
-      <h2>การแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ระดับกลุ่มโรงเรียน</h2>
-      <div>กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง อำเภอโกสุมพิสัย จังหวัดมหาสารคาม</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; border-bottom:2px solid #000; padding-bottom:5px; margin-bottom:8px;">
+      <div style="text-align:left; flex:1;">
+        <div style="font-size:18pt; font-weight:700; line-height:1.18;">แบบคำร้องขอเปลี่ยนแปลงตัวผู้เข้าแข่งขันและครูผู้ฝึกสอน</div>
+        <div style="font-size:15.5pt; font-weight:700; line-height:1.18;">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ระดับกลุ่มโรงเรียน</div>
+        <div style="font-size:14.5pt; line-height:1.18;">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (สพป.มหาสารคาม เขต 3)</div>
+      </div>
+      <div style="width:136px; flex-shrink:0;">${refBadgeHtml}</div>
     </div>
 
-    <div class="form-meta">
-      เขียนที่ โรงเรียน${escapeHtml(schoolName)}<br/>
-      วันที่ .......... เดือน ................................. พ.ศ. 2569
+    <div style="margin-left:52%; margin-bottom:6px; line-height:1.28;">
+      <div>เขียนที่ ${isBlank ? 'โรงเรียน................................................' : escapeHtml(schoolName)}</div>
+      <div style="padding-left:1.5em;">วันที่ .......... เดือน ........................ พ.ศ. 2569</div>
     </div>
 
-    <div style="margin-bottom: 8px;">
-      <strong>เรื่อง</strong> ขออนุมัติเปลี่ยนตัวผู้เข้าแข่งขัน / ครูผู้ฝึกสอน<br/>
-      <strong>เรียน</strong> ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง
+    <div style="margin-bottom:6px; line-height:1.28;">
+      <div><strong>เรื่อง</strong>&nbsp;&nbsp;ขออนุมัติเปลี่ยนแปลงตัวผู้เข้าแข่งขัน / ครูผู้ฝึกสอน</div>
+      <div><strong>เรียน</strong>&nbsp;&nbsp;ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
     </div>
 
-    <div style="text-indent: 2.5em; text-align: justify; margin-bottom: 8px;">
-      ด้วย โรงเรียน<strong>${escapeHtml(schoolName)}</strong> ได้ส่งนักเรียนเข้าร่วมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ในกิจกรรม <strong>${compText}</strong> มีความจำเป็นต้องขออนุมัติเปลี่ยนแปลงตัว เนื่องจาก (ระบุเหตุผลความจำเป็น เช่น ป่วย/ติดภารกิจสำคัญ) ........................................................................................................................
+    <div style="text-indent:2.5em; text-align:left; margin-bottom:5px; line-height:1.28;">
+      ด้วย ${schoolDisplay} ได้ลงทะเบียนส่งนักเรียนเข้าร่วมการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 ในรายการ ${compDisplay} มีความจำเป็นต้องขออนุมัติเปลี่ยนแปลงตัวผู้เข้าแข่งขัน / ครูผู้ฝึกสอน ดังรายละเอียดต่อไปนี้
     </div>
 
-    <div style="font-weight:700; margin-top:8px;">1. รายการขอเปลี่ยนตัวนักเรียนผู้เข้าแข่งขัน:</div>
+    <div style="margin-left:1.5em; margin-bottom:7px; font-size:15pt; line-height:1.25;">
+      <strong>เหตุผล:</strong>&nbsp;
+      <span style="margin-right:10px;"><span class="official-checkbox ${cSick ? 'checked' : ''}"></span>เจ็บป่วย/สุดวิสัย</span>
+      <span style="margin-right:10px;"><span class="official-checkbox ${cDuty ? 'checked' : ''}"></span>ติดภารกิจโรงเรียน</span>
+      <span><span class="official-checkbox ${cOther ? 'checked' : ''}"></span>อื่น ๆ <span class="dotted-line" style="min-width:95px;">${otherTextHtml}</span></span>
+    </div>
+
+    <div style="font-weight:700; margin-top:2px; margin-bottom:2px;">
+      1. รายการขอเปลี่ยนแปลงตัวนักเรียนผู้เข้าแข่งขัน${stuHeaderMetaHtml}
+    </div>
     <table>
       <thead>
         <tr>
-          <th style="width:5%;">ที่</th>
-          <th style="width:26%;">รายชื่อเดิมที่ลงทะเบียนไว้</th>
-          <th style="width:27%;">รายชื่อผู้ขอเปลี่ยนตัวแทน (พร้อมระบุชั้น)</th>
-          <th style="width:14%;">เลขประจำตัว/รหัส</th>
-          <th style="width:28%;">เหตุผลความจำเป็น</th>
+          <th style="width:6%;">ที่</th>
+          <th style="width:28%;">รายชื่อเดิมที่ลงทะเบียนไว้<br/><span style="font-weight:400; font-size:13pt;">(ชื่อ-สกุล / ชั้น)</span></th>
+          <th style="width:30%;">ขอเปลี่ยนตัวเป็นรายชื่อใหม่<br/><span style="font-weight:400; font-size:13pt;">(ชื่อ-สกุล / ชั้น)</span></th>
+          <th style="width:14%;">เลขประจำตัว<br/>นักเรียน</th>
+          <th style="width:22%;">เหตุผลความจำเป็น</th>
         </tr>
       </thead>
       <tbody>
@@ -14383,48 +14869,32 @@
       </tbody>
     </table>
 
-    <div style="font-weight:700;">2. รายการขอเปลี่ยนตัวครูผู้ฝึกสอน:</div>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:5%;">ที่</th>
-          <th style="width:26%;">รายชื่อครูเดิม</th>
-          <th style="width:27%;">รายชื่อครูผู้สอนท่านใหม่</th>
-          <th style="width:14%;">เบอร์โทรศัพท์</th>
-          <th style="width:28%;">เหตุผลความจำเป็น</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${teaRows}
-      </tbody>
-    </table>
-
-    <div class="rule-note">
-      * หมายเหตุ: ตามเกณฑ์การแข่งขัน การเปลี่ยนตัวผู้เข้าแข่งขันสามารถเปลี่ยนตัวได้ไม่เกินร้อยละตามที่เกณฑ์แต่ละกิจกรรมกำหนด และต้องยื่นแบบคำร้องนี้ต่อประธานกลุ่มโรงเรียนหรือคณะกรรมการจัดการแข่งขันก่อนเริ่มการแข่งขัน
-    </div>
+    ${teacherSectionHtml}
 
     <div class="sign-grid">
-      <div class="sign-box">
-        <div>(ลงชื่อ).................................................... ครูผู้รับผิดชอบ</div>
+      <div>
+        <div>ลงชื่อ .................................................... ผู้ยื่นคำร้อง</div>
         <div>(....................................................)</div>
-        <div>ตำแหน่ง ....................................................</div>
+        <div>ตำแหน่ง ครูผู้ฝึกสอน / ผู้รับผิดชอบ</div>
       </div>
-      <div class="sign-box">
-        <div>(ลงชื่อ).................................................... ผู้บริหารสถานศึกษา</div>
+      <div>
+        <div>ลงชื่อ .................................................... ผู้รับรอง</div>
         <div>(....................................................)</div>
-        <div>ผู้อำนวยการโรงเรียน${escapeHtml(schoolName)}</div>
+        <div>ผู้อำนวยการโรงเรียน${schoolSignDisplay}</div>
       </div>
     </div>
 
     <div class="approval-box">
-      <div style="font-weight:700; margin-bottom:6px;">ผลการพิจารณาของคณะกรรมการกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง:</div>
-      <div style="display:flex; flex-wrap:wrap; gap:24px; margin-bottom:8px;">
-        <label><input type="checkbox" style="vertical-align:middle; margin-right:4px;" /> อนุมัติให้เปลี่ยนตัวตามคำร้อง</label>
-        <label><input type="checkbox" style="vertical-align:middle; margin-right:4px;" /> ไม่อนุมัติ เนื่องจาก ...................................................</label>
+      <div style="font-weight:700; margin-bottom:3px;">ผลการพิจารณาของ${escapeHtml(signerPos)} / คณะกรรมการจัดการแข่งขัน</div>
+      <div style="display:flex; flex-wrap:wrap; gap:16px; margin-bottom:8px;">
+        <span><span class="official-checkbox"></span>อนุมัติให้เปลี่ยนแปลงตัวตามคำร้อง</span>
+        <span><span class="official-checkbox"></span>ไม่อนุมัติ เนื่องจาก ..............................................................</span>
       </div>
-      <div style="text-align:center; margin-top:14px;">
-        <div>(ลงชื่อ).................................................................... ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
-        <div>วันที่ .......... / .................... / 2569</div>
+      <div style="margin-left:42%; text-align:center; line-height:1.3;">
+        <div>ลงชื่อ ............................................................</div>
+        <div>(${escapeHtml(signerName)})</div>
+        <div>${escapeHtml(signerPos)}</div>
+        <div>วันที่ ......... / ..................... / 2569</div>
       </div>
     </div>
   </div>
@@ -14437,7 +14907,7 @@
       win.document.write(html);
       win.document.close();
     } else {
-      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์บัตรประจำตัว', 'warning');
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์แบบคำร้องขอเปลี่ยนตัว', 'warning');
     }
   }
 
@@ -20973,19 +21443,20 @@
       });
     });
 
-    // Phase 2: Official Substitution Request Form (Print)
+    // Phase 2: Official Substitution Request Form (Smart Builder Modal + Print)
     const btnPrintSubstitutionFormSchool = document.getElementById(
       'btnPrintSubstitutionFormSchool'
     );
     if (btnPrintSubstitutionFormSchool) {
       btnPrintSubstitutionFormSchool.addEventListener('click', function () {
-        printSubstitutionForm();
+        const schVal = (document.getElementById('schoolViewSelect') || {}).value || '';
+        openSubstitutionFormModal({ schoolName: schVal });
       });
     }
     const btnPrintSubstitutionFormComp = document.getElementById('btnPrintSubstitutionFormComp');
     if (btnPrintSubstitutionFormComp) {
       btnPrintSubstitutionFormComp.addEventListener('click', function () {
-        printSubstitutionForm();
+        openSubstitutionFormModal({});
       });
     }
     const btnPrintSubstitutionFormAdmin = document.getElementById(
@@ -20993,7 +21464,83 @@
     );
     if (btnPrintSubstitutionFormAdmin) {
       btnPrintSubstitutionFormAdmin.addEventListener('click', function () {
-        printSubstitutionForm();
+        openSubstitutionFormModal({});
+      });
+    }
+
+    const btnCloseSubFormModal = document.getElementById('btnCloseSubFormModal');
+    const btnCancelSubFormModal = document.getElementById('btnCancelSubFormModal');
+    if (btnCloseSubFormModal) btnCloseSubFormModal.addEventListener('click', closeSubstitutionFormModal);
+    if (btnCancelSubFormModal) btnCancelSubFormModal.addEventListener('click', closeSubstitutionFormModal);
+
+    const btnSubModalModeSmart = document.getElementById('btnSubModalModeSmart');
+    const btnSubModalModeBlank = document.getElementById('btnSubModalModeBlank');
+    if (btnSubModalModeSmart) {
+      btnSubModalModeSmart.addEventListener('click', function () {
+        subFormModalState.mode = 'smart';
+        syncSubModalModeUI();
+      });
+    }
+    if (btnSubModalModeBlank) {
+      btnSubModalModeBlank.addEventListener('click', function () {
+        subFormModalState.mode = 'blank';
+        syncSubModalModeUI();
+      });
+    }
+
+    const subModalSchoolSelect = document.getElementById('subModalSchoolSelect');
+    if (subModalSchoolSelect) {
+      subModalSchoolSelect.addEventListener('change', function () {
+        subFormModalState.schoolName = subModalSchoolSelect.value;
+        populateSubModalRegOptions(subModalSchoolSelect.value, '');
+      });
+    }
+    const subModalRegSelect = document.getElementById('subModalRegSelect');
+    if (subModalRegSelect) {
+      subModalRegSelect.addEventListener('change', function () {
+        subFormModalState.regId = subModalRegSelect.value;
+        renderSubModalChecklists();
+      });
+    }
+
+    document.querySelectorAll('input[name="subModalReasonPreset"]').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        subFormModalState.reasonPreset = radio.value;
+        const otherInp = document.getElementById('subModalOtherReasonInput');
+        if (otherInp) {
+          otherInp.classList.toggle('hidden', subFormModalState.reasonPreset !== 'other');
+          if (subFormModalState.reasonPreset === 'other') otherInp.focus();
+        }
+      });
+    });
+
+    const subModalOtherReasonInput = document.getElementById('subModalOtherReasonInput');
+    if (subModalOtherReasonInput) {
+      subModalOtherReasonInput.addEventListener('input', function () {
+        subFormModalState.otherReason = subModalOtherReasonInput.value;
+      });
+    }
+
+    const subModalShowBlankTeacherTable = document.getElementById('subModalShowBlankTeacherTable');
+    if (subModalShowBlankTeacherTable) {
+      subModalShowBlankTeacherTable.addEventListener('change', function () {
+        subFormModalState.showBlankTeacherTable = subModalShowBlankTeacherTable.checked;
+      });
+    }
+
+    const btnSubFormPrintNow = document.getElementById('btnSubFormPrintNow');
+    if (btnSubFormPrintNow) {
+      btnSubFormPrintNow.addEventListener('click', function () {
+        const regId = subFormModalState.regId;
+        printSubstitutionForm({
+          mode: subFormModalState.mode,
+          regId: regId,
+          reasonPreset: subFormModalState.reasonPreset,
+          otherReason: subFormModalState.otherReason,
+          showBlankTeacherTable: subFormModalState.showBlankTeacherTable,
+          stuSwaps: (regId && subFormModalState.stuSwaps[regId]) || {},
+          tchSwaps: (regId && subFormModalState.tchSwaps[regId]) || {}
+        });
       });
     }
 
