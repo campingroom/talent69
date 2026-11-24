@@ -13728,6 +13728,9 @@
             teamToken: teamToken,
             memberIndex: idx
           }),
+          team_token: teamToken,
+          member_index: idx,
+          seq_num: studentSeq,
           role_type: 'STUDENT',
           role_label: 'นักเรียนผู้เข้าแข่งขัน',
           recipient_name: formatFullNameForPrint(s.prefix, s.name),
@@ -13780,6 +13783,9 @@
             teamToken: teamToken,
             memberIndex: idx
           }),
+          team_token: teamToken,
+          member_index: idx,
+          seq_num: teacherSeq,
           role_type: 'TEACHER',
           role_label: 'ครูผู้ฝึกซ้อม',
           recipient_name: formatFullNameForPrint(t.prefix, t.name),
@@ -13837,6 +13843,9 @@
             teamToken: '',
             memberIndex: 0
           }),
+          team_token: '',
+          member_index: 0,
+          seq_num: judgeSeq,
           role_type: 'JUDGE',
           role_label: 'คณะกรรมการตัดสิน',
           recipient_name: formatFullNameForPrint(j.prefix, jName),
@@ -13950,7 +13959,15 @@
         const actionCellHtml =
           item.cert_ready === false
             ? '<span class="inline-block px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-200 font-heading text-xs cursor-not-allowed" title="รายการนี้ยังไม่ได้บันทึกคะแนนและประกาศผล — จะเปิดให้พิมพ์เมื่อแอดมินประกาศผลแล้ว">รอสรุปผลคะแนน</span>'
-            : `<button type="button" data-print-cert-idx="${idx}" title="พิมพ์เกียรติบัตร (PDF 2 หน้า: หน้าแรกเลขไทย หน้าที่สองเลขอารบิก)" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition cursor-pointer">พิมพ์เกียรติบัตร</button>`;
+            : `<div class="inline-flex items-center justify-end gap-1.5">
+                <button type="button" data-save-cert-img-idx="${idx}" title="เปิดพรีวิวรูปภาพความละเอียดสูง (บันทึกรูป .jpg หรือแตะค้างบันทึกลงมือถือ)" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-heading text-xs font-medium whitespace-nowrap transition cursor-pointer">
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>บันทึกรูป</span>
+                </button>
+                <button type="button" data-print-cert-idx="${idx}" title="พิมพ์เกียรติบัตร (PDF A4 แนวนอน)" class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium whitespace-nowrap transition cursor-pointer">พิมพ์ / PDF</button>
+              </div>`;
 
         return `
           <tr class="hover:bg-slate-50 transition">
@@ -13967,6 +13984,15 @@
         `;
       })
       .join('');
+
+    tbody.querySelectorAll('[data-save-cert-img-idx]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const i = Number(btn.getAttribute('data-save-cert-img-idx'));
+        if (filtered[i]) {
+          openCertificateImagePreviewModal(filtered[i]);
+        }
+      });
+    });
 
     tbody.querySelectorAll('[data-print-cert-idx]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -14014,6 +14040,37 @@
     }
   }
 
+  function resolveCanonicalCertRole(rawToken, numCfg) {
+    const token = normalizeCertCodeForCompare(rawToken);
+    if (!token) return '';
+    const cfg = numCfg || getCertNumberingConfig();
+    if (
+      token === normalizeCertCodeForCompare(cfg.studentCode) ||
+      token === 'น' ||
+      token === 'S' ||
+      token === 'STU'
+    ) {
+      return 'STUDENT';
+    }
+    if (
+      token === normalizeCertCodeForCompare(cfg.teacherCode) ||
+      token === 'ค' ||
+      token === 'T' ||
+      token === 'TCH'
+    ) {
+      return 'TEACHER';
+    }
+    if (
+      token === normalizeCertCodeForCompare(cfg.judgeCode) ||
+      token === 'ก' ||
+      token === 'J' ||
+      token === 'JDG'
+    ) {
+      return 'JUDGE';
+    }
+    return '';
+  }
+
   function findCertificateEntryByCode(rawCode) {
     const targetNorm = normalizeCertCodeForCompare(rawCode);
     if (!targetNorm) return { entry: null, matchedViaAlias: false };
@@ -14030,6 +14087,44 @@
       });
     });
     if (aliasMatch) return { entry: aliasMatch, matchedViaAlias: true };
+
+    // Step 3: Prefix-agnostic suffix fallback (requires unique match to protect against duplicate tokens)
+    const numCfg = getCertNumberingConfig();
+    const teamFixedMatch = targetNorm.match(/(?:^|[-/])(\d{4,6})-([^\s/-]+?)(\d+)$/);
+    if (teamFixedMatch && !/^0\d+$/.test(teamFixedMatch[3])) {
+      const tokNorm = normalizeCertCodeForCompare(teamFixedMatch[1].padStart(4, '0'));
+      const role = resolveCanonicalCertRole(teamFixedMatch[2], numCfg);
+      const memberNo = parseInt(teamFixedMatch[3], 10);
+      if (role && memberNo >= 1) {
+        const matches = entries.filter(function (item) {
+          return (
+            item.role_type === role &&
+            normalizeCertCodeForCompare(item.team_token) === tokNorm &&
+            Number(item.member_index) + 1 === memberNo
+          );
+        });
+        if (matches.length === 1) {
+          return { entry: matches[0], matchedViaAlias: true };
+        }
+        if (matches.length > 1) {
+          return { entry: null, matchedViaAlias: false };
+        }
+      }
+    }
+
+    const seqMatch = targetNorm.match(/(?:^|[-/])([^\d\s/-]+)(\d{4,})$/);
+    if (seqMatch) {
+      const seqRole = resolveCanonicalCertRole(seqMatch[1], numCfg);
+      const seqNum = parseInt(seqMatch[2], 10);
+      if (seqRole && seqNum >= 1) {
+        const seqMatches = entries.filter(function (item) {
+          return item.role_type === seqRole && Number(item.seq_num) === seqNum;
+        });
+        if (seqMatches.length === 1) {
+          return { entry: seqMatches[0], matchedViaAlias: true };
+        }
+      }
+    }
 
     return { entry: null, matchedViaAlias: false };
   }
@@ -14051,6 +14146,7 @@
   function openCertificateVerifyModal(rawCode, options) {
     const modal = document.getElementById('certVerifyModal');
     const bodyEl = document.getElementById('certVerifyModalBody');
+    const saveImgBtn = document.getElementById('btnCertVerifySaveImage');
     const printBtn = document.getElementById('btnCertVerifyPrint');
     const headerHashEl = document.getElementById('certVerifyHeaderHash');
     if (!modal || !bodyEl) return;
@@ -14065,6 +14161,10 @@
 
     if (headerHashEl) {
       headerHashEl.textContent = searchedCode ? '#cert=' + searchedCode : '';
+    }
+    if (saveImgBtn) {
+      saveImgBtn.classList.add('hidden');
+      saveImgBtn.classList.remove('flex');
     }
     if (printBtn) {
       printBtn.classList.add('hidden');
@@ -14246,9 +14346,15 @@
           '</div>' +
         '</div>';
 
-      if (printBtn && (effAdmin || isFeatureOpenToPublic('certificates'))) {
-        printBtn.classList.remove('hidden');
-        printBtn.classList.add('flex');
+      if (effAdmin || isFeatureOpenToPublic('certificates')) {
+        if (saveImgBtn) {
+          saveImgBtn.classList.remove('hidden');
+          saveImgBtn.classList.add('flex');
+        }
+        if (printBtn) {
+          printBtn.classList.remove('hidden');
+          printBtn.classList.add('flex');
+        }
       }
     }
 
@@ -14265,6 +14371,131 @@
       return;
     }
     openCertificateVerifyModal(code, options);
+  }
+
+  function getCertificateDesignAssetsConfig() {
+    const cfg = state.config || DEFAULT_CONFIG;
+    const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+    const defaultCertBgUrl = baseDir + 'assets/cert-bg-thai.jpg';
+    const logoObecUrl = baseDir + 'assets/logo-obec.svg';
+    const certWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
+    const rawSigUrl = String(cfg.certSignatureUrl || '').trim();
+    const resolvedSigUrl = rawSigUrl
+      ? (/^(data:|https?:|blob:|\/)/i.test(rawSigUrl) ? rawSigUrl : baseDir + rawSigUrl)
+      : '';
+    const sigOffsetX = Number.isFinite(Number(cfg.certSigOffsetX))
+      ? Number(cfg.certSigOffsetX)
+      : DEFAULT_CONFIG.certSigOffsetX;
+    const sigOffsetY = Number.isFinite(Number(cfg.certSigOffsetY))
+      ? Number(cfg.certSigOffsetY)
+      : DEFAULT_CONFIG.certSigOffsetY;
+    const sigScale = Number.isFinite(Number(cfg.certSigScale))
+      ? Number(cfg.certSigScale)
+      : DEFAULT_CONFIG.certSigScale;
+    const certBgUrl =
+      cfg.certBgMode === 'canva' && cfg.certBgImageUrl ? cfg.certBgImageUrl : defaultCertBgUrl;
+    const signerOrg = cfg.certSignerOrg || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3';
+    const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
+    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+    const rawIssueDate = cfg.certIssueDate || '25 พฤศจิกายน พุทธศักราช 2569';
+    let formattedIssueDate = rawIssueDate;
+    if (!formattedIssueDate.includes('เดือน')) {
+      formattedIssueDate = formattedIssueDate.replace(/^([^\s]+)\s+([^\s]+)\s+/, '$1 เดือน $2 ');
+    }
+    return {
+      baseDir: baseDir,
+      defaultCertBgUrl: defaultCertBgUrl,
+      certBgUrl: certBgUrl,
+      logoObecUrl: logoObecUrl,
+      certWatermarkUrl: certWatermarkUrl,
+      resolvedSigUrl: resolvedSigUrl,
+      sigOffsetX: sigOffsetX,
+      sigOffsetY: sigOffsetY,
+      sigScale: sigScale,
+      signerOrg: signerOrg,
+      signerName: signerName,
+      signerPos: signerPos,
+      formattedIssueDate: formattedIssueDate
+    };
+  }
+
+  function buildCertificateTextContent(c, useThaiNumerals, designCfg) {
+    const dCfg = designCfg || getCertificateDesignAssetsConfig();
+    const fmtNum = function (val) {
+      return useThaiNumerals ? toThaiNumerals(val) : toArabicNumerals(val);
+    };
+    const encodedHashCode = encodeURIComponent(toArabicNumerals(c.cert_code));
+    const rawVerifyUrl = 'https://campingroom.github.io/talent69/#cert=' + encodedHashCode;
+    const isJudge = c.role_type === 'JUDGE' || c.role_type === 'REFEREE';
+    const isTeacher = c.role_type === 'TEACHER';
+
+    let awardRaw = '';
+    if (isJudge) {
+      const jRole = String(c.grade_or_pos || '').trim();
+      if (!jRole || jRole === 'กรรมการ' || jRole === 'กรรมการตัดสิน' || jRole === 'คณะกรรมการตัดสิน') {
+        awardRaw = 'ได้ปฏิบัติหน้าที่กรรมการตัดสินการแข่งขัน';
+      } else {
+        awardRaw = 'ได้ปฏิบัติหน้าที่' + jRole + 'ตัดสินการแข่งขัน';
+      }
+    } else if (isTeacher) {
+      const rawT = String(c.award_title || '').trim();
+      if (rawT.indexOf('ครูผู้ฝึกสอน') === 0) {
+        awardRaw = rawT;
+      } else {
+        const medalRaw = c.medal ? String(c.medal) : 'เข้าร่วมการแข่งขัน';
+        const hasMedal = ['เหรียญทอง', 'เหรียญเงิน', 'เหรียญทองแดง'].indexOf(medalRaw) !== -1;
+        awardRaw = hasMedal
+          ? 'ครูผู้ฝึกสอนนักเรียน ได้รับรางวัลระดับ' +
+            medalRaw +
+            (rawT && rawT !== 'เข้าร่วมการแข่งขัน' ? ' ' + rawT : '')
+          : 'ครูผู้ฝึกสอนนักเรียน เข้าร่วมการแข่งขัน';
+      }
+    } else {
+      const medalRaw = c.medal ? String(c.medal) : 'เข้าร่วมการแข่งขัน';
+      const titleRaw = String(c.award_title || 'รางวัลเข้าร่วม');
+      awardRaw = titleRaw.includes(medalRaw) ? titleRaw : 'ได้รับรางวัลระดับ' + medalRaw + ' ' + titleRaw;
+    }
+
+    let schoolRaw = '';
+    if (!isJudge) {
+      schoolRaw = c.school_name
+        ? 'โรงเรียน' + String(c.school_name).replace(/^โรงเรียน/, '')
+        : '';
+    }
+
+    const cleanCompName = String(c.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
+    const cleanLevel = String(c.level || '').trim();
+    const activityRaw = cleanLevel
+      ? 'กิจกรรม ' + cleanCompName + ' ระดับชั้น ' + cleanLevel
+      : 'กิจกรรม ' + cleanCompName;
+
+    const eventTitleRaw =
+      'งานศิลปหัตถกรรมนักเรียน ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง ครั้งที่ 74 ประจำปีการศึกษา 2569';
+    const eventDatesRaw = 'ระหว่างวันที่ 24 - 25 พฤศจิกายน พ.ศ. 2569';
+    const blessingRaw = 'ขอให้มีความวิริยะ อุตสาหะ และความสามารถของท่านเป็นที่ประจักษ์ต่อไป';
+
+    return {
+      fmtNum: fmtNum,
+      useThaiNumerals: Boolean(useThaiNumerals),
+      rawVerifyUrl: rawVerifyUrl,
+      verifyUrlEncoded: encodeURIComponent(rawVerifyUrl),
+      qrImageUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(rawVerifyUrl),
+      certCodeFormatted: fmtNum(c.cert_code),
+      headerOrg: 'กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
+      signerOrgFormatted: fmtNum(dCfg.signerOrg),
+      subtitle: 'ขอมอบเกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า',
+      recipientName: formatFullNameForPrint('', c.recipient_name),
+      schoolFormatted: schoolRaw ? fmtNum(schoolRaw) : '',
+      awardFormatted: fmtNum(awardRaw),
+      activityFormatted: fmtNum(activityRaw),
+      eventTitleFormatted: fmtNum(eventTitleRaw),
+      eventDatesFormatted: fmtNum(eventDatesRaw),
+      blessingText: blessingRaw,
+      issueDateFormatted: 'ให้ไว้ ณ วันที่ ' + fmtNum(dCfg.formattedIssueDate),
+      qrLabel: 'สแกนตรวจสอบเกียรติบัตร',
+      signerName: dCfg.signerName,
+      signerPosFormatted: fmtNum(dCfg.signerPos)
+    };
   }
 
   // Print Official Landscape Certificates (Supports 3 Numeral Modes: 'thai', 'arabic', or 'both')
@@ -14284,90 +14515,23 @@
       ? (['thai', 'arabic', 'both'].indexOf(modeRaw) !== -1 ? modeRaw : 'both')
       : adminAllowedMode;
 
-    const cfg = state.config || DEFAULT_CONFIG;
-    const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
-    const defaultCertBgUrl = baseDir + 'assets/cert-bg-thai.jpg';
-    const logoObecUrl = baseDir + 'assets/logo-obec.svg';
-    const certWatermarkUrl = baseDir + 'assets/watermark-hybrid-frameless.svg';
-    const rawSigUrl = String(cfg.certSignatureUrl || '').trim();
-    const resolvedSigUrl = rawSigUrl
-      ? (/^(data:|https?:|blob:|\/)/i.test(rawSigUrl) ? rawSigUrl : baseDir + rawSigUrl)
-      : '';
-    const sigOffsetX = Number.isFinite(Number(cfg.certSigOffsetX)) ? Number(cfg.certSigOffsetX) : DEFAULT_CONFIG.certSigOffsetX;
-    const sigOffsetY = Number.isFinite(Number(cfg.certSigOffsetY)) ? Number(cfg.certSigOffsetY) : DEFAULT_CONFIG.certSigOffsetY;
-    const sigScale = Number.isFinite(Number(cfg.certSigScale)) ? Number(cfg.certSigScale) : DEFAULT_CONFIG.certSigScale;
-    const sigTransformStyle = `transform: translate(${sigOffsetX}px, ${sigOffsetY}px) scale(${(sigScale / 100).toFixed(2)}); transform-origin: bottom center;`;
-
-    const certBgUrl =
-      cfg.certBgMode === 'canva' && cfg.certBgImageUrl ? cfg.certBgImageUrl : defaultCertBgUrl;
-    const signerOrg = cfg.certSignerOrg || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3';
-    const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
-    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
-    const rawIssueDate = cfg.certIssueDate || '25 พฤศจิกายน พุทธศักราช 2569';
-    let formattedIssueDate = rawIssueDate;
-    if (!formattedIssueDate.includes('เดือน')) {
-      formattedIssueDate = formattedIssueDate.replace(/^([^\s]+)\s+([^\s]+)\s+/, '$1 เดือน $2 ');
-    }
+    const designCfg = getCertificateDesignAssetsConfig();
+    const baseDir = designCfg.baseDir;
+    const logoObecUrl = designCfg.logoObecUrl;
+    const certWatermarkUrl = designCfg.certWatermarkUrl;
+    const resolvedSigUrl = designCfg.resolvedSigUrl;
+    const sigTransformStyle = `transform: translate(${designCfg.sigOffsetX}px, ${designCfg.sigOffsetY}px) scale(${(designCfg.sigScale / 100).toFixed(2)}); transform-origin: bottom center;`;
+    const certBgUrl = designCfg.certBgUrl;
 
     function renderCertPage(c, useThaiNumerals) {
-      const fmtNum = function (val) {
-        return useThaiNumerals ? toThaiNumerals(val) : toArabicNumerals(val);
-      };
+      const textData = buildCertificateTextContent(c, useThaiNumerals, designCfg);
       const pageVariantCls = useThaiNumerals ? 'cert-page-thai' : 'cert-page-arabic';
-      const encodedHashCode = encodeURIComponent(toArabicNumerals(c.cert_code));
-      const verifyUrl = encodeURIComponent(
-        'https://campingroom.github.io/talent69/#cert=' + encodedHashCode
-      );
       const sigHtml = resolvedSigUrl
         ? `<div class="sign-img-wrap"><img src="${escapeHtml(resolvedSigUrl)}" alt="ลายมือชื่อ" class="cert-signature-img" style="${sigTransformStyle}" /></div>`
         : `<div class="sign-line">........................................................</div>`;
-      const signerNameHtml = signerName
-        ? `<div class="sign-name">(${escapeHtml(signerName)})</div>`
+      const signerNameHtml = textData.signerName
+        ? `<div class="sign-name">(${escapeHtml(textData.signerName)})</div>`
         : '';
-
-      const isJudge = c.role_type === 'JUDGE' || c.role_type === 'REFEREE';
-      const isTeacher = c.role_type === 'TEACHER';
-      let awardRaw = '';
-      if (isJudge) {
-        const jRole = String(c.grade_or_pos || '').trim();
-        if (!jRole || jRole === 'กรรมการ' || jRole === 'กรรมการตัดสิน' || jRole === 'คณะกรรมการตัดสิน') {
-          awardRaw = 'ได้ปฏิบัติหน้าที่กรรมการตัดสินการแข่งขัน';
-        } else {
-          awardRaw = `ได้ปฏิบัติหน้าที่${jRole}ตัดสินการแข่งขัน`;
-        }
-      } else if (isTeacher) {
-        const rawT = String(c.award_title || '').trim();
-        if (rawT.indexOf('ครูผู้ฝึกสอน') === 0) {
-          awardRaw = rawT;
-        } else {
-          const medalRaw = c.medal ? String(c.medal) : 'เข้าร่วมการแข่งขัน';
-          const hasMedal = ['เหรียญทอง', 'เหรียญเงิน', 'เหรียญทองแดง'].indexOf(medalRaw) !== -1;
-          awardRaw = hasMedal
-            ? `ครูผู้ฝึกสอนนักเรียน ได้รับรางวัลระดับ${medalRaw}${rawT && rawT !== 'เข้าร่วมการแข่งขัน' ? ' ' + rawT : ''}`
-            : 'ครูผู้ฝึกสอนนักเรียน เข้าร่วมการแข่งขัน';
-        }
-      } else {
-        const medalRaw = c.medal ? String(c.medal) : 'เข้าร่วมการแข่งขัน';
-        const titleRaw = String(c.award_title || 'รางวัลเข้าร่วม');
-        awardRaw = titleRaw.includes(medalRaw) ? titleRaw : `ได้รับรางวัลระดับ${medalRaw} ${titleRaw}`;
-      }
-
-      let schoolRaw = '';
-      if (!isJudge) {
-        schoolRaw = c.school_name
-          ? `โรงเรียน${String(c.school_name).replace(/^โรงเรียน/, '')}`
-          : '';
-      }
-
-      const cleanCompName = (c.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
-      const cleanLevel = (c.level || '').trim();
-      const activityRaw = cleanLevel
-        ? `กิจกรรม ${cleanCompName} ระดับชั้น ${cleanLevel}`
-        : `กิจกรรม ${cleanCompName}`;
-
-      const eventTitleRaw =
-        'งานศิลปหัตถกรรมนักเรียน ระดับกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง ครั้งที่ 74 ประจำปีการศึกษา 2569';
-      const eventDatesRaw = 'ระหว่างวันที่ 24 - 25 พฤศจิกายน พ.ศ. 2569';
 
       return `
         <div class="cert-page ${pageVariantCls}">
@@ -14377,7 +14541,7 @@
           <div class="cert-inner">
             <!-- Top Row: Certificate Code -->
             <div class="cert-top-row">
-              <div class="cert-top-code-pill">เลขที่ ${escapeHtml(fmtNum(c.cert_code))}</div>
+              <div class="cert-top-code-pill">เลขที่ ${escapeHtml(textData.certCodeFormatted)}</div>
             </div>
 
             <!-- Central Official Emblem: OBEC (ตรา สพฐ.) -->
@@ -14387,43 +14551,43 @@
 
             <!-- Header Organization -->
             <div class="cert-header-block">
-              <div class="cert-header-org">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>
-              <div class="cert-header-suborg">${escapeHtml(fmtNum(signerOrg))}</div>
-              <div class="cert-subtitle">ขอมอบเกียรติบัตรฉบับนี้ให้ไว้เพื่อแสดงว่า</div>
+              <div class="cert-header-org">${escapeHtml(textData.headerOrg)}</div>
+              <div class="cert-header-suborg">${escapeHtml(textData.signerOrgFormatted)}</div>
+              <div class="cert-subtitle">${escapeHtml(textData.subtitle)}</div>
             </div>
 
             <!-- Recipient Section -->
             <div class="cert-recipient-block">
-              <div class="cert-recipient-name">${escapeHtml(formatFullNameForPrint('', c.recipient_name))}</div>
-              ${schoolRaw ? `<div class="cert-recipient-school">${escapeHtml(fmtNum(schoolRaw))}</div>` : ''}
+              <div class="cert-recipient-name">${escapeHtml(textData.recipientName)}</div>
+              ${textData.schoolFormatted ? `<div class="cert-recipient-school">${escapeHtml(textData.schoolFormatted)}</div>` : ''}
             </div>
 
             <!-- Award & Activity Section -->
             <div class="cert-award-block">
-              <div class="cert-award">${escapeHtml(fmtNum(awardRaw))}</div>
-              <div class="cert-activity">${escapeHtml(fmtNum(activityRaw))}</div>
+              <div class="cert-award">${escapeHtml(textData.awardFormatted)}</div>
+              <div class="cert-activity">${escapeHtml(textData.activityFormatted)}</div>
             </div>
 
             <!-- Event & Ceremony Details -->
             <div class="cert-event-block">
-              <div class="cert-event-title">${escapeHtml(fmtNum(eventTitleRaw))}</div>
-              <div class="cert-event-dates">${escapeHtml(fmtNum(eventDatesRaw))}</div>
-              <div class="cert-blessing">ขอให้มีความวิริยะ อุตสาหะ และความสามารถของท่านเป็นที่ประจักษ์ต่อไป</div>
-              <div class="cert-issue-date">ให้ไว้ ณ วันที่ ${escapeHtml(fmtNum(formattedIssueDate))}</div>
+              <div class="cert-event-title">${escapeHtml(textData.eventTitleFormatted)}</div>
+              <div class="cert-event-dates">${escapeHtml(textData.eventDatesFormatted)}</div>
+              <div class="cert-blessing">${escapeHtml(textData.blessingText)}</div>
+              <div class="cert-issue-date">${escapeHtml(textData.issueDateFormatted)}</div>
             </div>
 
             <!-- Footer: QR Verification & Authorized Signer -->
             <div class="cert-footer">
               <div class="cert-qr">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${verifyUrl}" alt="QR Verify" class="cert-qr-img" width="64" height="64" />
-                <div class="cert-qr-label">สแกนตรวจสอบเกียรติบัตร</div>
-                <div class="cert-qr-code">${escapeHtml(fmtNum(c.cert_code))}</div>
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${textData.verifyUrlEncoded}" alt="QR Verify" class="cert-qr-img" width="64" height="64" />
+                <div class="cert-qr-label">${escapeHtml(textData.qrLabel)}</div>
+                <div class="cert-qr-code">${escapeHtml(textData.certCodeFormatted)}</div>
               </div>
               <div class="cert-sign">
                 ${sigHtml}
                 ${signerNameHtml}
-                <div class="sign-pos">${escapeHtml(fmtNum(signerPos))}</div>
-                <div class="sign-org">${escapeHtml(fmtNum(signerOrg))}</div>
+                <div class="sign-pos">${escapeHtml(textData.signerPosFormatted)}</div>
+                <div class="sign-org">${escapeHtml(textData.signerOrgFormatted)}</div>
               </div>
             </div>
           </div>
@@ -14860,6 +15024,646 @@
     } else {
       showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป โปรดอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์เกียรติบัตร', 'warning');
     }
+  }
+
+  // ==========================================
+  // HIGH-RES CANVAS 2D CERTIFICATE IMAGE RENDERER & MOBILE PREVIEW MODAL
+  // ==========================================
+  let currentImgPreviewEntry = null;
+  let currentImgPreviewNumeralMode = 'thai';
+  let currentImgPreviewDataUrl = '';
+  let currentImgPreviewFilename = '';
+  let imgPreviewRenderSeq = 0;
+
+  function needsCorsAnonymousForCanvas(url) {
+    if (!url || /^(data:|blob:)/i.test(url)) return false;
+    try {
+      const parsed = new URL(url, window.location.href);
+      return parsed.origin !== window.location.origin;
+    } catch (e) {
+      return /^https?:\/\//i.test(url);
+    }
+  }
+
+  function loadImageForCanvas(src, timeoutMs) {
+    return new Promise(function (resolve) {
+      if (!src) {
+        resolve(null);
+        return;
+      }
+      let settled = false;
+      const done = function (val) {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve(val);
+      };
+      const timer = setTimeout(function () {
+        done(null);
+      }, timeoutMs || 5000);
+
+      const img = new Image();
+      if (needsCorsAnonymousForCanvas(src)) {
+        img.crossOrigin = 'anonymous';
+      }
+      img.onload = function () {
+        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+          done(img);
+        } else {
+          done(null);
+        }
+      };
+      img.onerror = function () {
+        done(null);
+      };
+      img.src = src;
+    });
+  }
+
+  function drawRoundedRectPath(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+    ctx.lineTo(x + radius, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+
+  function fitFontSizeForCanvasText(ctx, text, weight, startSize, minSize, family, maxWidth) {
+    let size = startSize;
+    while (size > minSize) {
+      ctx.font = weight + ' ' + size + 'px ' + family;
+      if (ctx.measureText(text).width <= maxWidth) break;
+      size -= 0.5;
+    }
+    ctx.font = weight + ' ' + size + 'px ' + family;
+    return size;
+  }
+
+  function segmentThaiTextSegments(text) {
+    const raw = String(text || '');
+    if (!raw) return [];
+    if (typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function') {
+      try {
+        const segmenter = new Intl.Segmenter('th', { granularity: 'word' });
+        const segs = [];
+        for (const part of segmenter.segment(raw)) {
+          if (part && part.segment) segs.push(part.segment);
+        }
+        if (segs.length > 0) return segs;
+      } catch (e) {}
+    }
+    return raw.split(/(\s+)/).filter(Boolean);
+  }
+
+  function wrapThaiTextTwoLinesForCanvas(ctx, text, weight, startSize, minSize, family, maxWidth) {
+    const clean = String(text || '').trim();
+    ctx.font = weight + ' ' + startSize + 'px ' + family;
+    if (ctx.measureText(clean).width <= maxWidth) {
+      return { lines: [clean], fontSize: startSize };
+    }
+
+    const levelBreakIdx = clean.indexOf(' ระดับชั้น ');
+    if (levelBreakIdx > 0) {
+      const part1 = clean.slice(0, levelBreakIdx).trim();
+      const part2 = clean.slice(levelBreakIdx + 1).trim();
+      if (ctx.measureText(part1).width <= maxWidth && ctx.measureText(part2).width <= maxWidth) {
+        return { lines: [part1, part2], fontSize: startSize };
+      }
+    }
+
+    let size = startSize;
+    while (size >= minSize) {
+      ctx.font = weight + ' ' + size + 'px ' + family;
+      if (ctx.measureText(clean).width <= maxWidth) {
+        return { lines: [clean], fontSize: size };
+      }
+      const segments = segmentThaiTextSegments(clean);
+      const totalWidth = ctx.measureText(clean).width;
+      const targetLine1 = Math.min(maxWidth, totalWidth * 0.56);
+      let line1 = '';
+      let splitIdx = 0;
+      for (let i = 0; i < segments.length; i++) {
+        const candidate = line1 + segments[i];
+        const w = ctx.measureText(candidate.trim()).width;
+        if (w <= targetLine1 || line1.length === 0) {
+          line1 = candidate;
+          splitIdx = i + 1;
+        } else {
+          break;
+        }
+      }
+      let line1Trim = line1.trim();
+      let line2Trim = segments.slice(splitIdx).join('').trim();
+      if (!line2Trim && segments.length > 1) {
+        line1Trim = segments.slice(0, segments.length - 1).join('').trim();
+        line2Trim = String(segments[segments.length - 1] || '').trim();
+      }
+      if (
+        line1Trim &&
+        line2Trim &&
+        ctx.measureText(line1Trim).width <= maxWidth &&
+        ctx.measureText(line2Trim).width <= maxWidth
+      ) {
+        return { lines: [line1Trim, line2Trim], fontSize: size };
+      }
+      size -= 0.5;
+    }
+
+    const fallbackSize = minSize;
+    ctx.font = weight + ' ' + fallbackSize + 'px ' + family;
+    const mid = Math.ceil(clean.length / 2);
+    return {
+      lines: [clean.slice(0, mid).trim(), clean.slice(mid).trim()],
+      fontSize: fallbackSize
+    };
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    const parts = String(dataUrl || '').split(',');
+    if (parts.length < 2) return null;
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    const binary = atob(parts[1]);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: mime });
+  }
+
+  function buildSafeCertImageFilename(entry, useThaiNumerals) {
+    const cleanName = String(formatFullNameForPrint('', entry && entry.recipient_name) || 'เกียรติบัตร')
+      .replace(/[\\/:*?"<>|\r\n]+/g, ' ')
+      .replace(/\s+/g, '_')
+      .trim()
+      .slice(0, 60);
+    const rawCode = useThaiNumerals
+      ? toThaiNumerals((entry && entry.cert_code) || '')
+      : toArabicNumerals((entry && entry.cert_code) || '');
+    const cleanCode = String(rawCode || '')
+      .replace(/[\\/:*?"<>|\r\n]+/g, '-')
+      .replace(/\s+/g, '')
+      .trim()
+      .slice(0, 40);
+    return 'เกียรติบัตร_' + (cleanName || 'recipient') + (cleanCode ? '_' + cleanCode : '') + '.jpg';
+  }
+
+  async function renderCertificateToImageDataUrl(entry, useThaiNumerals) {
+    if (!entry) throw new Error('ไม่พบข้อมูลเกียรติบัตร');
+    const designCfg = getCertificateDesignAssetsConfig();
+    const textData = buildCertificateTextContent(entry, useThaiNumerals, designCfg);
+
+    if (typeof document !== 'undefined' && document.fonts && typeof document.fonts.load === 'function') {
+      await Promise.race([
+        Promise.all([
+          document.fonts.load('400 16px "Niramit"'),
+          document.fonts.load('500 16px "Niramit"'),
+          document.fonts.load('600 18px "Niramit"'),
+          document.fonts.load('700 34px "Niramit"'),
+          document.fonts.ready
+        ]).catch(function () {
+          return null;
+        }),
+        new Promise(function (resolve) {
+          setTimeout(resolve, 2500);
+        })
+      ]);
+    }
+
+    const assetPromises = [
+      loadImageForCanvas(designCfg.certBgUrl, 6000),
+      getObecLogoSvgAsset().then(function (pngUrl) {
+        return loadImageForCanvas(pngUrl || designCfg.logoObecUrl, 4500);
+      }),
+      getCardWatermarkAsset().then(function (pngUrl) {
+        return loadImageForCanvas(pngUrl || designCfg.certWatermarkUrl, 4500);
+      }),
+      loadImageForCanvas(designCfg.resolvedSigUrl, 4500),
+      loadImageForCanvas(textData.qrImageUrl, 4500)
+    ];
+
+    const loaded = await Promise.all(assetPromises);
+    let bgImg = loaded[0];
+    const obecImg = loaded[1];
+    const watermarkImg = loaded[2];
+    const sigImg = loaded[3];
+    const qrImg = loaded[4];
+
+    if (!bgImg && designCfg.certBgUrl !== designCfg.defaultCertBgUrl) {
+      bgImg = await loadImageForCanvas(designCfg.defaultCertBgUrl, 6000);
+    }
+
+    const LOGICAL_W = 1122.5;
+    const LOGICAL_H = 793.7;
+    const SCALE = 2;
+    const FONT_FAMILY = '"Niramit", "Sarabun", "Prompt", sans-serif';
+
+    const drawCanvasWithBackground = function (activeBgImg) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(LOGICAL_W * SCALE);
+      canvas.height = Math.round(LOGICAL_H * SCALE);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(SCALE, SCALE);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // 1. Base white + Official background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+      if (activeBgImg) {
+        ctx.drawImage(activeBgImg, 0, 0, LOGICAL_W, LOGICAL_H);
+      }
+
+      // 2. Center subtle watermark
+      if (watermarkImg) {
+        const boxW = 521.6;
+        const boxH = 453.5;
+        const ratio = Math.min(boxW / watermarkImg.width, boxH / watermarkImg.height);
+        const wmW = watermarkImg.width * ratio;
+        const wmH = watermarkImg.height * ratio;
+        const wmCenterX = LOGICAL_W * 0.5;
+        const wmCenterY = LOGICAL_H * 0.52 + boxH * 0.03;
+        ctx.save();
+        ctx.globalAlpha = 0.088;
+        ctx.drawImage(watermarkImg, wmCenterX - wmW / 2, wmCenterY - wmH / 2, wmW, wmH);
+        ctx.restore();
+      }
+
+      // 3. Top-right certificate number pill
+      const pillText = 'เลขที่ ' + textData.certCodeFormatted;
+      ctx.font = '600 13px ' + FONT_FAMILY;
+      const pillTextWidth = ctx.measureText(pillText).width;
+      const pillW = pillTextWidth + 28;
+      const pillH = 24;
+      const pillX = LOGICAL_W - 83 - pillW;
+      const pillY = 49;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.04)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 1;
+      drawRoundedRectPath(ctx, pillX, pillY, pillW, pillH, 12);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      drawRoundedRectPath(ctx, pillX, pillY, pillW, pillH, 12);
+      ctx.strokeStyle = 'rgba(212, 175, 55, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#334155';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pillText, pillX + pillW / 2, pillY + pillH / 2 + 0.5);
+
+      const cx = LOGICAL_W / 2;
+
+      // 4. Central OBEC emblem
+      if (obecImg) {
+        const logoH = 117;
+        const logoW = logoH * ((obecImg.naturalWidth || 547) / (obecImg.naturalHeight || 789));
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.14)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 1.5;
+        ctx.drawImage(obecImg, cx - logoW / 2, 50, logoW, logoH);
+        ctx.restore();
+      }
+
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'center';
+
+      // 5. Header organization block
+      ctx.fillStyle = '#1e1b4b';
+      fitFontSizeForCanvasText(ctx, textData.headerOrg, '700', 21, 16, FONT_FAMILY, 900);
+      ctx.fillText(textData.headerOrg, cx, 192);
+
+      ctx.fillStyle = '#0f172a';
+      fitFontSizeForCanvasText(ctx, textData.signerOrgFormatted, '600', 17.5, 13.5, FONT_FAMILY, 900);
+      ctx.fillText(textData.signerOrgFormatted, cx, 217);
+
+      ctx.fillStyle = '#334155';
+      ctx.font = '500 15px ' + FONT_FAMILY;
+      ctx.fillText(textData.subtitle, cx, 243);
+
+      // 6. Recipient name & school
+      ctx.save();
+      ctx.fillStyle = '#090d16';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.06)';
+      ctx.shadowBlur = 2;
+      ctx.shadowOffsetY = 1;
+      fitFontSizeForCanvasText(ctx, textData.recipientName, '700', 34, 21, FONT_FAMILY, 880);
+      ctx.fillText(textData.recipientName, cx, 295);
+      ctx.restore();
+
+      if (textData.schoolFormatted) {
+        ctx.fillStyle = '#334155';
+        fitFontSizeForCanvasText(ctx, textData.schoolFormatted, '600', 17.5, 13.5, FONT_FAMILY, 880);
+        ctx.fillText(textData.schoolFormatted, cx, 326);
+      }
+
+      // 7. Award & Activity
+      const awardY = textData.schoolFormatted ? 373 : 355;
+      ctx.fillStyle = '#92400e';
+      fitFontSizeForCanvasText(ctx, textData.awardFormatted, '700', 21, 15, FONT_FAMILY, 880);
+      ctx.fillText(textData.awardFormatted, cx, awardY);
+
+      const actWrap = wrapThaiTextTwoLinesForCanvas(
+        ctx,
+        textData.activityFormatted,
+        '600',
+        16.5,
+        13.5,
+        FONT_FAMILY,
+        860
+      );
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '600 ' + actWrap.fontSize + 'px ' + FONT_FAMILY;
+      ctx.fillText(actWrap.lines[0], cx, awardY + 26);
+      let extraActY = 0;
+      if (actWrap.lines.length > 1 && actWrap.lines[1]) {
+        ctx.fillText(actWrap.lines[1], cx, awardY + 49);
+        extraActY = 22;
+      }
+
+      // 8. Event & Ceremony details
+      const eventBaseY = awardY + 67 + extraActY;
+      ctx.fillStyle = '#1e293b';
+      fitFontSizeForCanvasText(ctx, textData.eventTitleFormatted, '600', 15, 12, FONT_FAMILY, 910);
+      ctx.fillText(textData.eventTitleFormatted, cx, eventBaseY);
+
+      ctx.fillStyle = '#334155';
+      ctx.font = '500 14.5px ' + FONT_FAMILY;
+      ctx.fillText(textData.eventDatesFormatted, cx, eventBaseY + 23);
+
+      ctx.fillStyle = '#475569';
+      ctx.font = '400 14px ' + FONT_FAMILY;
+      ctx.fillText(textData.blessingText, cx, eventBaseY + 47);
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '600 14.5px ' + FONT_FAMILY;
+      ctx.fillText(textData.issueDateFormatted, cx, eventBaseY + 71);
+
+      // 9. Footer Left: QR verification block
+      const qrBoxX = 98;
+      const qrBoxY = 616;
+      const qrBoxSize = 68;
+      drawRoundedRectPath(ctx, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 4);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      if (qrImg) {
+        ctx.drawImage(qrImg, qrBoxX + 2, qrBoxY + 2, 64, 64);
+      } else {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '600 11px ' + FONT_FAMILY;
+        ctx.fillText('QR', qrBoxX + qrBoxSize / 2, qrBoxY + qrBoxSize / 2 + 4);
+      }
+
+      const qrCenterX = qrBoxX + qrBoxSize / 2;
+      ctx.fillStyle = '#475569';
+      ctx.font = '600 9.5px ' + FONT_FAMILY;
+      ctx.fillText(textData.qrLabel, qrCenterX, qrBoxY + qrBoxSize + 13);
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '500 8.5px monospace';
+      ctx.fillText(textData.certCodeFormatted, qrCenterX, qrBoxY + qrBoxSize + 25);
+
+      // 10. Footer Center: Authorized signature block
+      const sigAnchorY = 656;
+      if (sigImg) {
+        const ratio = Math.min(195 / sigImg.width, 52 / sigImg.height);
+        const fitW = sigImg.width * ratio;
+        const fitH = sigImg.height * ratio;
+        ctx.save();
+        ctx.translate(cx + designCfg.sigOffsetX, sigAnchorY + designCfg.sigOffsetY);
+        const sc = designCfg.sigScale / 100;
+        ctx.scale(sc, sc);
+        ctx.drawImage(sigImg, -fitW / 2, -fitH, fitW, fitH);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#64748b';
+        ctx.font = '400 14px ' + FONT_FAMILY;
+        ctx.fillText('........................................................', cx, sigAnchorY - 4);
+      }
+
+      if (textData.signerName) {
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '700 15.5px ' + FONT_FAMILY;
+        ctx.fillText('(' + textData.signerName + ')', cx, 676);
+      }
+
+      ctx.fillStyle = '#1e293b';
+      ctx.font = '600 13.5px ' + FONT_FAMILY;
+      ctx.fillText(textData.signerPosFormatted, cx, 696);
+
+      ctx.fillStyle = '#475569';
+      fitFontSizeForCanvasText(ctx, textData.signerOrgFormatted, '400', 12.5, 10.5, FONT_FAMILY, 520);
+      ctx.fillText(textData.signerOrgFormatted, cx, 714);
+
+      return canvas.toDataURL('image/jpeg', 0.95);
+    };
+
+    try {
+      return drawCanvasWithBackground(bgImg);
+    } catch (err) {
+      if (designCfg.certBgUrl !== designCfg.defaultCertBgUrl) {
+        const fallbackBg = await loadImageForCanvas(designCfg.defaultCertBgUrl, 6000);
+        return drawCanvasWithBackground(fallbackBg);
+      }
+      throw err;
+    }
+  }
+
+  function syncCertImgPreviewNumeralButtons(activeMode) {
+    const adminAllowed = getAdminCertNumeralMode();
+    const bar = document.getElementById('certImgPreviewNumeralBar');
+    if (bar) {
+      if (adminAllowed === 'both') {
+        bar.classList.remove('hidden');
+        bar.classList.add('inline-flex');
+      } else {
+        bar.classList.add('hidden');
+        bar.classList.remove('inline-flex');
+      }
+    }
+    document.querySelectorAll('[data-img-numeral]').forEach(function (btn) {
+      const m = btn.getAttribute('data-img-numeral');
+      btn.className =
+        m === activeMode
+          ? 'cert-img-numeral-btn px-2 py-1 rounded-md font-heading text-[11px] font-semibold bg-white text-slate-900 shadow-2xs transition cursor-pointer'
+          : 'cert-img-numeral-btn px-2 py-1 rounded-md font-heading text-[11px] font-medium text-slate-600 hover:text-slate-900 transition cursor-pointer';
+    });
+  }
+
+  function checkCertImageShareSupported(dataUrl, filename) {
+    try {
+      if (
+        typeof navigator === 'undefined' ||
+        typeof navigator.share !== 'function' ||
+        typeof navigator.canShare !== 'function' ||
+        typeof File !== 'function'
+      ) {
+        return false;
+      }
+      const blob = dataUrlToBlob(dataUrl);
+      if (!blob) return false;
+      const testFile = new File([blob], filename || 'certificate.jpg', { type: 'image/jpeg' });
+      return Boolean(navigator.canShare({ files: [testFile] }));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function closeCertificateImagePreviewModal() {
+    imgPreviewRenderSeq++;
+    const modal = document.getElementById('certImagePreviewModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    currentImgPreviewEntry = null;
+    currentImgPreviewDataUrl = '';
+    currentImgPreviewFilename = '';
+  }
+
+  async function renderActiveCertificateImagePreview() {
+    const entry = currentImgPreviewEntry;
+    if (!entry) return;
+    const renderId = ++imgPreviewRenderSeq;
+
+    const loadingEl = document.getElementById('certImgPreviewLoading');
+    const errorEl = document.getElementById('certImgPreviewError');
+    const wrapEl = document.getElementById('certImgPreviewImageWrap');
+    const imgEl = document.getElementById('certImagePreviewImg');
+    const hintEl = document.getElementById('certImgPreviewLongPressHint');
+    const actionsEl = document.getElementById('certImgPreviewActions');
+    const subtitleEl = document.getElementById('certImgPreviewSubtitle');
+    const downloadBtn = document.getElementById('btnCertImgDownload');
+    const shareBtn = document.getElementById('btnCertImgShare');
+
+    const useThaiNumerals = currentImgPreviewNumeralMode === 'thai';
+    const displayCode = useThaiNumerals
+      ? toThaiNumerals(entry.cert_code)
+      : toArabicNumerals(entry.cert_code);
+    if (subtitleEl) {
+      subtitleEl.textContent = formatFullNameForPrint('', entry.recipient_name) + ' • เลขที่ ' + displayCode;
+    }
+    syncCertImgPreviewNumeralButtons(currentImgPreviewNumeralMode);
+
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (errorEl) {
+      errorEl.classList.add('hidden');
+      errorEl.textContent = '';
+    }
+    if (wrapEl) wrapEl.classList.add('hidden');
+    if (imgEl) imgEl.classList.add('hidden');
+    if (hintEl) {
+      hintEl.classList.add('hidden');
+      hintEl.classList.remove('flex');
+    }
+    if (actionsEl) {
+      actionsEl.classList.add('hidden');
+      actionsEl.classList.remove('grid');
+    }
+    currentImgPreviewDataUrl = '';
+    currentImgPreviewFilename = buildSafeCertImageFilename(entry, useThaiNumerals);
+
+    try {
+      const dataUrl = await renderCertificateToImageDataUrl(entry, useThaiNumerals);
+      if (renderId !== imgPreviewRenderSeq) return;
+
+      currentImgPreviewDataUrl = dataUrl;
+      if (imgEl) {
+        imgEl.setAttribute('src', dataUrl);
+        imgEl.setAttribute(
+          'alt',
+          'เกียรติบัตรออนไลน์ ' + formatFullNameForPrint('', entry.recipient_name)
+        );
+        imgEl.classList.remove('hidden');
+      }
+      if (wrapEl) wrapEl.classList.remove('hidden');
+      if (loadingEl) loadingEl.classList.add('hidden');
+      if (hintEl) {
+        hintEl.classList.remove('hidden');
+        hintEl.classList.add('flex');
+      }
+      if (actionsEl) {
+        actionsEl.classList.remove('hidden');
+        actionsEl.classList.add('grid');
+      }
+
+      const canShare = checkCertImageShareSupported(dataUrl, currentImgPreviewFilename);
+      if (shareBtn) {
+        if (canShare) {
+          shareBtn.classList.remove('hidden');
+          shareBtn.classList.add('inline-flex');
+        } else {
+          shareBtn.classList.add('hidden');
+          shareBtn.classList.remove('inline-flex');
+        }
+      }
+      if (downloadBtn) {
+        downloadBtn.classList.toggle('sm:col-span-2', !canShare);
+      }
+    } catch (err) {
+      if (renderId !== imgPreviewRenderSeq) return;
+      if (loadingEl) loadingEl.classList.add('hidden');
+      if (errorEl) {
+        errorEl.textContent =
+          'ไม่สามารถสร้างไฟล์รูปภาพได้ชั่วคราว (' +
+          (err && err.message ? err.message : 'Canvas error') +
+          ') — กรุณาใช้ปุ่ม "พิมพ์ / บันทึก PDF (A4)" แทนครับ';
+        errorEl.classList.remove('hidden');
+      }
+      if (actionsEl) {
+        actionsEl.classList.remove('hidden');
+        actionsEl.classList.add('grid');
+      }
+      if (downloadBtn) downloadBtn.classList.add('hidden');
+      if (shareBtn) {
+        shareBtn.classList.add('hidden');
+        shareBtn.classList.remove('inline-flex');
+      }
+    }
+  }
+
+  function openCertificateImagePreviewModal(entry, initialMode) {
+    if (!entry || entry.cert_ready === false) {
+      showToast('ยังไม่มีรายการที่บันทึกคะแนนและประกาศผลแล้วสำหรับสร้างรูปเกียรติบัตร', 'warning');
+      return;
+    }
+    const modal = document.getElementById('certImagePreviewModal');
+    const downloadBtn = document.getElementById('btnCertImgDownload');
+    if (!modal) return;
+
+    if (downloadBtn) {
+      downloadBtn.classList.remove('hidden');
+    }
+
+    const adminAllowed = getAdminCertNumeralMode();
+    if (adminAllowed === 'thai' || adminAllowed === 'arabic') {
+      currentImgPreviewNumeralMode = adminAllowed;
+    } else {
+      const requested = String(initialMode || state.certNumeralMode || 'thai');
+      currentImgPreviewNumeralMode = requested === 'arabic' ? 'arabic' : 'thai';
+    }
+    currentImgPreviewEntry = entry;
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    renderActiveCertificateImagePreview();
   }
 
   // Export District Representatives as .xlsx
@@ -17519,7 +18323,13 @@
       .then(function (svgText) {
         return new Promise(function (resolve) {
           try {
-            const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+            const normalizedSvgText = String(svgText || '').replace(/<svg\b([^>]*)>/i, function (full, attrs) {
+              let nextAttrs = attrs || '';
+              if (!/\bwidth\s*=/i.test(nextAttrs)) nextAttrs += ' width="' + width + '"';
+              if (!/\bheight\s*=/i.test(nextAttrs)) nextAttrs += ' height="' + height + '"';
+              return '<svg' + nextAttrs + '>';
+            });
+            const blob = new Blob([normalizedSvgText], { type: 'image/svg+xml;charset=utf-8' });
             const blobUrl = URL.createObjectURL(blob);
             const img = new Image();
             img.onload = function () {
@@ -23673,6 +24483,7 @@
     const certVerifyModalEl = document.getElementById('certVerifyModal');
     const btnCloseCertVerifyModal = document.getElementById('btnCloseCertVerifyModal');
     const btnCertVerifyGoMain = document.getElementById('btnCertVerifyGoMain');
+    const btnCertVerifySaveImage = document.getElementById('btnCertVerifySaveImage');
     const btnCertVerifyPrint = document.getElementById('btnCertVerifyPrint');
     if (btnCloseCertVerifyModal) {
       btnCloseCertVerifyModal.addEventListener('click', function () {
@@ -23682,6 +24493,13 @@
     if (btnCertVerifyGoMain) {
       btnCertVerifyGoMain.addEventListener('click', function () {
         closeCertificateVerifyModal(true);
+      });
+    }
+    if (btnCertVerifySaveImage) {
+      btnCertVerifySaveImage.addEventListener('click', function () {
+        if (currentVerifiedCertEntry) {
+          openCertificateImagePreviewModal(currentVerifiedCertEntry);
+        }
       });
     }
     if (btnCertVerifyPrint) {
@@ -23698,8 +24516,95 @@
         }
       });
     }
+
+    // Mobile-First Certificate Image Preview Modal Events
+    const certImgModalEl = document.getElementById('certImagePreviewModal');
+    const btnCloseCertImgPreview = document.getElementById('btnCloseCertImgPreview');
+    const btnCertImgDownload = document.getElementById('btnCertImgDownload');
+    const btnCertImgShare = document.getElementById('btnCertImgShare');
+    const btnCertImgOpenPrint = document.getElementById('btnCertImgOpenPrint');
+    if (btnCloseCertImgPreview) {
+      btnCloseCertImgPreview.addEventListener('click', closeCertificateImagePreviewModal);
+    }
+    if (certImgModalEl) {
+      certImgModalEl.addEventListener('click', function (ev) {
+        if (ev.target === certImgModalEl) {
+          closeCertificateImagePreviewModal();
+        }
+      });
+    }
+    document.querySelectorAll('[data-img-numeral]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const nextMode = btn.getAttribute('data-img-numeral') === 'arabic' ? 'arabic' : 'thai';
+        if (nextMode !== currentImgPreviewNumeralMode && currentImgPreviewEntry) {
+          currentImgPreviewNumeralMode = nextMode;
+          renderActiveCertificateImagePreview();
+        }
+      });
+    });
+    if (btnCertImgDownload) {
+      btnCertImgDownload.addEventListener('click', function () {
+        if (!currentImgPreviewDataUrl) return;
+        const filename = currentImgPreviewFilename || 'certificate.jpg';
+        const blob = dataUrlToBlob(currentImgPreviewDataUrl);
+        let objUrl = '';
+        try {
+          objUrl = blob ? URL.createObjectURL(blob) : '';
+          const link = document.createElement('a');
+          link.href = objUrl || currentImgPreviewDataUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          showToast('ดาวน์โหลดรูปภาพเกียรติบัตร (.jpg) เรียบร้อยแล้ว', 'success');
+        } catch (e) {
+          showToast('กรุณาแตะค้างที่รูปภาพเพื่อบันทึกลงเครื่อง', 'info');
+        } finally {
+          if (objUrl) {
+            setTimeout(function () {
+              try {
+                URL.revokeObjectURL(objUrl);
+              } catch (e) {}
+            }, 1500);
+          }
+        }
+      });
+    }
+    if (btnCertImgShare) {
+      btnCertImgShare.addEventListener('click', async function () {
+        if (!currentImgPreviewDataUrl || typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
+          return;
+        }
+        try {
+          const blob = dataUrlToBlob(currentImgPreviewDataUrl);
+          if (!blob) return;
+          const filename = currentImgPreviewFilename || 'certificate.jpg';
+          const file = new File([blob], filename, { type: 'image/jpeg' });
+          await navigator.share({
+            files: [file],
+            title: 'เกียรติบัตรออนไลน์ - งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74'
+          });
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+          showToast('สามารถแตะค้างที่รูปภาพเพื่อบันทึกหรือแชร์ต่อได้ทันที', 'info');
+        }
+      });
+    }
+    if (btnCertImgOpenPrint) {
+      btnCertImgOpenPrint.addEventListener('click', function () {
+        if (currentImgPreviewEntry) {
+          printCertificatesWindow([currentImgPreviewEntry], currentImgPreviewNumeralMode);
+        }
+      });
+    }
+
     document.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Escape' && certVerifyModalEl && !certVerifyModalEl.classList.contains('hidden')) {
+      if (ev.key !== 'Escape') return;
+      if (certImgModalEl && !certImgModalEl.classList.contains('hidden')) {
+        closeCertificateImagePreviewModal();
+        return;
+      }
+      if (certVerifyModalEl && !certVerifyModalEl.classList.contains('hidden')) {
         closeCertificateVerifyModal(true);
       }
     });
