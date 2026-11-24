@@ -15592,6 +15592,13 @@
     });
   }
 
+  function isIosMobileDevice() {
+    if (typeof navigator === 'undefined') return false;
+    const ua = String(navigator.userAgent || '');
+    const isTouchMac = navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints) > 1;
+    return /iPad|iPhone|iPod/i.test(ua) || isTouchMac;
+  }
+
   function checkCertImageShareSupported(dataUrl, filename) {
     try {
       if (
@@ -15690,17 +15697,48 @@
       }
 
       const canShare = checkCertImageShareSupported(dataUrl, currentImgPreviewFilename);
-      if (shareBtn) {
-        if (canShare) {
-          shareBtn.classList.remove('hidden');
-          shareBtn.classList.add('inline-flex');
-        } else {
-          shareBtn.classList.add('hidden');
-          shareBtn.classList.remove('inline-flex');
+      const printBtn = document.getElementById('btnCertImgOpenPrint');
+      const prioritizeIosPhotos = Boolean(canShare && isIosMobileDevice());
+      const primaryBtnCls =
+        'justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-heading text-xs font-semibold transition cursor-pointer';
+      const secondaryBtnCls =
+        'justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold transition cursor-pointer';
+
+      if (prioritizeIosPhotos) {
+        if (shareBtn) {
+          shareBtn.className = 'inline-flex ' + primaryBtnCls;
+          shareBtn.style.order = '1';
+          const sp = shareBtn.querySelector('span');
+          if (sp) sp.textContent = 'บันทึกลงแอปรูปภาพ / แชร์';
+        }
+        if (downloadBtn) {
+          downloadBtn.className = 'inline-flex ' + secondaryBtnCls;
+          downloadBtn.style.order = '2';
+          const sp = downloadBtn.querySelector('span');
+          if (sp) sp.textContent = 'ดาวน์โหลดลงแอปไฟล์ (.jpg)';
+        }
+      } else {
+        if (downloadBtn) {
+          downloadBtn.className =
+            (canShare ? '' : 'sm:col-span-2 ') + 'inline-flex ' + primaryBtnCls;
+          downloadBtn.style.order = '1';
+          const sp = downloadBtn.querySelector('span');
+          if (sp) sp.textContent = 'บันทึกรูปภาพ (.jpg)';
+        }
+        if (shareBtn) {
+          if (canShare) {
+            shareBtn.className = 'inline-flex ' + secondaryBtnCls;
+            shareBtn.style.order = '2';
+            const sp = shareBtn.querySelector('span');
+            if (sp) sp.textContent = 'แชร์รูปภาพ (LINE / อื่น ๆ)';
+          } else {
+            shareBtn.className = 'hidden ' + secondaryBtnCls;
+            shareBtn.style.order = '';
+          }
         }
       }
-      if (downloadBtn) {
-        downloadBtn.classList.toggle('sm:col-span-2', !canShare);
+      if (printBtn) {
+        printBtn.style.order = '3';
       }
     } catch (err) {
       if (renderId !== imgPreviewRenderSeq) return;
@@ -15716,7 +15754,10 @@
         actionsEl.classList.remove('hidden');
         actionsEl.classList.add('grid');
       }
-      if (downloadBtn) downloadBtn.classList.add('hidden');
+      if (downloadBtn) {
+        downloadBtn.classList.add('hidden');
+        downloadBtn.classList.remove('inline-flex');
+      }
       if (shareBtn) {
         shareBtn.classList.add('hidden');
         shareBtn.classList.remove('inline-flex');
@@ -15735,6 +15776,7 @@
 
     if (downloadBtn) {
       downloadBtn.classList.remove('hidden');
+      downloadBtn.classList.add('inline-flex');
     }
 
     const adminAllowed = getAdminCertNumeralMode();
