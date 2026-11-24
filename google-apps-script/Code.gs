@@ -116,7 +116,9 @@ function doGet(e) {
       updatedAt: new Date().toISOString(),
       config: {
         registrationOpen: isRegistrationOpen_(),
-        operationTimeline: getStoredOperationTimeline_()
+        operationTimeline: getStoredOperationTimeline_(),
+        featureVisibility: getStoredFeatureVisibility_(),
+        certConfig: getStoredCertConfig_()
       },
       schools: schools,
       competitions: competitions,
@@ -200,6 +202,10 @@ function doPost(e) {
       return jsonResponse_({ ok: true });
     } else if (action === 'save_timeline_config') {
       return handleSaveTimelineConfig_(body);
+    } else if (action === 'save_feature_visibility') {
+      return handleSaveFeatureVisibility_(body);
+    } else if (action === 'save_cert_config') {
+      return handleSaveCertConfig_(body);
     }
 
     return jsonResponse_({ ok: false, error: 'ไม่รู้จักคำสั่ง: ' + action });
@@ -950,4 +956,136 @@ function handleSaveTimelineConfig_(body) {
   }
   props.setProperty('OPERATION_TIMELINE_JSON', JSON.stringify(cleanList));
   return jsonResponse_({ ok: true, operationTimeline: cleanList });
+}
+
+/**
+ * อ่านค่าตั้งค่าการแสดงผลแท็บ/ฟีเจอร์ (เก็บเฉพาะใน ScriptProperties ไม่แตะชีตข้อมูล)
+ */
+function getStoredFeatureVisibility_() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty('FEATURE_VISIBILITY_JSON');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
+ * บันทึกสถานะการแสดงผลแท็บ/ฟีเจอร์ของแอดมินไว้ใน ScriptProperties (ไม่แตะข้อมูลในชีต)
+ */
+function handleSaveFeatureVisibility_(body) {
+  const allowedKeys = [
+    'schedule',
+    'venue',
+    'judges',
+    'judge_certs',
+    'results',
+    'certificates',
+    'id_cards',
+    'substitution_form'
+  ];
+  const allowedVals = ['open', 'auto', 'hidden', 'disabled'];
+  const incoming =
+    body && body.featureVisibility && typeof body.featureVisibility === 'object'
+      ? body.featureVisibility
+      : {};
+  const existing = getStoredFeatureVisibility_() || {};
+  const cleanMap = Object.assign({}, existing);
+  allowedKeys.forEach(function (k) {
+    if (Object.prototype.hasOwnProperty.call(incoming, k)) {
+      const val = String(incoming[k] || '').trim();
+      if (allowedVals.indexOf(val) !== -1) {
+        cleanMap[k] = val;
+      }
+    }
+  });
+  PropertiesService.getScriptProperties().setProperty(
+    'FEATURE_VISIBILITY_JSON',
+    JSON.stringify(cleanMap)
+  );
+  return jsonResponse_({ ok: true, featureVisibility: cleanMap });
+}
+
+/**
+ * อ่านค่าตั้งค่ารูปแบบเลขและข้อมูลเกียรติบัตร (เก็บเฉพาะใน ScriptProperties)
+ */
+function getStoredCertConfig_() {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty('CERT_CONFIG_JSON');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
+ * บันทึกค่าตั้งค่ารูปแบบเลขและข้อความเกียรติบัตรไว้ใน ScriptProperties (ไม่แตะข้อมูลในชีต)
+ */
+function handleSaveCertConfig_(body) {
+  const incoming =
+    body && body.certConfig && typeof body.certConfig === 'object' ? body.certConfig : {};
+  const existing = getStoredCertConfig_() || {};
+  const cleanRoleCode = function (rawVal, fallback) {
+    const cleaned = String(rawVal === undefined || rawVal === null ? '' : rawVal)
+      .replace(/[\s#?/&]+/g, '')
+      .trim()
+      .slice(0, 12);
+    return cleaned || fallback;
+  };
+  const modeRaw = String(incoming.certNumberMode || existing.certNumberMode || 'team_fixed').trim();
+  const numModeRaw = String(incoming.certNumeralMode || existing.certNumeralMode || 'both').trim();
+
+  const cleanCfg = {
+    certPrefix: String(incoming.certPrefix !== undefined ? incoming.certPrefix : (existing.certPrefix || 'WYK74-2569-'))
+      .trim()
+      .slice(0, 40) || 'WYK74-2569-',
+    certNumberMode: modeRaw === 'sequential' ? 'sequential' : 'team_fixed',
+    certRoleCodeStudent: cleanRoleCode(
+      incoming.certRoleCodeStudent !== undefined ? incoming.certRoleCodeStudent : existing.certRoleCodeStudent,
+      'น'
+    ),
+    certRoleCodeTeacher: cleanRoleCode(
+      incoming.certRoleCodeTeacher !== undefined ? incoming.certRoleCodeTeacher : existing.certRoleCodeTeacher,
+      'ค'
+    ),
+    certRoleCodeJudge: cleanRoleCode(
+      incoming.certRoleCodeJudge !== undefined ? incoming.certRoleCodeJudge : existing.certRoleCodeJudge,
+      'ก'
+    ),
+    certFormatLocked: Boolean(
+      incoming.certFormatLocked !== undefined ? incoming.certFormatLocked : existing.certFormatLocked
+    ),
+    certIssueDate: String(
+      incoming.certIssueDate !== undefined ? incoming.certIssueDate : (existing.certIssueDate || '')
+    )
+      .trim()
+      .slice(0, 160),
+    certSignerName: String(
+      incoming.certSignerName !== undefined ? incoming.certSignerName : (existing.certSignerName || '')
+    )
+      .trim()
+      .slice(0, 160),
+    certSignerPos: String(
+      incoming.certSignerPos !== undefined ? incoming.certSignerPos : (existing.certSignerPos || '')
+    )
+      .trim()
+      .slice(0, 160),
+    certSignerOrg: String(
+      incoming.certSignerOrg !== undefined ? incoming.certSignerOrg : (existing.certSignerOrg || '')
+    )
+      .trim()
+      .slice(0, 160),
+    certNumeralMode: ['thai', 'arabic', 'both'].indexOf(numModeRaw) !== -1 ? numModeRaw : 'both'
+  };
+  PropertiesService.getScriptProperties().setProperty(
+    'CERT_CONFIG_JSON',
+    JSON.stringify(cleanCfg)
+  );
+  return jsonResponse_({ ok: true, certConfig: cleanCfg });
 }

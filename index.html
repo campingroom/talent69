@@ -2819,18 +2819,22 @@
             <h2 class="text-sm sm:text-base font-bold font-heading text-slate-900">รายงานผลการแข่งขัน สรุปอันดับตัวแทนกลุ่ม และสรุปเหรียญรางวัล</h2>
             <p class="text-[11px] sm:text-xs text-slate-500 hidden sm:block">คำนวณระดับเหรียญรางวัล (ทอง 80–100, เงิน 70–79.99, ทองแดง 60–69.99, เข้าร่วม) และจัดลำดับที่ 1–3 อัตโนมัติ</p>
           </div>
-          <div class="grid grid-cols-3 gap-1 sm:gap-2 sm:flex sm:flex-wrap">
-            <button type="button" data-result-subview="by-comp" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-semibold bg-slate-900 text-white transition">
+          <div class="grid grid-cols-2 gap-1.5 sm:gap-2 sm:flex sm:flex-wrap">
+            <button type="button" data-result-subview="by-comp" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-semibold bg-slate-900 text-white transition cursor-pointer">
               <span class="sm:hidden">1. รายกิจกรรม</span>
               <span class="hidden sm:inline">1. ประกาศผลรายกิจกรรม</span>
             </button>
-            <button type="button" data-result-subview="by-rank" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+            <button type="button" data-result-subview="by-rank" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">
               <span class="sm:hidden">2. ตัวแทนกลุ่ม</span>
               <span class="hidden sm:inline">2. สรุปอันดับรายโรงเรียน (ตัวแทนกลุ่ม)</span>
             </button>
-            <button type="button" data-result-subview="by-medal" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+            <button type="button" data-result-subview="by-medal" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">
               <span class="sm:hidden">3. สรุปเหรียญ</span>
               <span class="hidden sm:inline">3. สรุปเหรียญรางวัลรวม</span>
+            </button>
+            <button type="button" data-result-subview="by-school" class="result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">
+              <span class="sm:hidden">4. ผลรายโรงเรียน</span>
+              <span class="hidden sm:inline">4. รายงานผลรายโรงเรียน</span>
             </button>
           </div>
         </div>
@@ -2886,6 +2890,15 @@
 
         <!-- Subview 2: สรุปอันดับรายโรงเรียน (ชนะเลิศ / รองชนะเลิศ) -->
         <div id="resultSubviewByRank" class="hidden space-y-4 pt-2 border-t border-slate-100">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <span class="text-slate-500">คลิกชื่อโรงเรียนในตารางเพื่อเปิดรายงานผลรายโรงเรียน</span>
+            <button type="button" id="btnPrintAllSchoolsSummaryRank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs cursor-pointer self-start sm:self-auto">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>พิมพ์สรุปอันดับ 13 โรงเรียน (A4 แนวนอน)</span>
+            </button>
+          </div>
           <div class="overflow-x-auto">
             <table class="w-full text-sm text-left">
               <thead class="text-xs font-heading text-slate-500 bg-slate-50 border-y border-slate-200">
@@ -2906,6 +2919,15 @@
 
         <!-- Subview 3: สรุปเหรียญรางวัลรายโรงเรียน -->
         <div id="resultSubviewByMedal" class="hidden space-y-4 pt-2 border-t border-slate-100">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <span class="text-slate-500">คลิกชื่อโรงเรียนในตารางเพื่อเปิดรายงานผลรายโรงเรียน</span>
+            <button type="button" id="btnPrintAllSchoolsSummaryMedal" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition shadow-2xs cursor-pointer self-start sm:self-auto">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>พิมพ์สรุปเหรียญ 13 โรงเรียน (A4 แนวนอน)</span>
+            </button>
+          </div>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200">
               <div class="text-xs font-heading text-amber-900">เหรียญทองรวม (80–100)</div>
@@ -2940,6 +2962,78 @@
                 </tr>
               </thead>
               <tbody id="resultsSchoolMedalBody" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Subview 4: รายงานผลรายโรงเรียน + พิมพ์/ส่งออก -->
+        <div id="resultSubviewBySchool" class="hidden space-y-4 pt-2 border-t border-slate-100">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+            <div class="md:col-span-5">
+              <label for="resSchoolSelect" class="block text-xs font-medium text-slate-600 mb-1">เลือกโรงเรียน</label>
+              <select id="resSchoolSelect" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"></select>
+            </div>
+            <div class="md:col-span-4">
+              <label for="resSchoolMedalFilter" class="block text-xs font-medium text-slate-600 mb-1">กรองระดับผล / รางวัล</label>
+              <select id="resSchoolMedalFilter" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+                <option value="ALL">ทุกรายการที่โรงเรียนส่ง</option>
+                <option value="REP">เฉพาะตัวแทนระดับเขตฯ</option>
+                <option value="GOLD">เหรียญทอง</option>
+                <option value="SILVER">เหรียญเงิน</option>
+                <option value="BRONZE">เหรียญทองแดง</option>
+                <option value="PART">เข้าร่วม / รอผล</option>
+                <option value="ABSENT">ขาดสอบ / ไม่มาแข่งขัน</option>
+              </select>
+            </div>
+            <div class="md:col-span-3">
+              <label for="resSchoolSearchInput" class="block text-xs font-medium text-slate-600 mb-1">ค้นหาเพิ่มเติม</label>
+              <input type="search" id="resSchoolSearchInput" placeholder="ค้นหากิจกรรม / นักเรียน..." class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" />
+            </div>
+          </div>
+
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-xl bg-[#F7F7F5] border border-slate-200">
+            <div class="min-w-0">
+              <div id="resSchoolHeaderName" class="font-heading font-bold text-slate-900 text-base truncate">กรุณาเลือกโรงเรียน</div>
+              <div id="resSchoolHeaderMeta" class="text-xs text-slate-600 mt-0.5 truncate">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง (สพป.มหาสารคาม เขต 3)</div>
+            </div>
+            <div class="flex flex-wrap gap-1.5 sm:gap-2 shrink-0">
+              <button type="button" id="btnPrintSelectedSchoolResult" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                <span>พิมพ์ผลโรงเรียนนี้ (A4 แนวนอน)</span>
+              </button>
+              <button type="button" id="btnPrintAllSchoolsResultsBatch" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                </svg>
+                <span>พิมพ์แยกชุดครบทุกโรงเรียน</span>
+              </button>
+              <button type="button" id="btnExportSelectedSchoolResultExcel" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-medium transition shadow-2xs cursor-pointer">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>ส่งออก Excel (.xlsx)</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="resSchoolKpiStrip" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2"></div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+              <thead class="text-xs font-heading text-slate-500 bg-slate-50 border-y border-slate-200">
+                <tr>
+                  <th class="py-2.5 px-2.5 text-center w-12">ที่</th>
+                  <th class="py-2.5 px-3 min-w-[210px]">กิจกรรมการแข่งขัน (ระดับชั้น)</th>
+                  <th class="py-2.5 px-3 min-w-[170px]">นักเรียนผู้เข้าแข่งขัน</th>
+                  <th class="py-2.5 px-3 min-w-[140px]">ครูผู้ฝึกสอน</th>
+                  <th class="py-2.5 px-2.5 text-center w-20">คะแนน</th>
+                  <th class="py-2.5 px-2.5 text-center w-28">เหรียญรางวัล</th>
+                  <th class="py-2.5 px-3 text-center min-w-[130px]">ลำดับ / ตัวแทนระดับเขตฯ</th>
+                </tr>
+              </thead>
+              <tbody id="resultsBySchoolTableBody" class="divide-y divide-slate-100"></tbody>
             </table>
           </div>
         </div>
@@ -3750,12 +3844,73 @@
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label for="cfgCertPrefixInput" class="block font-medium text-slate-700 mb-1">รหัสขึ้นต้นเกียรติบัตร</label>
-                  <input type="text" id="cfgCertPrefixInput" placeholder="เช่น WYK74-2569-" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
+                  <input type="text" id="cfgCertPrefixInput" maxlength="40" placeholder="เช่น WYK74-2569-" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
                 </div>
                 <div>
                   <label for="cfgCertIssueDateInput" class="block font-medium text-slate-700 mb-1">วันที่ออกเกียรติบัตร (ภาษาไทย)</label>
                   <input type="text" id="cfgCertIssueDateInput" placeholder="เช่น 25 พฤศจิกายน พุทธศักราช 2569" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm" />
                 </div>
+              </div>
+
+              <!-- Certificate Numbering Mode, Custom Role Codes & Lock Guard -->
+              <div id="certNumberingConfigBox" class="p-3.5 rounded-lg border border-slate-200 bg-slate-50/80 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div class="font-heading font-semibold text-slate-800">รูปแบบการรันเลขเกียรติบัตรและรหัสแยกประเภท</div>
+                    <p class="text-[11px] text-slate-500">เลือกได้ 2 แบบ และปรับแต่งรหัสแทนนักเรียน ครูผู้ฝึกสอน และกรรมการตัดสินได้</p>
+                  </div>
+                  <button type="button" id="btnToggleCertFormatLock" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-heading text-[11px] font-semibold transition cursor-pointer shrink-0">
+                    <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span id="certFormatLockBtnText">ล็อกรูปแบบเลข</span>
+                  </button>
+                </div>
+
+                <!-- Warning Banner shown when published competitions exist or Certificates tab is open -->
+                <div id="certFormatPublishWarningBanner" class="hidden rounded-lg border p-2.5 text-[11px] leading-relaxed items-start gap-2">
+                  <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div id="certFormatPublishWarningText" class="min-w-0 flex-1"></div>
+                </div>
+
+                <!-- 2 Mode Selector -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <label class="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 bg-white hover:border-slate-300 cursor-pointer transition">
+                    <input type="radio" name="certNumberMode" id="certNumberModeTeamFixed" value="team_fixed" checked class="mt-0.5 text-slate-900 shrink-0" />
+                    <div class="min-w-0">
+                      <div class="font-heading font-semibold text-slate-900 text-xs">แบบผูกติดเลขทีมถาวร (ค่าเริ่มต้น)</div>
+                      <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">ดึงเลข 4 หลักท้ายรหัสใบสมัคร (เช่น WYK74-2569-6067-น1) เหมาะเมื่อทยอยประกาศผล เพิ่ม/ลบทีมอื่นเลขไม่ขยับ</p>
+                    </div>
+                  </label>
+                  <label class="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 bg-white hover:border-slate-300 cursor-pointer transition">
+                    <input type="radio" name="certNumberMode" id="certNumberModeSequential" value="sequential" class="mt-0.5 text-slate-900 shrink-0" />
+                    <div class="min-w-0">
+                      <div class="font-heading font-semibold text-slate-900 text-xs">แบบรันเลขต่อเนื่องสวยงาม (แบบ ก)</div>
+                      <p class="text-[11px] text-slate-500 mt-0.5 leading-snug">รัน 0001, 0002, ... แยกตามกลุ่ม (เช่น WYK74-2569-น0001) เหมาะเมื่อกรอกคะแนนครบแล้วเปิดดาวน์โหลดทีเดียว</p>
+                    </div>
+                  </label>
+                </div>
+
+                <!-- Custom Role Codes (น / ค / ก) -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label for="cfgCertCodeStudent" class="block font-medium text-slate-700 mb-1">รหัสนักเรียน</label>
+                    <input type="text" id="cfgCertCodeStudent" maxlength="12" placeholder="น" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-mono" />
+                  </div>
+                  <div>
+                    <label for="cfgCertCodeTeacher" class="block font-medium text-slate-700 mb-1">รหัสครูผู้ฝึกสอน</label>
+                    <input type="text" id="cfgCertCodeTeacher" maxlength="12" placeholder="ค" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-mono" />
+                  </div>
+                  <div>
+                    <label for="cfgCertCodeJudge" class="block font-medium text-slate-700 mb-1">รหัสกรรมการตัดสิน</label>
+                    <input type="text" id="cfgCertCodeJudge" maxlength="12" placeholder="ก" class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-mono" />
+                  </div>
+                </div>
+
+                <!-- Live Example Preview -->
+                <div id="certNumberLivePreview" class="rounded-lg border border-slate-200 bg-white p-2.5 space-y-1.5 text-[11px]"></div>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3984,6 +4139,35 @@
   </footer>
 
   </div><!-- end #notionMainArea -->
+
+  <!-- Official QR Certificate Verification Modal (#cert=...) -->
+  <div id="certVerifyModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs items-center justify-center p-3 sm:p-4 overflow-y-auto no-print" role="dialog" aria-modal="true" aria-labelledby="certVerifyModalTitle">
+    <div class="w-full max-w-md bg-[#F7F7F5] rounded-2xl border border-slate-200 shadow-2xl overflow-hidden my-auto text-[#37352F]">
+      <div class="bg-white border-b border-[#E9E9E7] px-4 py-2.5 flex items-center justify-between gap-2 text-xs">
+        <span id="certVerifyModalTitle" class="font-heading font-bold text-[#37352F] truncate">ระบบตรวจสอบเกียรติบัตรออนไลน์</span>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <span id="certVerifyHeaderHash" class="font-mono text-[10px] px-2 py-0.5 rounded bg-[#F1F1EF] text-[#787774] truncate max-w-[165px]"></span>
+          <button type="button" id="btnCloseCertVerifyModal" class="p-1 rounded-lg hover:bg-slate-200/70 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0" title="ปิดหน้าต่างตรวจสอบ" aria-label="ปิดหน้าต่างตรวจสอบ">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="certVerifyModalBody" class="p-3.5 sm:p-4 max-h-[74vh] overflow-y-auto"></div>
+      <div class="px-3.5 sm:px-4 pb-3.5 sm:pb-4 pt-0 space-y-2">
+        <button type="button" id="btnCertVerifyPrint" class="hidden w-full justify-center items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-heading text-xs font-semibold transition cursor-pointer">
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          <span>พิมพ์ / ดาวน์โหลดเกียรติบัตรฉบับนี้ (PDF)</span>
+        </button>
+        <button type="button" id="btnCertVerifyGoMain" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-heading text-xs font-medium transition cursor-pointer">
+          ปิดหน้าตรวจสอบ • ดูข้อมูลทั้งหมดบนเว็บ
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Floating Back To Top Button (Shown when scrolled down > 380px) -->
   <button type="button" id="btnFloatingBackToTop" title="เลื่อนกลับขึ้นด้านบนและช่องค้นหา" aria-label="กลับด้านบน" class="hidden fixed bottom-5 right-5 z-40 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-slate-900 hover:bg-slate-800 text-white border border-slate-700/60 shadow-lg font-heading text-xs font-semibold transition cursor-pointer no-print">

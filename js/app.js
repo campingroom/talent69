@@ -46,6 +46,11 @@
     districtRepCriteriaMixed: 'rank_1',
     districtRepCriteriaSecondary: 'rank_1_2',
     certPrefix: 'WYK74-2569-',
+    certNumberMode: 'team_fixed', // 'team_fixed' (6067-น1) | 'sequential' (น0001)
+    certRoleCodeStudent: 'น',
+    certRoleCodeTeacher: 'ค',
+    certRoleCodeJudge: 'ก',
+    certFormatLocked: false,
     certSignerName: 'นายกิจภูมิ บุญอบ',
     certSignerPos: 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง',
     certSignerOrg: 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3',
@@ -66,13 +71,14 @@
       venue: 'hidden',
       judges: 'disabled',
       judge_certs: 'disabled',
-      results: 'auto',
-      certificates: 'auto',
+      results: 'hidden',
+      certificates: 'hidden',
       id_cards: 'open',
       substitution_form: 'hidden'
     },
     idCardsDefaultMigratedV1: true,
-    nonHostDefaultsMigratedV1: true
+    nonHostDefaultsMigratedV1: true,
+    resultsCertsHiddenDefaultMigratedV1: true
   };
 
   const FEATURE_MILESTONES = {
@@ -131,10 +137,23 @@
     if (featureKey === 'schedule' || featureKey === 'judges' || featureKey === 'judge_certs') {
       return 'disabled';
     }
-    if (featureKey === 'venue' || featureKey === 'substitution_form') {
+    if (
+      featureKey === 'venue' ||
+      featureKey === 'substitution_form' ||
+      featureKey === 'results' ||
+      featureKey === 'certificates'
+    ) {
       return 'hidden';
     }
     return 'auto';
+  }
+
+  function sanitizeCertRoleCode(raw, fallback) {
+    const cleaned = String(raw === undefined || raw === null ? '' : raw)
+      .replace(/[\s#?/&]+/g, '')
+      .trim()
+      .slice(0, 12);
+    return cleaned || fallback;
   }
 
   function isScheduleModeDisabled() {
@@ -1225,6 +1244,23 @@
           state.config.nonHostDefaultsMigratedV1 = true;
           saveState();
         }
+        if (!parsed.config || !parsed.config.resultsCertsHiddenDefaultMigratedV1) {
+          if (state.config.featureVisibility.results === 'auto') {
+            state.config.featureVisibility.results = 'hidden';
+          }
+          if (state.config.featureVisibility.certificates === 'auto') {
+            state.config.featureVisibility.certificates = 'hidden';
+          }
+          state.config.resultsCertsHiddenDefaultMigratedV1 = true;
+          saveState();
+        }
+        if (!state.config.certNumberMode || ['sequential', 'team_fixed'].indexOf(state.config.certNumberMode) === -1) {
+          state.config.certNumberMode = DEFAULT_CONFIG.certNumberMode;
+        }
+        state.config.certRoleCodeStudent = sanitizeCertRoleCode(state.config.certRoleCodeStudent, 'น');
+        state.config.certRoleCodeTeacher = sanitizeCertRoleCode(state.config.certRoleCodeTeacher, 'ค');
+        state.config.certRoleCodeJudge = sanitizeCertRoleCode(state.config.certRoleCodeJudge, 'ก');
+        state.config.certFormatLocked = Boolean(state.config.certFormatLocked);
         // Auto-migrate school SCH-13 subdistrict and default signer name if outdated
         state.schools = normalizeSchoolsList(state.schools);
         if (!state.config.certSignerName || state.config.certSignerName === 'นายวิทยา มโนการณ์') {
@@ -1542,19 +1578,238 @@
     updateFeatureVisibilityUI();
   }
 
+  function getCertNumberingConfig(override) {
+    const cfg = state.config || DEFAULT_CONFIG;
+    const src = override || cfg;
+    const rawMode = String(src.mode || src.certNumberMode || DEFAULT_CONFIG.certNumberMode).trim();
+    return {
+      prefix:
+        String(
+          src.prefix !== undefined
+            ? src.prefix
+            : src.certPrefix !== undefined
+            ? src.certPrefix
+            : DEFAULT_CONFIG.certPrefix
+        ).trim() || 'WYK74-2569-',
+      mode: rawMode === 'sequential' ? 'sequential' : 'team_fixed',
+      studentCode: sanitizeCertRoleCode(
+        src.studentCode !== undefined ? src.studentCode : src.certRoleCodeStudent,
+        DEFAULT_CONFIG.certRoleCodeStudent || 'น'
+      ),
+      teacherCode: sanitizeCertRoleCode(
+        src.teacherCode !== undefined ? src.teacherCode : src.certRoleCodeTeacher,
+        DEFAULT_CONFIG.certRoleCodeTeacher || 'ค'
+      ),
+      judgeCode: sanitizeCertRoleCode(
+        src.judgeCode !== undefined ? src.judgeCode : src.certRoleCodeJudge,
+        DEFAULT_CONFIG.certRoleCodeJudge || 'ก'
+      ),
+      locked: Boolean(src.locked !== undefined ? src.locked : src.certFormatLocked)
+    };
+  }
+
+  function normalizeCertCodeForCompare(code) {
+    return toArabicNumerals(String(code || ''))
+      .replace(/\s+/g, '')
+      .trim()
+      .toUpperCase();
+  }
+
+  function extractTeamCertToken(r) {
+    if (!r) return '0000';
+    const rawCert = toArabicNumerals(String(r.cert_code || '').trim());
+    const mCert = rawCert.match(/-(\d{3,6})$/);
+    if (mCert && mCert[1]) return mCert[1].padStart(4, '0');
+    const regDigits = toArabicNumerals(String(r.reg_id || '')).replace(/\D/g, '');
+    if (regDigits) return regDigits.slice(-4).padStart(4, '0');
+    return String(r.comp_id || '0000').replace(/\s+/g, '');
+  }
+
+  function formatCertificateCodeByMode(opts) {
+    const numCfg = getCertNumberingConfig(opts && opts.config);
+    const roleType = (opts && opts.role_type) || 'STUDENT';
+    const roleCode =
+      roleType === 'TEACHER'
+        ? numCfg.teacherCode
+        : roleType === 'JUDGE'
+        ? numCfg.judgeCode
+        : numCfg.studentCode;
+    const seqStr = String(Math.max(1, Number(opts && opts.seqNum) || 1)).padStart(4, '0');
+    if (numCfg.mode === 'sequential' || roleType === 'JUDGE') {
+      return numCfg.prefix + roleCode + seqStr;
+    }
+    const teamToken = String((opts && opts.teamToken) || '0000');
+    const memberNo = Math.max(1, Number(opts && opts.memberIndex) + 1 || 1);
+    return numCfg.prefix + teamToken + '-' + roleCode + memberNo;
+  }
+
+  function getCertPublishRiskStatus() {
+    const certOpenPublic = isFeatureOpenToPublic('certificates');
+    const regsByComp = {};
+    (state.registrations || []).forEach(function (r) {
+      if (!regsByComp[r.comp_id]) regsByComp[r.comp_id] = [];
+      regsByComp[r.comp_id].push(r);
+    });
+    const announcedCount = (state.competitions || []).filter(function (c) {
+      return isCompetitionResultAnnounced(c, regsByComp[c.comp_id] || []);
+    }).length;
+    return {
+      certOpenPublic: certOpenPublic,
+      announcedCount: announcedCount
+    };
+  }
+
+  function readCertFormNumberingDraft() {
+    const saved = getCertNumberingConfig();
+    const prefixEl = document.getElementById('cfgCertPrefixInput');
+    const seqRadio = document.getElementById('certNumberModeSequential');
+    const teamRadio = document.getElementById('certNumberModeTeamFixed');
+    const stuEl = document.getElementById('cfgCertCodeStudent');
+    const tchEl = document.getElementById('cfgCertCodeTeacher');
+    const jdgEl = document.getElementById('cfgCertCodeJudge');
+    const mode =
+      seqRadio && seqRadio.checked
+        ? 'sequential'
+        : teamRadio && teamRadio.checked
+        ? 'team_fixed'
+        : saved.mode;
+    return {
+      prefix: prefixEl ? String(prefixEl.value || '').trim() || saved.prefix : saved.prefix,
+      mode: mode,
+      studentCode: stuEl ? sanitizeCertRoleCode(stuEl.value, saved.studentCode) : saved.studentCode,
+      teacherCode: tchEl ? sanitizeCertRoleCode(tchEl.value, saved.teacherCode) : saved.teacherCode,
+      judgeCode: jdgEl ? sanitizeCertRoleCode(jdgEl.value, saved.judgeCode) : saved.judgeCode,
+      locked: Boolean(state.config && state.config.certFormatLocked)
+    };
+  }
+
+  function renderCertNumberLivePreview(draftOverride) {
+    const box = document.getElementById('certNumberLivePreview');
+    if (!box) return;
+    const numCfg = getCertNumberingConfig(draftOverride);
+    const stuEx = formatCertificateCodeByMode({
+      config: numCfg,
+      role_type: 'STUDENT',
+      seqNum: 1,
+      teamToken: '6067',
+      memberIndex: 0
+    });
+    const tchEx = formatCertificateCodeByMode({
+      config: numCfg,
+      role_type: 'TEACHER',
+      seqNum: 1,
+      teamToken: '6067',
+      memberIndex: 0
+    });
+    const jdgEx = formatCertificateCodeByMode({
+      config: numCfg,
+      role_type: 'JUDGE',
+      seqNum: 1,
+      teamToken: '',
+      memberIndex: 0
+    });
+    const modeLabel =
+      numCfg.mode === 'sequential'
+        ? 'โหมด: รันเลขต่อเนื่อง 4 หลัก (แบบ ก)'
+        : 'โหมด: ผูกติดเลขทีม 4 หลักท้ายใบสมัคร';
+
+    box.innerHTML =
+      '<div class="flex flex-wrap items-center justify-between gap-1 text-slate-600">' +
+        '<span class="font-heading font-semibold text-slate-800">ตัวอย่างเลขเกียรติบัตรที่จะออกจริง</span>' +
+        '<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-heading text-[10px]">' + escapeHtml(modeLabel) + '</span>' +
+      '</div>' +
+      '<div class="grid grid-cols-1 sm:grid-cols-3 gap-2">' +
+        '<div class="p-2 rounded bg-slate-50 border border-slate-200/80">' +
+          '<div class="text-[10px] text-slate-500">นักเรียน (รหัส ' + escapeHtml(numCfg.studentCode) + ')</div>' +
+          '<div class="font-mono font-semibold text-slate-900 text-xs mt-0.5 break-all">' + escapeHtml(stuEx) + '</div>' +
+          '<div class="font-mono text-[10px] text-slate-500 break-all">' + escapeHtml(toThaiNumerals(stuEx)) + '</div>' +
+        '</div>' +
+        '<div class="p-2 rounded bg-slate-50 border border-slate-200/80">' +
+          '<div class="text-[10px] text-slate-500">ครูผู้ฝึกสอน (รหัส ' + escapeHtml(numCfg.teacherCode) + ')</div>' +
+          '<div class="font-mono font-semibold text-slate-900 text-xs mt-0.5 break-all">' + escapeHtml(tchEx) + '</div>' +
+          '<div class="font-mono text-[10px] text-slate-500 break-all">' + escapeHtml(toThaiNumerals(tchEx)) + '</div>' +
+        '</div>' +
+        '<div class="p-2 rounded bg-slate-50 border border-slate-200/80">' +
+          '<div class="text-[10px] text-slate-500">กรรมการ (รหัส ' + escapeHtml(numCfg.judgeCode) + ')</div>' +
+          '<div class="font-mono font-semibold text-slate-900 text-xs mt-0.5 break-all">' + escapeHtml(jdgEx) + '</div>' +
+          '<div class="font-mono text-[10px] text-slate-500 break-all">' + escapeHtml(toThaiNumerals(jdgEx)) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="text-[10px] text-slate-500">หมายเหตุ: ระบบสแกน QR Code รองรับการค้นหาเทียบย้อนหลังทั้งรูปแบบเดิม (-S1/-T1) และรูปแบบใหม่</div>';
+  }
+
   function updateCertConfigUI() {
     const cfg = state.config || DEFAULT_CONFIG;
+    const numCfg = getCertNumberingConfig(cfg);
     const prefixInput = document.getElementById('cfgCertPrefixInput');
     const issueDateInput = document.getElementById('cfgCertIssueDateInput');
     const signerNameInput = document.getElementById('cfgCertSignerNameInput');
     const signerPosInput = document.getElementById('cfgCertSignerPosInput');
     const signerOrgInput = document.getElementById('cfgCertSignerOrgInput');
+    const stuCodeInput = document.getElementById('cfgCertCodeStudent');
+    const tchCodeInput = document.getElementById('cfgCertCodeTeacher');
+    const jdgCodeInput = document.getElementById('cfgCertCodeJudge');
+    const teamRadio = document.getElementById('certNumberModeTeamFixed');
+    const seqRadio = document.getElementById('certNumberModeSequential');
 
-    if (prefixInput && document.activeElement !== prefixInput) prefixInput.value = cfg.certPrefix || 'WYK74-2569-';
+    if (prefixInput && document.activeElement !== prefixInput) prefixInput.value = numCfg.prefix;
     if (issueDateInput && document.activeElement !== issueDateInput) issueDateInput.value = cfg.certIssueDate || '25 พฤศจิกายน พุทธศักราช 2569';
     if (signerNameInput && document.activeElement !== signerNameInput) signerNameInput.value = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
     if (signerPosInput && document.activeElement !== signerPosInput) signerPosInput.value = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
     if (signerOrgInput && document.activeElement !== signerOrgInput) signerOrgInput.value = cfg.certSignerOrg || 'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3';
+    if (stuCodeInput && document.activeElement !== stuCodeInput) stuCodeInput.value = numCfg.studentCode;
+    if (tchCodeInput && document.activeElement !== tchCodeInput) tchCodeInput.value = numCfg.teacherCode;
+    if (jdgCodeInput && document.activeElement !== jdgCodeInput) jdgCodeInput.value = numCfg.judgeCode;
+    if (teamRadio && seqRadio) {
+      teamRadio.checked = numCfg.mode !== 'sequential';
+      seqRadio.checked = numCfg.mode === 'sequential';
+    }
+
+    const isFormatLocked = Boolean(numCfg.locked);
+    [prefixInput, stuCodeInput, tchCodeInput, jdgCodeInput, teamRadio, seqRadio].forEach(function (el) {
+      if (!el) return;
+      el.disabled = isFormatLocked;
+      if (el.type === 'text') {
+        el.classList.toggle('bg-slate-100', isFormatLocked);
+        el.classList.toggle('text-slate-500', isFormatLocked);
+        el.classList.toggle('cursor-not-allowed', isFormatLocked);
+        el.classList.toggle('bg-white', !isFormatLocked);
+      }
+    });
+    const lockBtn = document.getElementById('btnToggleCertFormatLock');
+    const lockBtnText = document.getElementById('certFormatLockBtnText');
+    if (lockBtn && lockBtnText) {
+      if (isFormatLocked) {
+        lockBtnText.textContent = 'ล็อกอยู่ (กดเพื่อปลดล็อกแก้ไข)';
+        lockBtn.className = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-heading text-[11px] font-semibold transition cursor-pointer shrink-0';
+      } else {
+        lockBtnText.textContent = 'ล็อกรูปแบบเลข';
+        lockBtn.className = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-heading text-[11px] font-semibold transition cursor-pointer shrink-0';
+      }
+    }
+
+    const risk = getCertPublishRiskStatus();
+    const warnBanner = document.getElementById('certFormatPublishWarningBanner');
+    const warnText = document.getElementById('certFormatPublishWarningText');
+    if (warnBanner && warnText) {
+      if (risk.certOpenPublic) {
+        warnBanner.className = 'rounded-lg border border-rose-200 bg-rose-50 text-rose-900 p-2.5 text-[11px] leading-relaxed flex items-start gap-2';
+        warnBanner.classList.remove('hidden');
+        warnText.innerHTML =
+          '<strong>คำเตือนสำคัญ: แท็บเกียรติบัตรออนไลน์เปิดให้สาธารณะดาวน์โหลดแล้ว</strong>' +
+          (risk.announcedCount > 0 ? ' (ประกาศผลแล้ว ' + risk.announcedCount + ' รายการ)' : '') +
+          ' — หากเปลี่ยนรูปแบบเลขตอนนี้ ผู้ที่ดาวน์โหลดไปก่อนหน้าจะมีเลขคนละรูปแบบกับหน้าเว็บ (แนะนำให้กดล็อกรูปแบบเลขไว้; ทั้งนี้ QR Code ใบเดิมยังสแกนตรวจสอบพบได้ปกติ)';
+      } else if (risk.announcedCount > 0) {
+        warnBanner.className = 'rounded-lg border border-amber-200 bg-amber-50 text-amber-900 p-2.5 text-[11px] leading-relaxed flex items-start gap-2';
+        warnBanner.classList.remove('hidden');
+        warnText.innerHTML =
+          '<strong>ข้อควรระวัง: มีรายการแข่งขันที่ประกาศผลแล้ว ' + risk.announcedCount + ' รายการ</strong> — โปรดตรวจสอบรูปแบบเลขที่ต้องการให้เรียบร้อยก่อนเปิดแท็บเกียรติบัตรให้คนทั่วไป (ระบบมีกล่องยืนยันให้ตรวจซ้ำก่อนเปลี่ยนเสมอ)';
+      } else {
+        warnBanner.className = 'hidden';
+        warnText.innerHTML = '';
+      }
+    }
+    renderCertNumberLivePreview(numCfg);
 
     // Signature Preview & Live Position Controls
     const sigPreview = document.getElementById('cfgCertSigPreview');
@@ -1678,6 +1933,7 @@
 
     let visibleBtnCount = 0;
     const effAdmin = isEffectiveAdmin();
+    const ALWAYS_SHOW_SIDEBAR_KEYS = { results: true, certificates: true };
 
     keys.forEach(function (key) {
       const isPublic = isFeatureOpenToPublic(key);
@@ -1692,13 +1948,16 @@
 
       // 1. Sidebar Button Visibility
       if (btn) {
-        if (canAccess) {
+        if (canAccess || ALWAYS_SHOW_SIDEBAR_KEYS[key]) {
           btn.classList.remove('hidden');
           visibleBtnCount++;
           if (badge) {
             if (effAdmin && !isPublic) {
-              badge.classList.remove('hidden');
+              badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-normal shrink-0';
               badge.textContent = 'แอดมิน';
+            } else if (!effAdmin && !isPublic && ALWAYS_SHOW_SIDEBAR_KEYS[key]) {
+              badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-normal shrink-0';
+              badge.textContent = key === 'results' ? 'รอประกาศ' : 'รอเปิด';
             } else {
               badge.classList.add('hidden');
             }
@@ -1727,17 +1986,21 @@
                   '<span class="font-heading font-semibold">สถานะการแสดงผล: เปิดให้คนทั่วไปเข้าชมแล้ว</span>' +
                   '<span class="text-emerald-700 text-[11px]">(' + (setting === 'open' ? 'แอดมินสั่งเปิดทันที' : 'ตามกำหนดการ') + ')</span>' +
                 '</div>' +
-                '<button type="button" data-banner-feature="' + key + '" data-action="auto" class="px-3 py-1 rounded-md bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-heading text-[11px] font-medium transition cursor-pointer shrink-0">' +
-                  'ล็อกกลับตามกำหนดการเดิม' +
+                '<button type="button" data-banner-feature="' + key + '" data-action="hidden" class="px-3 py-1 rounded-md bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-heading text-[11px] font-medium transition cursor-pointer shrink-0">' +
+                  'ซ่อนไว้เฉพาะแอดมินชั่วคราว' +
                 '</button>' +
               '</div>';
           } else {
+            const hiddenSubtext =
+              setting === 'hidden'
+                ? '(ซ่อนไว้เฉพาะแอดมิน — คนทั่วไปจะเห็นหน้าจอรอเปิดให้บริการจนกว่าแอดมินจะกดเปิด)'
+                : '(คนทั่วไปจะเห็นอัตโนมัติ ' + escapeHtml(meta.dateLabel) + ')';
             banner.innerHTML =
               '<div class="p-3 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900 mb-4 shadow-2xs">' +
-                '<div class="flex items-center gap-2">' +
+                '<div class="flex items-center gap-2 flex-wrap">' +
                   '<span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>' +
                   '<span class="font-heading font-semibold">สถานะการแสดงผล: มองเห็นเฉพาะแอดมิน</span>' +
-                  '<span class="text-amber-700 text-[11px]">(คนทั่วไปจะเห็นอัตโนมัติ ' + meta.dateLabel + ')</span>' +
+                  '<span class="text-amber-700 text-[11px]">' + hiddenSubtext + '</span>' +
                 '</div>' +
                 '<button type="button" data-banner-feature="' + key + '" data-action="open" class="px-3.5 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-heading text-[11px] font-semibold transition shadow-2xs cursor-pointer shrink-0">' +
                   'เปิดให้คนทั่วไปดูทันที' +
@@ -2234,6 +2497,29 @@
   function renderLockedNotice(featureKey, containerEl) {
     if (!containerEl) return;
     const meta = FEATURE_MILESTONES[featureKey];
+    const setting = getFeatureVisibilitySetting(featureKey);
+    const isAdminHidden = setting === 'hidden';
+    let headingText = 'ยังไม่ถึงกำหนดเปิดให้บริการ';
+    let subText = 'ระบบ' + meta.name + ' มีกำหนดเปิดให้เข้าชมในวันที่';
+    let pillText = meta.dateLabel || 'เมื่อแอดมินเปิดให้บริการ';
+
+    if (isAdminHidden) {
+      headingText =
+        featureKey === 'results'
+          ? 'อยู่ระหว่างบันทึกและตรวจสอบผลการแข่งขัน'
+          : featureKey === 'certificates'
+          ? 'ระบบเกียรติบัตรออนไลน์ยังไม่เปิดให้ดาวน์โหลด'
+          : 'ยังไม่เปิดให้บริการชั่วคราว';
+      subText =
+        'คณะกรรมการกำลังดำเนินการบันทึกและตรวจสอบความถูกต้องของข้อมูล แอดมินจะเปิดให้เข้าชมพร้อมกันเมื่อดำเนินการเรียบร้อยแล้ว';
+      pillText =
+        featureKey === 'results'
+          ? 'สถานะ: รอประกาศผลอย่างเป็นทางการ'
+          : featureKey === 'certificates'
+          ? 'สถานะ: รอเปิดระบบดาวน์โหลดเกียรติบัตร'
+          : meta.dateLabel || 'อยู่ระหว่างตรวจสอบข้อมูล';
+    }
+
     containerEl.className = 'bg-white rounded-2xl border border-slate-200 p-8 text-center max-w-lg mx-auto my-8 space-y-4 shadow-sm';
     containerEl.innerHTML =
       '<div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">' +
@@ -2242,10 +2528,10 @@
         '</svg>' +
       '</div>' +
       '<div class="space-y-1.5">' +
-        '<h3 class="text-base font-bold font-heading text-slate-900">ยังไม่ถึงกำหนดเปิดให้บริการ</h3>' +
-        '<p class="text-xs text-slate-600">ระบบ' + escapeHtml(meta.name) + ' มีกำหนดเปิดให้เข้าชมในวันที่</p>' +
+        '<h3 class="text-base font-bold font-heading text-slate-900">' + escapeHtml(headingText) + '</h3>' +
+        '<p class="text-xs text-slate-600 leading-relaxed">' + escapeHtml(subText) + '</p>' +
         '<div class="font-heading font-semibold text-amber-800 bg-amber-50 border border-amber-200 py-1.5 px-3 rounded-lg inline-block text-xs">' +
-          escapeHtml(meta.dateLabel) +
+          escapeHtml(pillText) +
         '</div>' +
       '</div>' +
       '<div class="pt-1 text-xs text-slate-500">' +
@@ -2665,6 +2951,43 @@
     });
   }
 
+  function getSyncableCertConfigPayload() {
+    const cfg = state.config || DEFAULT_CONFIG;
+    const numCfg = getCertNumberingConfig(cfg);
+    return {
+      certPrefix: numCfg.prefix,
+      certNumberMode: numCfg.mode,
+      certRoleCodeStudent: numCfg.studentCode,
+      certRoleCodeTeacher: numCfg.teacherCode,
+      certRoleCodeJudge: numCfg.judgeCode,
+      certFormatLocked: Boolean(numCfg.locked),
+      certIssueDate: String(cfg.certIssueDate || '').trim(),
+      certSignerName: String(cfg.certSignerName || '').trim(),
+      certSignerPos: String(cfg.certSignerPos || '').trim(),
+      certSignerOrg: String(cfg.certSignerOrg || '').trim(),
+      certNumeralMode: getAdminCertNumeralMode()
+    };
+  }
+
+  async function syncFeatureVisibilityToGas() {
+    if (!state.isAdmin || !state.gasWebAppUrl) return { ok: true, localOnly: true };
+    const vis = (state.config && state.config.featureVisibility) || DEFAULT_CONFIG.featureVisibility;
+    return await postToGoogleSheets({
+      action: 'save_feature_visibility',
+      featureVisibility: vis,
+      admin_pin: state.adminPin
+    });
+  }
+
+  async function syncCertConfigToGas() {
+    if (!state.isAdmin || !state.gasWebAppUrl) return { ok: true, localOnly: true };
+    return await postToGoogleSheets({
+      action: 'save_cert_config',
+      certConfig: getSyncableCertConfigPayload(),
+      admin_pin: state.adminPin
+    });
+  }
+
   function setFeatureVisibility(featureKey, action) {
     if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
     if (!state.config.featureVisibility) {
@@ -2673,6 +2996,11 @@
     state.config.featureVisibility[featureKey] = action;
     saveState();
     renderAll();
+    syncFeatureVisibilityToGas().then(function (res) {
+      if (res && !res.ok) {
+        showToast('บันทึกในเครื่องแล้ว (ซิงก์ข้ามเครื่องเมื่อ Deploy Code.gs ใหม่)', 'info');
+      }
+    });
     const meta = FEATURE_MILESTONES[featureKey];
     const metaName = (meta && meta.name) || featureKey;
     let label = '';
@@ -2696,6 +3024,7 @@
   async function syncFromGoogleSheets(showNotification) {
     if (!state.gasWebAppUrl) {
       renderAll();
+      checkCertificateHashVerification({ fromSync: true });
       if (showNotification) {
         showToast('รีเฟรชข้อมูลล่าสุดเรียบร้อยแล้ว', 'success');
       }
@@ -2731,13 +3060,63 @@
           state.registrationOpen = regOpenFlag;
           localStorage.setItem(REG_OPEN_KEY, String(regOpenFlag));
         }
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
         if (data.config && Array.isArray(data.config.operationTimeline) && data.config.operationTimeline.length) {
-          if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
           state.config.operationTimeline = data.config.operationTimeline;
+        }
+        if (data.config && data.config.featureVisibility && typeof data.config.featureVisibility === 'object') {
+          if (!state.config.featureVisibility) {
+            state.config.featureVisibility = Object.assign({}, DEFAULT_CONFIG.featureVisibility);
+          }
+          const validVisKeys = [
+            'schedule',
+            'venue',
+            'judges',
+            'judge_certs',
+            'results',
+            'certificates',
+            'id_cards',
+            'substitution_form'
+          ];
+          const validVisVals = ['open', 'auto', 'hidden', 'disabled'];
+          validVisKeys.forEach(function (vk) {
+            const v = data.config.featureVisibility[vk];
+            if (validVisVals.indexOf(v) !== -1) {
+              state.config.featureVisibility[vk] = v;
+            }
+          });
+        }
+        if (data.config && data.config.certConfig && typeof data.config.certConfig === 'object') {
+          const cc = data.config.certConfig;
+          if (cc.certPrefix) state.config.certPrefix = String(cc.certPrefix).trim() || 'WYK74-2569-';
+          if (cc.certNumberMode === 'sequential' || cc.certNumberMode === 'team_fixed') {
+            state.config.certNumberMode = cc.certNumberMode;
+          }
+          if (cc.certRoleCodeStudent) {
+            state.config.certRoleCodeStudent = sanitizeCertRoleCode(cc.certRoleCodeStudent, 'น');
+          }
+          if (cc.certRoleCodeTeacher) {
+            state.config.certRoleCodeTeacher = sanitizeCertRoleCode(cc.certRoleCodeTeacher, 'ค');
+          }
+          if (cc.certRoleCodeJudge) {
+            state.config.certRoleCodeJudge = sanitizeCertRoleCode(cc.certRoleCodeJudge, 'ก');
+          }
+          if (typeof cc.certFormatLocked === 'boolean') {
+            state.config.certFormatLocked = cc.certFormatLocked;
+          }
+          if (cc.certIssueDate) state.config.certIssueDate = String(cc.certIssueDate).trim();
+          if (cc.certSignerName !== undefined) state.config.certSignerName = String(cc.certSignerName).trim();
+          if (cc.certSignerPos) state.config.certSignerPos = String(cc.certSignerPos).trim();
+          if (cc.certSignerOrg) state.config.certSignerOrg = String(cc.certSignerOrg).trim();
+          if (['thai', 'arabic', 'both'].indexOf(cc.certNumeralMode) !== -1) {
+            state.config.certNumeralMode = cc.certNumeralMode;
+            state.certNumeralMode = cc.certNumeralMode;
+          }
         }
         saveState();
         populateStaticSelects();
         renderAll();
+        checkCertificateHashVerification({ fromSync: true });
         if (showNotification) {
           showToast('ซิงก์ข้อมูลจาก Google Sheets สำเร็จ', 'success');
         }
@@ -2745,6 +3124,7 @@
         throw new Error((data && data.error) || 'ไม่สามารถดึงข้อมูลจาก Apps Script ได้');
       }
     } catch (err) {
+      checkCertificateHashVerification({ fromSync: true });
       if (showNotification) {
         showToast('ไม่สามารถดึงข้อมูลจาก Apps Script: ' + err.message, 'warning');
       }
@@ -2933,7 +3313,6 @@
     const regSchoolSelect = document.getElementById('regSchoolSelect');
     const schoolViewSelect = document.getElementById('schoolViewSelect');
     const prevRegSchool = regSchoolSelect ? regSchoolSelect.value : '';
-    const prevViewSchool = schoolViewSelect ? schoolViewSelect.value : '';
 
     if (regSchoolSelect) {
       let html = '<option value="">-- เลือกโรงเรียนในกลุ่มวังยาวเขวาไร่ดอนกลาง --</option>';
@@ -2951,25 +3330,29 @@
       if (prevRegSchool) regSchoolSelect.value = prevRegSchool;
     }
 
-    if (schoolViewSelect) {
-      let html = '';
-      state.schools.forEach(function (s) {
-        html +=
-          '<option value="' +
-          escapeHtml(s.school_name) +
-          '">' +
-          escapeHtml(s.school_name) +
-          ' (' +
-          escapeHtml(s.subdistrict || '') +
-          ')</option>';
-      });
-      schoolViewSelect.innerHTML = html;
-      if (prevViewSchool && state.schools.some((s) => s.school_name === prevViewSchool)) {
-        schoolViewSelect.value = prevViewSchool;
+    ['schoolViewSelect', 'resSchoolSelect'].forEach(function (selId) {
+      const el = document.getElementById(selId);
+      if (!el) return;
+      const prev = el.value || '';
+      el.innerHTML = state.schools
+        .map(function (s) {
+          return (
+            '<option value="' +
+            escapeHtml(s.school_name) +
+            '">' +
+            escapeHtml(s.school_name) +
+            ' (' +
+            escapeHtml(s.subdistrict || '') +
+            ')</option>'
+          );
+        })
+        .join('');
+      if (prev && state.schools.some((s) => s.school_name === prev)) {
+        el.value = prev;
       } else if (state.schools.length > 0) {
-        schoolViewSelect.value = state.schools[0].school_name;
+        el.value = state.schools[0].school_name;
       }
-    }
+    });
 
     ['judgeSchoolFilter', 'certSchoolFilter', 'schedViewSchoolFilter'].forEach(function (id) {
       const el = document.getElementById(id);
@@ -7909,79 +8292,30 @@
     ];
 
     let seq = 1;
-    state.registrations.forEach(function (r) {
-      if (isRegistrationAbsent(r)) return;
-      const scoreVal = hasValidScore(r) ? r.score : '';
-      const medalVal = r.medal || (scoreVal !== '' ? calculateMedalFromScore(scoreVal) : 'เข้าร่วม');
-      const awardVal = r.award_title || medalVal;
-      const baseCert = r.cert_code || ('CERT-74-' + r.comp_id);
-
-      (r.students || []).forEach(function (s, idx) {
-        rows.push([
-          seq++,
-          baseCert + '-S' + (idx + 1),
-          'นักเรียนผู้เข้าแข่งขัน',
-          toFullPrefix(s.prefix) || '',
-          s.name || '',
-          formatFullNameForPrint(s.prefix, s.name),
-          s.grade || '',
-          r.school_name,
-          r.comp_id,
-          r.learning_area,
-          r.comp_name,
-          r.level,
-          r.team_type,
-          scoreVal,
-          medalVal,
-          awardVal,
-          r.reg_id
-        ]);
-      });
-
-      (r.teachers || []).forEach(function (t, idx) {
-        rows.push([
-          seq++,
-          baseCert + '-T' + (idx + 1),
-          'ครูผู้ฝึกซ้อม',
-          toFullPrefix(t.prefix) || '',
-          t.name || '',
-          formatFullNameForPrint(t.prefix, t.name),
-          'ครูผู้ฝึกซ้อม',
-          r.school_name,
-          r.comp_id,
-          r.learning_area,
-          r.comp_name,
-          r.level,
-          r.team_type,
-          scoreVal,
-          medalVal,
-          awardVal,
-          r.reg_id
-        ]);
-      });
-    });
-
-    (state.judges || []).forEach(function (j) {
-      const jName = j.judge_name || j.full_name || '';
-      const jCert = j.cert_code || ('WYK74-' + j.judge_id);
+    const allEntries = buildAllCertificateEntries({ includeAllJudgesForVerify: true });
+    allEntries.forEach(function (item) {
       rows.push([
         seq++,
-        jCert,
-        'คณะกรรมการตัดสิน',
-        toFullPrefix(j.prefix) || '',
-        jName,
-        formatFullNameForPrint(j.prefix, jName),
-        j.role || 'กรรมการตัดสิน',
-        j.school_name || '',
-        j.comp_id || '',
-        j.learning_area || '',
-        j.comp_name || '',
-        j.level || '',
-        'กรรมการตัดสิน',
-        '',
-        'คณะกรรมการตัดสิน',
-        j.role || 'กรรมการตัดสิน',
-        j.judge_id
+        item.cert_code,
+        item.role_label,
+        toFullPrefix(item.prefix_raw) || '',
+        item.name_raw || '',
+        item.recipient_name,
+        item.role_type === 'STUDENT'
+          ? item.grade_raw || ''
+          : item.role_type === 'TEACHER'
+          ? 'ครูผู้ฝึกซ้อม'
+          : item.grade_raw || 'กรรมการตัดสิน',
+        item.school_name || '',
+        item.comp_id || '',
+        item.learning_area || '',
+        item.comp_name || '',
+        item.level || '',
+        item.role_type === 'JUDGE' ? 'กรรมการตัดสิน' : item.team_type || '',
+        item.role_type === 'JUDGE' ? '' : item.csv_score !== undefined ? item.csv_score : '',
+        item.role_type === 'JUDGE' ? 'คณะกรรมการตัดสิน' : item.csv_medal || 'เข้าร่วม',
+        item.role_type === 'JUDGE' ? item.grade_raw || 'กรรมการตัดสิน' : item.csv_award || 'เข้าร่วม',
+        item.role_type === 'JUDGE' ? item.judge_id || '' : item.reg_id || ''
       ]);
     });
 
@@ -10225,13 +10559,26 @@
     containerEl.querySelectorAll('[data-print-judge-cert]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         const jId = btn.getAttribute('data-print-judge-cert');
+        const matchedEntry = buildAllCertificateEntries({ includeAllJudgesForVerify: true }).find(function (item) {
+          return item && item.role_type === 'JUDGE' && item.judge_id === jId;
+        });
+        if (matchedEntry) {
+          printCertificatesWindow([matchedEntry]);
+          return;
+        }
         const judge = (state.judges || []).find((x) => x.judge_id === jId);
         if (judge) {
+          const jIdx = (state.judges || []).indexOf(judge);
           const jName = judge.judge_name || judge.full_name || '';
           const jRole = judge.role || 'กรรมการ';
           printCertificatesWindow([
             {
-              cert_code: judge.cert_code || ('WYK74-' + judge.judge_id),
+              cert_code: formatCertificateCodeByMode({
+                role_type: 'JUDGE',
+                seqNum: jIdx >= 0 ? jIdx + 1 : 1,
+                teamToken: '',
+                memberIndex: 0
+              }),
               role_type: 'JUDGE',
               role_label: 'คณะกรรมการตัดสิน',
               recipient_name: formatFullNameForPrint(judge.prefix, jName),
@@ -10242,7 +10589,8 @@
               learning_area: judge.learning_area || '',
               level: judge.level || '',
               medal: 'คณะกรรมการตัดสิน',
-              award_title: 'ได้ปฏิบัติหน้าที่' + jRole + 'ตัดสินการแข่งขัน'
+              award_title: 'ได้ปฏิบัติหน้าที่' + jRole + 'ตัดสินการแข่งขัน',
+              cert_ready: true
             }
           ]);
         }
@@ -11387,27 +11735,155 @@
   }
 
   // ==========================================
-  // PHASE 2: TAB 6 — RESULTS & MEDAL SUMMARY (3 SUBVIEWS)
+  // PHASE 2: TAB 6 — RESULTS & MEDAL SUMMARY (4 SUBVIEWS)
   // ==========================================
+  function computeAllSchoolsSummaryStats() {
+    const schoolStats = state.schools.map(function (s) {
+      const regs = state.registrations.filter((r) => r.school_name === s.school_name);
+      let rank1 = 0;
+      let rank2 = 0;
+      let rank3 = 0;
+      let rankOther = 0;
+      let gold = 0;
+      let silver = 0;
+      let bronze = 0;
+      let part = 0;
+      let absent = 0;
+      let districtRep = 0;
+
+      regs.forEach(function (r) {
+        if (isRegistrationAbsent(r)) {
+          absent++;
+          return;
+        }
+        const isBye = isRegistrationByeRep(r);
+        if (isBye || isDistrictRepresentative(r)) {
+          districtRep++;
+        }
+        if (isBye) {
+          rank1++;
+          return;
+        }
+        if (!hasValidScore(r)) return;
+
+        const rk = Number(r.rank || 0);
+        if (rk === 1) rank1++;
+        else if (rk === 2) rank2++;
+        else if (rk === 3) rank3++;
+        else if (rk > 3) rankOther++;
+
+        const m = r.medal || calculateMedalFromScore(r.score);
+        if (m === 'เหรียญทอง') gold++;
+        else if (m === 'เหรียญเงิน') silver++;
+        else if (m === 'เหรียญทองแดง') bronze++;
+        else if (m) part++;
+      });
+
+      return {
+        school_name: s.school_name,
+        subdistrict: s.subdistrict || '',
+        total_regs: regs.length,
+        rank1: rank1,
+        rank2: rank2,
+        rank3: rank3,
+        rankOther: rankOther,
+        gold: gold,
+        silver: silver,
+        bronze: bronze,
+        part: part,
+        absent: absent,
+        district_rep: districtRep,
+        total_medals: gold + silver + bronze + part
+      };
+    });
+
+    const rankSorted = schoolStats.slice().sort(function (a, b) {
+      if (b.rank1 !== a.rank1) return b.rank1 - a.rank1;
+      if (b.rank2 !== a.rank2) return b.rank2 - a.rank2;
+      if (b.rank3 !== a.rank3) return b.rank3 - a.rank3;
+      return b.total_regs - a.total_regs;
+    });
+
+    const medalSorted = schoolStats.slice().sort(function (a, b) {
+      if (b.gold !== a.gold) return b.gold - a.gold;
+      if (b.silver !== a.silver) return b.silver - a.silver;
+      if (b.bronze !== a.bronze) return b.bronze - a.bronze;
+      return b.total_regs - a.total_regs;
+    });
+
+    const totals = schoolStats.reduce(
+      function (acc, st) {
+        acc.total_regs += st.total_regs;
+        acc.rank1 += st.rank1;
+        acc.rank2 += st.rank2;
+        acc.rank3 += st.rank3;
+        acc.rankOther += st.rankOther;
+        acc.gold += st.gold;
+        acc.silver += st.silver;
+        acc.bronze += st.bronze;
+        acc.part += st.part;
+        acc.absent += st.absent;
+        acc.district_rep += st.district_rep;
+        acc.total_medals += st.total_medals;
+        return acc;
+      },
+      {
+        total_regs: 0,
+        rank1: 0,
+        rank2: 0,
+        rank3: 0,
+        rankOther: 0,
+        gold: 0,
+        silver: 0,
+        bronze: 0,
+        part: 0,
+        absent: 0,
+        district_rep: 0,
+        total_medals: 0
+      }
+    );
+
+    return {
+      schoolStats: schoolStats,
+      rankSorted: rankSorted,
+      medalSorted: medalSorted,
+      totals: totals
+    };
+  }
+
+  function openSchoolResultsSubviewFor(schoolName) {
+    if (!schoolName) return;
+    const sel = document.getElementById('resSchoolSelect');
+    if (sel) sel.value = schoolName;
+    state.resultSubview = 'by-school';
+    renderResultsTab();
+    const targetEl = document.getElementById('resultSubviewBySchool');
+    if (targetEl && typeof targetEl.scrollIntoView === 'function') {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   function renderResultsTab() {
     // Subview buttons state
     document.querySelectorAll('.result-subview-btn').forEach(function (btn) {
       const sv = btn.getAttribute('data-result-subview');
       if (sv === state.resultSubview) {
         btn.className =
-          'result-subview-btn px-3.5 py-2 rounded-lg font-heading text-xs font-semibold bg-slate-900 text-white transition';
+          'result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-semibold bg-slate-900 text-white transition cursor-pointer';
       } else {
         btn.className =
-          'result-subview-btn px-3.5 py-2 rounded-lg font-heading text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition';
+          'result-subview-btn px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-lg font-heading text-center text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer';
       }
     });
 
     const viewComp = document.getElementById('resultSubviewByComp');
     const viewRank = document.getElementById('resultSubviewByRank');
     const viewMedal = document.getElementById('resultSubviewByMedal');
+    const viewSchool = document.getElementById('resultSubviewBySchool');
     if (viewComp) viewComp.classList.toggle('hidden', state.resultSubview !== 'by-comp');
     if (viewRank) viewRank.classList.toggle('hidden', state.resultSubview !== 'by-rank');
     if (viewMedal) viewMedal.classList.toggle('hidden', state.resultSubview !== 'by-medal');
+    if (viewSchool) viewSchool.classList.toggle('hidden', state.resultSubview !== 'by-school');
 
     // Update district representative criteria badge text
     const criteriaTextEl = document.getElementById('resDistrictCriteriaText');
@@ -11682,61 +12158,9 @@
     }
 
     // 2. Render Subview: By School Rank (ชนะเลิศ / รองชนะเลิศ) & 3. By School Medal
-    const schoolStats = state.schools.map(function (s) {
-      const regs = state.registrations.filter((r) => r.school_name === s.school_name);
-      let rank1 = 0;
-      let rank2 = 0;
-      let rank3 = 0;
-      let rankOther = 0;
-      let gold = 0;
-      let silver = 0;
-      let bronze = 0;
-      let part = 0;
-      let absent = 0;
-
-      regs.forEach(function (r) {
-        if (isRegistrationAbsent(r)) {
-          absent++;
-          return;
-        }
-        if (!hasValidScore(r)) return;
-
-        const rk = Number(r.rank || 0);
-        if (rk === 1) rank1++;
-        else if (rk === 2) rank2++;
-        else if (rk === 3) rank3++;
-        else if (rk > 3) rankOther++;
-
-        const m = r.medal || calculateMedalFromScore(r.score);
-        if (m === 'เหรียญทอง') gold++;
-        else if (m === 'เหรียญเงิน') silver++;
-        else if (m === 'เหรียญทองแดง') bronze++;
-        else if (m) part++;
-      });
-
-      return {
-        school_name: s.school_name,
-        total_regs: regs.length,
-        rank1: rank1,
-        rank2: rank2,
-        rank3: rank3,
-        rankOther: rankOther,
-        gold: gold,
-        silver: silver,
-        bronze: bronze,
-        part: part,
-        absent: absent,
-        total_medals: gold + silver + bronze + part
-      };
-    });
-
-    // Sort for Rank table
-    const rankSorted = schoolStats.slice().sort(function (a, b) {
-      if (b.rank1 !== a.rank1) return b.rank1 - a.rank1;
-      if (b.rank2 !== a.rank2) return b.rank2 - a.rank2;
-      if (b.rank3 !== a.rank3) return b.rank3 - a.rank3;
-      return b.total_regs - a.total_regs;
-    });
+    const summaryData = computeAllSchoolsSummaryStats();
+    const rankSorted = summaryData.rankSorted;
+    const medalSorted = summaryData.medalSorted;
 
     const rankBody = document.getElementById('resultsSchoolRankBody');
     if (rankBody) {
@@ -11745,7 +12169,9 @@
           return `
             <tr class="hover:bg-slate-50">
               <td class="py-2.5 px-3 text-center font-heading font-semibold text-slate-600">${idx + 1}</td>
-              <td class="py-2.5 px-3 font-heading font-semibold text-slate-900">${escapeHtml(st.school_name)}</td>
+              <td class="py-2.5 px-3">
+                <button type="button" data-open-school-result="${escapeHtml(st.school_name)}" class="text-left font-heading font-semibold text-slate-900 hover:text-blue-700 hover:underline transition cursor-pointer">${escapeHtml(st.school_name)}</button>
+              </td>
               <td class="py-2.5 px-3 text-center font-heading font-bold text-amber-800 bg-amber-50/40">${st.rank1}</td>
               <td class="py-2.5 px-3 text-center font-heading font-semibold text-slate-700">${st.rank2}</td>
               <td class="py-2.5 px-3 text-center font-heading font-semibold text-slate-700">${st.rank3}</td>
@@ -11757,33 +12183,14 @@
         .join('');
     }
 
-    // Sort for Medal table
-    const medalSorted = schoolStats.slice().sort(function (a, b) {
-      if (b.gold !== a.gold) return b.gold - a.gold;
-      if (b.silver !== a.silver) return b.silver - a.silver;
-      if (b.bronze !== a.bronze) return b.bronze - a.bronze;
-      return b.total_regs - a.total_regs;
-    });
-
-    let totalGold = 0;
-    let totalSilver = 0;
-    let totalBronze = 0;
-    let totalPart = 0;
-    schoolStats.forEach(function (st) {
-      totalGold += st.gold;
-      totalSilver += st.silver;
-      totalBronze += st.bronze;
-      totalPart += st.part;
-    });
-
     const elGoldTot = document.getElementById('medalSummaryGoldTotal');
     const elSilvTot = document.getElementById('medalSummarySilverTotal');
     const elBronTot = document.getElementById('medalSummaryBronzeTotal');
     const elPartTot = document.getElementById('medalSummaryPartTotal');
-    if (elGoldTot) elGoldTot.textContent = totalGold;
-    if (elSilvTot) elSilvTot.textContent = totalSilver;
-    if (elBronTot) elBronTot.textContent = totalBronze;
-    if (elPartTot) elPartTot.textContent = totalPart;
+    if (elGoldTot) elGoldTot.textContent = summaryData.totals.gold;
+    if (elSilvTot) elSilvTot.textContent = summaryData.totals.silver;
+    if (elBronTot) elBronTot.textContent = summaryData.totals.bronze;
+    if (elPartTot) elPartTot.textContent = summaryData.totals.part;
 
     const medalBody = document.getElementById('resultsSchoolMedalBody');
     if (medalBody) {
@@ -11792,7 +12199,9 @@
           return `
             <tr class="hover:bg-slate-50">
               <td class="py-2.5 px-3 text-center font-heading font-semibold text-slate-600">${idx + 1}</td>
-              <td class="py-2.5 px-3 font-heading font-semibold text-slate-900">${escapeHtml(st.school_name)}</td>
+              <td class="py-2.5 px-3">
+                <button type="button" data-open-school-result="${escapeHtml(st.school_name)}" class="text-left font-heading font-semibold text-slate-900 hover:text-blue-700 hover:underline transition cursor-pointer">${escapeHtml(st.school_name)}</button>
+              </td>
               <td class="py-2.5 px-3 text-center font-heading font-bold text-amber-800">${st.gold}</td>
               <td class="py-2.5 px-3 text-center font-heading font-semibold text-slate-700">${st.silver}</td>
               <td class="py-2.5 px-3 text-center font-heading font-semibold text-orange-800">${st.bronze}</td>
@@ -11804,6 +12213,15 @@
         })
         .join('');
     }
+
+    document.querySelectorAll('[data-open-school-result]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openSchoolResultsSubviewFor(btn.getAttribute('data-open-school-result'));
+      });
+    });
+
+    // 4. Render Subview: Detailed Per-School Results Report
+    renderResultsBySchoolSubview();
   }
 
   // ==========================================
@@ -13202,25 +13620,114 @@
   // ==========================================
   // PHASE 2: TAB 7 — ONLINE CERTIFICATES (เกียรติบัตรออนไลน์)
   // ==========================================
-  function buildAllCertificateEntries() {
+  function buildAltCertCodesList(opts) {
+    const numCfg = opts.numCfg;
+    const altSet = new Set();
+    const pushCode = function (val) {
+      const clean = toArabicNumerals(String(val || '').trim());
+      if (clean) altSet.add(clean);
+    };
+    pushCode(opts.activeCode);
+    pushCode(opts.legacyCode);
+    const oppositeMode = numCfg.mode === 'sequential' ? 'team_fixed' : 'sequential';
+    pushCode(
+      formatCertificateCodeByMode({
+        config: Object.assign({}, numCfg, { mode: oppositeMode }),
+        role_type: opts.role_type,
+        seqNum: opts.seqNum,
+        teamToken: opts.teamToken,
+        memberIndex: opts.memberIndex
+      })
+    );
+    const defaultRoleCfg = Object.assign({}, numCfg, {
+      studentCode: 'น',
+      teacherCode: 'ค',
+      judgeCode: 'ก'
+    });
+    ['team_fixed', 'sequential'].forEach(function (m) {
+      pushCode(
+        formatCertificateCodeByMode({
+          config: Object.assign({}, defaultRoleCfg, { mode: m }),
+          role_type: opts.role_type,
+          seqNum: opts.seqNum,
+          teamToken: opts.teamToken,
+          memberIndex: opts.memberIndex
+        })
+      );
+    });
+    if (opts.role_type === 'STUDENT' && opts.teamToken) {
+      pushCode(numCfg.prefix + opts.teamToken + '-S' + (opts.memberIndex + 1));
+    } else if (opts.role_type === 'TEACHER' && opts.teamToken) {
+      pushCode(numCfg.prefix + opts.teamToken + '-T' + (opts.memberIndex + 1));
+    }
+    return Array.from(altSet);
+  }
+
+  function buildAllCertificateEntries(options) {
     const entries = [];
-    const prefix = (state.config && state.config.certPrefix) ? state.config.certPrefix : 'WYK74-2569-';
-    state.registrations.forEach(function (r) {
-      // Never generate certificates for absent / no-show teams
-      if (isRegistrationAbsent(r)) return;
+    const numCfg = getCertNumberingConfig();
+    const prefix = numCfg.prefix;
+    const regsByComp = {};
+    (state.registrations || []).forEach(function (r) {
+      if (!regsByComp[r.comp_id]) regsByComp[r.comp_id] = [];
+      regsByComp[r.comp_id].push(r);
+    });
+
+    const sortedRegs = (state.registrations || [])
+      .filter(function (r) {
+        return !isRegistrationAbsent(r);
+      })
+      .slice()
+      .sort(function (a, b) {
+        const cmpComp = String(a.comp_id || '').localeCompare(String(b.comp_id || ''));
+        if (cmpComp !== 0) return cmpComp;
+        const rkA = Number(a.rank) > 0 ? Number(a.rank) : 9999;
+        const rkB = Number(b.rank) > 0 ? Number(b.rank) : 9999;
+        if (rkA !== rkB) return rkA - rkB;
+        const cmpSch = String(a.school_name || '').localeCompare(String(b.school_name || ''), 'th');
+        if (cmpSch !== 0) return cmpSch;
+        return String(a.reg_id || '').localeCompare(String(b.reg_id || ''));
+      });
+
+    let studentSeq = 0;
+    let teacherSeq = 0;
+    let judgeSeq = 0;
+
+    sortedRegs.forEach(function (r) {
       const compObj = state.competitions.find((c) => c.comp_id === r.comp_id);
-      const isPublished = Boolean(compObj && compObj.result_status === 'ประกาศผลแล้ว');
+      const isPublished = Boolean(compObj && isCompetitionResultAnnounced(compObj, regsByComp[r.comp_id] || []));
       const hasScore = hasValidScore(r);
       const certReady = Boolean(hasScore && isPublished);
       const medal = certReady ? r.medal || calculateMedalFromScore(r.score) : 'รอประกาศผล';
       const award = certReady
         ? r.award_title || getAwardTitleFromRank(r.rank, medal)
         : 'รอสรุปผลคะแนน';
-      const baseCert = r.cert_code || (prefix + r.comp_id);
+      const csvScore = hasScore ? r.score : '';
+      const csvMedal = r.medal || (csvScore !== '' ? calculateMedalFromScore(csvScore) : 'เข้าร่วม');
+      const csvAward = r.award_title || csvMedal;
+      const baseLegacyCert = r.cert_code || (prefix + r.comp_id);
+      const teamToken = extractTeamCertToken(r);
 
       (r.students || []).forEach(function (s, idx) {
+        studentSeq++;
+        const activeCode = formatCertificateCodeByMode({
+          config: numCfg,
+          role_type: 'STUDENT',
+          seqNum: studentSeq,
+          teamToken: teamToken,
+          memberIndex: idx
+        });
         entries.push({
-          cert_code: baseCert + '-S' + (idx + 1),
+          cert_code: activeCode,
+          alt_cert_codes: buildAltCertCodesList({
+            numCfg: numCfg,
+            activeCode: activeCode,
+            legacyCode: baseLegacyCert + '-S' + (idx + 1),
+            role_type: 'STUDENT',
+            seqNum: studentSeq,
+            teamToken: teamToken,
+            memberIndex: idx
+          }),
           role_type: 'STUDENT',
           role_label: 'นักเรียนผู้เข้าแข่งขัน',
           recipient_name: formatFullNameForPrint(s.prefix, s.name),
@@ -13233,11 +13740,20 @@
           score: r.score,
           medal: medal,
           award_title: award,
-          cert_ready: certReady
+          cert_ready: certReady,
+          reg_id: r.reg_id || '',
+          team_type: r.team_type || '',
+          prefix_raw: s.prefix || '',
+          name_raw: s.name || '',
+          grade_raw: s.grade || '',
+          csv_score: csvScore,
+          csv_medal: csvMedal,
+          csv_award: csvAward
         });
       });
 
       (r.teachers || []).forEach(function (t, idx) {
+        teacherSeq++;
         const teacherHasMedal = medal && ['เหรียญทอง', 'เหรียญเงิน', 'เหรียญทองแดง'].indexOf(medal) !== -1;
         const teacherAwardText = certReady
           ? teacherHasMedal
@@ -13246,8 +13762,24 @@
               (award && award !== 'เข้าร่วมการแข่งขัน' ? ' ' + award : '')
             : 'ครูผู้ฝึกสอนนักเรียน เข้าร่วมการแข่งขัน'
           : 'รอสรุปผลคะแนน';
+        const activeCode = formatCertificateCodeByMode({
+          config: numCfg,
+          role_type: 'TEACHER',
+          seqNum: teacherSeq,
+          teamToken: teamToken,
+          memberIndex: idx
+        });
         entries.push({
-          cert_code: baseCert + '-T' + (idx + 1),
+          cert_code: activeCode,
+          alt_cert_codes: buildAltCertCodesList({
+            numCfg: numCfg,
+            activeCode: activeCode,
+            legacyCode: baseLegacyCert + '-T' + (idx + 1),
+            role_type: 'TEACHER',
+            seqNum: teacherSeq,
+            teamToken: teamToken,
+            memberIndex: idx
+          }),
           role_type: 'TEACHER',
           role_label: 'ครูผู้ฝึกซ้อม',
           recipient_name: formatFullNameForPrint(t.prefix, t.name),
@@ -13260,16 +13792,51 @@
           score: r.score,
           medal: medal,
           award_title: teacherAwardText,
-          cert_ready: certReady
+          cert_ready: certReady,
+          reg_id: r.reg_id || '',
+          team_type: r.team_type || '',
+          prefix_raw: t.prefix || '',
+          name_raw: t.name || '',
+          grade_raw: 'ครูผู้ฝึกซ้อม',
+          csv_score: csvScore,
+          csv_medal: csvMedal,
+          csv_award: csvAward
         });
       });
     });
 
-    if (isJudgeCertificatesEnabled()) {
-      (state.judges || []).forEach(function (j, idx) {
+    if (isJudgeCertificatesEnabled() || (options && options.includeAllJudgesForVerify)) {
+      const sortedJudges = (state.judges || []).slice().sort(function (a, b) {
+        const cmpComp = String(a.comp_id || '').localeCompare(String(b.comp_id || ''));
+        if (cmpComp !== 0) return cmpComp;
+        const nameA = String(a.judge_name || a.full_name || '');
+        const nameB = String(b.judge_name || b.full_name || '');
+        const cmpName = nameA.localeCompare(nameB, 'th');
+        if (cmpName !== 0) return cmpName;
+        return String(a.judge_id || '').localeCompare(String(b.judge_id || ''));
+      });
+      sortedJudges.forEach(function (j, idx) {
+        judgeSeq++;
         const jName = j.judge_name || j.full_name || '';
+        const activeCode = formatCertificateCodeByMode({
+          config: numCfg,
+          role_type: 'JUDGE',
+          seqNum: judgeSeq,
+          teamToken: '',
+          memberIndex: 0
+        });
+        const legacyJudgeCode = j.cert_code || (prefix + (j.judge_id || ('J' + (idx + 1))));
         entries.push({
-          cert_code: j.cert_code || (prefix + (j.judge_id || ('J' + (idx + 1)))),
+          cert_code: activeCode,
+          alt_cert_codes: buildAltCertCodesList({
+            numCfg: numCfg,
+            activeCode: activeCode,
+            legacyCode: legacyJudgeCode,
+            role_type: 'JUDGE',
+            seqNum: judgeSeq,
+            teamToken: '',
+            memberIndex: 0
+          }),
           role_type: 'JUDGE',
           role_label: 'คณะกรรมการตัดสิน',
           recipient_name: formatFullNameForPrint(j.prefix, jName),
@@ -13282,7 +13849,11 @@
           score: '',
           medal: 'คณะกรรมการตัดสิน',
           award_title: 'ปฏิบัติหน้าที่ ' + (j.role || 'กรรมการตัดสิน'),
-          cert_ready: true
+          cert_ready: true,
+          judge_id: j.judge_id || '',
+          prefix_raw: j.prefix || '',
+          name_raw: jName,
+          grade_raw: j.role || 'กรรมการตัดสิน'
         });
       });
     }
@@ -13293,25 +13864,32 @@
   function getFilteredCertificateEntries() {
     const roleFilter = (document.getElementById('certRoleFilter') || {}).value || 'ALL';
     const schoolFilter = (document.getElementById('certSchoolFilter') || {}).value || 'ALL';
-    const searchVal = ((document.getElementById('certSearchInput') || {}).value || '').trim().toLowerCase();
+    const searchValRaw = ((document.getElementById('certSearchInput') || {}).value || '').trim().toLowerCase();
+    const searchVal = toArabicNumerals(searchValRaw);
 
     return buildAllCertificateEntries().filter(function (item) {
       if (roleFilter !== 'ALL' && item.role_type !== roleFilter) return false;
       if (schoolFilter !== 'ALL' && item.school_name !== schoolFilter) return false;
       if (searchVal) {
-        const hay = (
-          item.cert_code +
-          ' ' +
-          item.recipient_name +
-          ' ' +
-          item.school_name +
-          ' ' +
-          item.comp_id +
-          ' ' +
-          item.comp_name +
-          ' ' +
-          item.award_title
-        ).toLowerCase();
+        const hay = toArabicNumerals(
+          (
+            item.cert_code +
+            ' ' +
+            toThaiNumerals(item.cert_code) +
+            ' ' +
+            (item.alt_cert_codes ? item.alt_cert_codes.join(' ') : '') +
+            ' ' +
+            item.recipient_name +
+            ' ' +
+            item.school_name +
+            ' ' +
+            item.comp_id +
+            ' ' +
+            item.comp_name +
+            ' ' +
+            item.award_title
+          ).toLowerCase()
+        );
         if (!hay.includes(searchVal)) return false;
       }
       return true;
@@ -13419,6 +13997,276 @@
     });
   }
 
+  // ==========================================
+  // QR CERTIFICATE VERIFICATION MODAL (#cert=...)
+  // ==========================================
+  let currentVerifiedCertEntry = null;
+
+  function parseCertHashFromLocation() {
+    const rawHash = (typeof window !== 'undefined' && window.location && window.location.hash) || '';
+    const match = rawHash.match(/(?:^|[#&])cert=([^&]+)/i);
+    if (!match || !match[1]) return '';
+    const val = match[1].replace(/\+/g, ' ').trim();
+    try {
+      return decodeURIComponent(val).trim();
+    } catch (e) {
+      return val;
+    }
+  }
+
+  function findCertificateEntryByCode(rawCode) {
+    const targetNorm = normalizeCertCodeForCompare(rawCode);
+    if (!targetNorm) return { entry: null, matchedViaAlias: false };
+    const entries = buildAllCertificateEntries({ includeAllJudgesForVerify: true });
+
+    const exact = entries.find(function (item) {
+      return normalizeCertCodeForCompare(item.cert_code) === targetNorm;
+    });
+    if (exact) return { entry: exact, matchedViaAlias: false };
+
+    const aliasMatch = entries.find(function (item) {
+      return (item.alt_cert_codes || []).some(function (alt) {
+        return normalizeCertCodeForCompare(alt) === targetNorm;
+      });
+    });
+    if (aliasMatch) return { entry: aliasMatch, matchedViaAlias: true };
+
+    return { entry: null, matchedViaAlias: false };
+  }
+
+  function closeCertificateVerifyModal(clearHash) {
+    const modal = document.getElementById('certVerifyModal');
+    if (modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    currentVerifiedCertEntry = null;
+    if (clearHash && typeof window !== 'undefined' && window.history && window.location.hash) {
+      try {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      } catch (e) {}
+    }
+  }
+
+  function openCertificateVerifyModal(rawCode, options) {
+    const modal = document.getElementById('certVerifyModal');
+    const bodyEl = document.getElementById('certVerifyModalBody');
+    const printBtn = document.getElementById('btnCertVerifyPrint');
+    const headerHashEl = document.getElementById('certVerifyHeaderHash');
+    if (!modal || !bodyEl) return;
+
+    const searchedCode = String(rawCode || '').trim();
+    const cfg = state.config || DEFAULT_CONFIG;
+    const rawIssueDate = cfg.certIssueDate || '25 พฤศจิกายน พุทธศักราช 2569';
+    const signerName = String(cfg.certSignerName || 'นายกิจภูมิ บุญอบ').trim();
+    const signerPos = String(cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง').trim();
+    const signerDisplay = signerPos ? signerName + ' (' + signerPos + ')' : signerName;
+    const isLoading = Boolean(options && options.loading);
+
+    if (headerHashEl) {
+      headerHashEl.textContent = searchedCode ? '#cert=' + searchedCode : '';
+    }
+    if (printBtn) {
+      printBtn.classList.add('hidden');
+      printBtn.classList.remove('flex');
+    }
+    currentVerifiedCertEntry = null;
+
+    if (isLoading) {
+      bodyEl.innerHTML =
+        '<div class="bg-white rounded-2xl border border-slate-200 p-6 text-center space-y-3 shadow-xs">' +
+          '<div class="w-10 h-10 rounded-full border-2 border-slate-300 border-t-slate-800 animate-spin mx-auto"></div>' +
+          '<div class="font-heading font-semibold text-slate-900 text-sm">กำลังตรวจสอบข้อมูลเกียรติบัตรล่าสุด...</div>' +
+          '<div class="text-xs text-slate-500">รหัสที่สแกน: <span class="font-mono font-semibold text-slate-800">' + escapeHtml(searchedCode) + '</span></div>' +
+        '</div>';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      return;
+    }
+
+    const result = findCertificateEntryByCode(searchedCode);
+    const entry = result.entry;
+    const effAdmin = isEffectiveAdmin();
+    const resultsOrCertsOpen = isFeatureOpenToPublic('results') || isFeatureOpenToPublic('certificates');
+
+    if (headerHashEl) {
+      headerHashEl.textContent = entry
+        ? '#cert=' + toArabicNumerals(entry.cert_code)
+        : searchedCode
+        ? '#cert=' + searchedCode
+        : '';
+    }
+
+    if (!entry) {
+      bodyEl.innerHTML =
+        '<div class="bg-white rounded-2xl border border-rose-200 p-5 text-center space-y-3 shadow-xs">' +
+          '<div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center mx-auto">' +
+            '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">' +
+              '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />' +
+            '</svg>' +
+          '</div>' +
+          '<div class="space-y-1">' +
+            '<span class="inline-block px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-heading font-semibold">ไม่พบข้อมูลในระบบ</span>' +
+            '<h3 class="text-base font-bold font-heading text-slate-900 pt-1">ไม่พบเกียรติบัตรเลขที่นี้</h3>' +
+            '<p class="text-xs text-slate-500 font-mono break-all">' + escapeHtml(searchedCode || '-') + '</p>' +
+          '</div>' +
+          '<p class="text-xs text-slate-600 leading-relaxed">' +
+            'รหัสเกียรติบัตรอาจไม่ถูกต้อง ยังไม่อยู่ในสถานะ "ประกาศผลแล้ว" หรือถูกยกเลิกผล กรุณาตรวจสอบกับกองอำนวยการกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง' +
+          '</p>' +
+        '</div>';
+    } else if (!entry.cert_ready || (!effAdmin && !resultsOrCertsOpen)) {
+      bodyEl.innerHTML =
+        '<div class="bg-white rounded-2xl border border-amber-200 p-5 text-center space-y-3 shadow-xs">' +
+          '<div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center mx-auto">' +
+            '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">' +
+              '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />' +
+            '</svg>' +
+          '</div>' +
+          '<div class="space-y-1">' +
+            '<span class="inline-block px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-heading font-semibold">รอการประกาศผลอย่างเป็นทางการ</span>' +
+            '<h3 class="text-base font-bold font-heading text-amber-950 pt-1">อยู่ระหว่างบันทึกและตรวจสอบผลการแข่งขัน</h3>' +
+            '<p class="text-xs text-amber-900/90 leading-relaxed">รหัสนี้อยู่ในระบบเรียบร้อยแล้ว แต่รายการแข่งขันยังอยู่ระหว่างรอสรุปผลคะแนนหรือรอเปิดประกาศผลอย่างเป็นทางการโดยผู้ดูแลระบบ</p>' +
+          '</div>' +
+          '<div class="inline-block px-3 py-1 rounded-lg bg-[#F7F7F5] border border-amber-200 font-mono text-xs text-amber-900 break-all">' +
+            'เลขที่อ้างอิง: ' + escapeHtml(toArabicNumerals(entry.cert_code)) +
+          '</div>' +
+        '</div>';
+    } else {
+      currentVerifiedCertEntry = entry;
+      const isJudge = entry.role_type === 'JUDGE' || entry.role_type === 'REFEREE';
+      const cleanCompName = String(entry.comp_name || '').replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '').trim();
+      const activityDisplay = cleanCompName + (entry.level ? ' ระดับชั้น ' + entry.level : '');
+      const schoolDisplay = isJudge
+        ? (entry.school_name ? 'สังกัด' + entry.school_name + ' (คณะกรรมการตัดสิน)' : 'คณะกรรมการตัดสินกลุ่มโรงเรียน')
+        : (entry.school_name || '-');
+      const rolePillCls =
+        entry.role_type === 'STUDENT'
+          ? 'bg-blue-50 text-blue-800 border-blue-200'
+          : entry.role_type === 'TEACHER'
+          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+          : 'bg-purple-50 text-purple-800 border-purple-200';
+
+      const medalRaw = entry.medal ? String(entry.medal).trim() : '';
+      const rawTitle = String(entry.award_title || '').trim();
+      let awardLine = rawTitle || 'เข้าร่วมการแข่งขัน';
+      if (isJudge) {
+        const jRole = String(entry.grade_or_pos || '').trim();
+        if (!jRole || jRole === 'กรรมการ' || jRole === 'กรรมการตัดสิน' || jRole === 'คณะกรรมการตัดสิน') {
+          awardLine = 'ได้ปฏิบัติหน้าที่กรรมการตัดสินการแข่งขัน';
+        } else {
+          awardLine = 'ได้ปฏิบัติหน้าที่' + jRole + 'ตัดสินการแข่งขัน';
+        }
+      } else if (entry.role_type === 'TEACHER') {
+        if (rawTitle.indexOf('ครูผู้ฝึกสอน') === 0) {
+          awardLine = rawTitle;
+        } else if (medalRaw && ['เหรียญทอง', 'เหรียญเงิน', 'เหรียญทองแดง'].indexOf(medalRaw) !== -1) {
+          awardLine =
+            'ครูผู้ฝึกสอนนักเรียน ได้รับรางวัลระดับ' +
+            medalRaw +
+            (rawTitle && rawTitle !== 'เข้าร่วมการแข่งขัน' ? ' ' + rawTitle : '');
+        } else {
+          awardLine = 'ครูผู้ฝึกสอนนักเรียน เข้าร่วมการแข่งขัน';
+        }
+      } else {
+        if (!medalRaw || medalRaw === 'เข้าร่วม') {
+          awardLine = 'เข้าร่วมการแข่งขัน';
+        } else if (awardLine.indexOf(medalRaw) !== -1) {
+          awardLine = awardLine.indexOf('ได้รับรางวัล') === 0 ? awardLine : 'ได้รับรางวัลระดับ' + awardLine;
+        } else {
+          awardLine =
+            'ได้รับรางวัลระดับ' +
+            medalRaw +
+            (awardLine && awardLine !== 'เข้าร่วมการแข่งขัน' ? ' ' + awardLine : '');
+        }
+      }
+
+      const awardPillCls = isJudge
+        ? 'bg-slate-100 text-slate-800 border-slate-300'
+        : medalRaw.indexOf('ทองแดง') !== -1
+        ? 'bg-orange-50 text-orange-900 border-orange-300'
+        : medalRaw.indexOf('ทอง') !== -1
+        ? 'bg-amber-50 text-amber-900 border-amber-300'
+        : medalRaw.indexOf('เงิน') !== -1
+        ? 'bg-slate-100 text-slate-800 border-slate-300'
+        : 'bg-slate-50 text-slate-700 border-slate-300';
+
+      const aliasNoteHtml = result.matchedViaAlias
+        ? '<div class="text-[11px] text-emerald-800 bg-emerald-50/70 border border-emerald-200/80 rounded-lg px-2.5 py-1">ตรวจสอบพบจากรหัสอ้างอิงเดิม: <span class="font-mono font-semibold">' + escapeHtml(searchedCode) + '</span></div>'
+        : '';
+
+      bodyEl.innerHTML =
+        '<div class="bg-white rounded-2xl border border-emerald-200 p-4 space-y-3 shadow-xs">' +
+          '<div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2.5">' +
+            '<div class="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">' +
+              '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
+                '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />' +
+              '</svg>' +
+            '</div>' +
+            '<div class="min-w-0">' +
+              '<div class="text-xs font-bold font-heading text-emerald-950">ผ่านการตรวจสอบ • เกียรติบัตรฉบับจริง</div>' +
+              '<div class="text-[11px] text-emerald-800">รับรองโดย กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="flex flex-wrap items-center justify-between gap-2 pt-0.5">' +
+            '<span class="px-2 py-0.5 rounded border text-[11px] font-heading font-semibold ' + rolePillCls + '">' + escapeHtml(entry.role_label) + '</span>' +
+            '<span class="font-mono text-[11px] text-slate-600 font-semibold break-all">' + escapeHtml(toArabicNumerals(entry.cert_code)) + '</span>' +
+          '</div>' +
+          aliasNoteHtml +
+          '<div class="p-3 rounded-xl bg-[#F7F7F5] border border-[#E9E9E7] space-y-1 text-center">' +
+            '<div class="text-[11px] text-[#787774]">ขอมอบเกียรติบัตรให้ไว้เพื่อแสดงว่า</div>' +
+            '<div class="text-lg font-bold font-heading text-slate-900 leading-snug">' + escapeHtml(formatFullNameForPrint('', entry.recipient_name)) + '</div>' +
+            '<div class="text-xs font-medium text-slate-700">' + escapeHtml(schoolDisplay) + '</div>' +
+            '<div class="pt-1.5">' +
+              '<span class="inline-block px-3 py-1 rounded-full border text-xs font-bold font-heading ' + awardPillCls + '">' + escapeHtml(awardLine) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="space-y-2 text-xs">' +
+            '<div class="border-b border-slate-100 pb-1.5">' +
+              '<div class="text-[11px] text-[#787774]">กิจกรรมการแข่งขัน</div>' +
+              '<div class="font-semibold font-heading text-slate-900 mt-0.5">' + escapeHtml(activityDisplay) + '</div>' +
+            '</div>' +
+            '<div class="border-b border-slate-100 pb-1.5">' +
+              '<div class="text-[11px] text-[#787774]">งาน / ปีการศึกษา</div>' +
+              '<div class="text-slate-800 mt-0.5">งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569</div>' +
+            '</div>' +
+            '<div class="grid grid-cols-2 gap-2 border-b border-slate-100 pb-1.5">' +
+              '<div>' +
+                '<div class="text-[11px] text-[#787774]">เลขที่เกียรติบัตร (ไทย)</div>' +
+                '<div class="font-medium text-slate-800 font-mono break-all">' + escapeHtml(toThaiNumerals(entry.cert_code)) + '</div>' +
+              '</div>' +
+              '<div>' +
+                '<div class="text-[11px] text-[#787774]">ให้ไว้ ณ วันที่</div>' +
+                '<div class="font-medium text-slate-800">' + escapeHtml(rawIssueDate) + '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div>' +
+              '<div class="text-[11px] text-[#787774]">ผู้ลงนามรับรอง</div>' +
+              '<div class="text-slate-800 mt-0.5">' + escapeHtml(signerDisplay) + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      if (printBtn && (effAdmin || isFeatureOpenToPublic('certificates'))) {
+        printBtn.classList.remove('hidden');
+        printBtn.classList.add('flex');
+      }
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function checkCertificateHashVerification(options) {
+    const code = parseCertHashFromLocation();
+    if (!code) {
+      if (options && options.openIfEmptyClose) {
+        closeCertificateVerifyModal(false);
+      }
+      return;
+    }
+    openCertificateVerifyModal(code, options);
+  }
+
   // Print Official Landscape Certificates (Supports 3 Numeral Modes: 'thai', 'arabic', or 'both')
   function printCertificatesWindow(entries, initialNumeralMode) {
     const printable = (entries || []).filter(function (item) {
@@ -13466,8 +14314,9 @@
         return useThaiNumerals ? toThaiNumerals(val) : toArabicNumerals(val);
       };
       const pageVariantCls = useThaiNumerals ? 'cert-page-thai' : 'cert-page-arabic';
+      const encodedHashCode = encodeURIComponent(toArabicNumerals(c.cert_code));
       const verifyUrl = encodeURIComponent(
-        'https://campingroom.github.io/talent69/#cert=' + toArabicNumerals(c.cert_code)
+        'https://campingroom.github.io/talent69/#cert=' + encodedHashCode
       );
       const sigHtml = resolvedSigUrl
         ? `<div class="sign-img-wrap"><img src="${escapeHtml(resolvedSigUrl)}" alt="ลายมือชื่อ" class="cert-signature-img" style="${sigTransformStyle}" /></div>`
@@ -14307,6 +15156,771 @@
     } else {
       showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์รายงานตัวแทน', 'warning');
     }
+  }
+
+  // ==========================================
+  // PER-SCHOOL COMPETITION RESULTS REPORT & EXPORT (SUBVIEW 4)
+  // ==========================================
+  function getSchoolResultData(schoolName) {
+    const compOrder = {};
+    (state.competitions || []).forEach(function (c, idx) {
+      compOrder[c.comp_id] = idx;
+    });
+    const regsByComp = {};
+    (state.registrations || []).forEach(function (r) {
+      if (!regsByComp[r.comp_id]) regsByComp[r.comp_id] = [];
+      regsByComp[r.comp_id].push(r);
+    });
+
+    const rawRegs = (state.registrations || [])
+      .filter((r) => r.school_name === schoolName)
+      .slice()
+      .sort(function (a, b) {
+        const oa = compOrder[a.comp_id] !== undefined ? compOrder[a.comp_id] : 9999;
+        const ob = compOrder[b.comp_id] !== undefined ? compOrder[b.comp_id] : 9999;
+        if (oa !== ob) return oa - ob;
+        return String(a.comp_id || '').localeCompare(String(b.comp_id || ''));
+      });
+
+    let announcedCount = 0;
+    let districtRepCount = 0;
+    let gold = 0;
+    let silver = 0;
+    let bronze = 0;
+    let part = 0;
+    let absent = 0;
+    let pending = 0;
+
+    const items = rawRegs.map(function (r) {
+      const compObj = state.competitions.find((c) => c.comp_id === r.comp_id) || {};
+      const isAnnounced = isCompetitionResultAnnounced(compObj, regsByComp[r.comp_id] || []);
+      const isAbsent = isRegistrationAbsent(r);
+      const isByeRep = isRegistrationByeRep(r);
+      const hasScore = hasValidScore(r);
+      const isEvaluated = Boolean(isAbsent || isByeRep || hasScore);
+      const scoreText = isAbsent || isByeRep ? '-' : hasScore ? Number(r.score).toFixed(2) : '-';
+      const medalText = isAbsent
+        ? 'ไม่มาแข่งขัน'
+        : isByeRep
+        ? 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)'
+        : hasScore
+        ? r.medal || calculateMedalFromScore(r.score)
+        : 'รอประกาศผล';
+      const rankNum = isAbsent ? 0 : isByeRep ? 1 : Number(r.rank || 0);
+      const awardText = isAbsent
+        ? 'ไม่มาแข่งขัน (ขาดสอบ)'
+        : isByeRep
+        ? 'ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)'
+        : hasScore
+        ? r.award_title || getAwardTitleFromRank(rankNum, medalText)
+        : 'รอประกาศผล';
+      const isDistrictRep = Boolean(isByeRep || (hasScore && isDistrictRepresentative(r)));
+      const cleanCompName = String(r.comp_name || compObj.comp_name || '')
+        .replace(/^[A-Z0-9-]+\s*[:\-]\s*/, '')
+        .trim();
+
+      if (isAbsent) {
+        absent++;
+        announcedCount++;
+      } else if (isByeRep) {
+        announcedCount++;
+        districtRepCount++;
+      } else if (hasScore) {
+        announcedCount++;
+        if (medalText === 'เหรียญทอง') gold++;
+        else if (medalText === 'เหรียญเงิน') silver++;
+        else if (medalText === 'เหรียญทองแดง') bronze++;
+        else part++;
+        if (isDistrictRep) districtRepCount++;
+      } else {
+        pending++;
+      }
+
+      return {
+        reg: r,
+        compObj: compObj,
+        comp_id: r.comp_id || '',
+        learning_area: r.learning_area || compObj.learning_area || '',
+        comp_name: cleanCompName || r.comp_name || '',
+        level: r.level || compObj.level || '',
+        team_type: r.team_type || compObj.team_type || '',
+        students: r.students || [],
+        teachers: r.teachers || [],
+        isAnnounced: isAnnounced,
+        isAbsent: isAbsent,
+        isByeRep: isByeRep,
+        hasScore: hasScore,
+        isEvaluated: isEvaluated,
+        scoreText: scoreText,
+        medalText: medalText,
+        rankNum: rankNum,
+        awardText: awardText,
+        isDistrictRep: isDistrictRep
+      };
+    });
+
+    const schoolObj = state.schools.find((s) => s.school_name === schoolName) || {};
+    return {
+      school_name: schoolName,
+      subdistrict: schoolObj.subdistrict || '',
+      school_type: schoolObj.school_type || '',
+      totalRegs: items.length,
+      announcedCount: announcedCount,
+      districtRepCount: districtRepCount,
+      gold: gold,
+      silver: silver,
+      bronze: bronze,
+      part: part,
+      absent: absent,
+      pending: pending,
+      items: items
+    };
+  }
+
+  function filterSchoolResultItems(items, filterCode, searchQuery) {
+    const code = filterCode || 'ALL';
+    const q = String(searchQuery || '').trim().toLowerCase();
+    return (items || []).filter(function (it) {
+      if (code === 'REP' && !it.isDistrictRep) return false;
+      if (code === 'GOLD' && it.medalText !== 'เหรียญทอง') return false;
+      if (code === 'SILVER' && it.medalText !== 'เหรียญเงิน') return false;
+      if (code === 'BRONZE' && it.medalText !== 'เหรียญทองแดง') return false;
+      if (code === 'PART') {
+        const isPartOrPending = !it.isAbsent && ['เหรียญทอง', 'เหรียญเงิน', 'เหรียญทองแดง'].indexOf(it.medalText) === -1 && !it.isByeRep;
+        if (!isPartOrPending) return false;
+      }
+      if (code === 'ABSENT' && !it.isAbsent) return false;
+      if (q) {
+        const stuStr = (it.students || []).map((s) => formatFullNameForPrint(s.prefix, s.name)).join(' ');
+        const tchStr = (it.teachers || []).map((t) => formatFullNameForPrint(t.prefix, t.name)).join(' ');
+        const hay = (it.comp_id + ' ' + it.comp_name + ' ' + it.learning_area + ' ' + it.level + ' ' + stuStr + ' ' + tchStr).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function getSchoolResultFilterLabel(filterCode) {
+    const labels = {
+      ALL: 'ทุกรายการที่โรงเรียนส่ง',
+      REP: 'เฉพาะทีมตัวแทนระดับเขตฯ',
+      GOLD: 'เฉพาะเหรียญทอง',
+      SILVER: 'เฉพาะเหรียญเงิน',
+      BRONZE: 'เฉพาะเหรียญทองแดง',
+      PART: 'เฉพาะเข้าร่วม / รอผล',
+      ABSENT: 'เฉพาะขาดสอบ / ไม่มาแข่งขัน'
+    };
+    return labels[filterCode] || labels.ALL;
+  }
+
+  function renderResultsBySchoolSubview() {
+    const sel = document.getElementById('resSchoolSelect');
+    const filterEl = document.getElementById('resSchoolMedalFilter');
+    const searchEl = document.getElementById('resSchoolSearchInput');
+    const headerNameEl = document.getElementById('resSchoolHeaderName');
+    const headerMetaEl = document.getElementById('resSchoolHeaderMeta');
+    const kpiEl = document.getElementById('resSchoolKpiStrip');
+    const tbody = document.getElementById('resultsBySchoolTableBody');
+    if (!tbody) return;
+
+    const schoolName = (sel && sel.value) || (state.schools[0] ? state.schools[0].school_name : '');
+    const filterCode = (filterEl && filterEl.value) || 'ALL';
+    const searchVal = (searchEl && searchEl.value) || '';
+    const data = getSchoolResultData(schoolName);
+
+    if (headerNameEl) {
+      headerNameEl.textContent = schoolName || 'กรุณาเลือกโรงเรียน';
+    }
+    if (headerMetaEl) {
+      headerMetaEl.textContent =
+        (data.subdistrict ? data.subdistrict + ' • ' : '') +
+        (data.school_type ? 'ระดับที่เปิดสอน: ' + data.school_type + ' • ' : '') +
+        'ประกาศผลแล้ว ' + data.announcedCount + ' จาก ' + data.totalRegs + ' รายการที่ส่ง';
+    }
+    if (kpiEl) {
+      kpiEl.innerHTML =
+        '<div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200">' +
+          '<div class="text-[11px] font-heading text-slate-500">ส่งทั้งหมด</div>' +
+          '<div class="text-lg font-bold font-heading text-slate-900">' + data.totalRegs + '</div>' +
+        '</div>' +
+        '<div class="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200">' +
+          '<div class="text-[11px] font-heading text-amber-900">เหรียญทอง</div>' +
+          '<div class="text-lg font-bold font-heading text-amber-900">' + data.gold + '</div>' +
+        '</div>' +
+        '<div class="p-2.5 rounded-lg bg-slate-100 border border-slate-300">' +
+          '<div class="text-[11px] font-heading text-slate-700">เหรียญเงิน</div>' +
+          '<div class="text-lg font-bold font-heading text-slate-800">' + data.silver + '</div>' +
+        '</div>' +
+        '<div class="p-2.5 rounded-lg bg-orange-50/70 border border-orange-200">' +
+          '<div class="text-[11px] font-heading text-orange-900">เหรียญทองแดง</div>' +
+          '<div class="text-lg font-bold font-heading text-orange-900">' + data.bronze + '</div>' +
+        '</div>' +
+        '<div class="p-2.5 rounded-lg bg-slate-50 border border-slate-200">' +
+          '<div class="text-[11px] font-heading text-slate-600">เข้าร่วม/รอผล</div>' +
+          '<div class="text-lg font-bold font-heading text-slate-800">' + (data.part + data.pending) + '</div>' +
+        '</div>' +
+        '<div class="p-2.5 rounded-lg bg-rose-50/70 border border-rose-200">' +
+          '<div class="text-[11px] font-heading text-rose-800">ขาดสอบ</div>' +
+          '<div class="text-lg font-bold font-heading text-rose-800">' + data.absent + '</div>' +
+        '</div>' +
+        '<div class="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">' +
+          '<div class="text-[11px] font-heading text-emerald-900">ตัวแทนเขตฯ</div>' +
+          '<div class="text-lg font-bold font-heading text-emerald-900">' + data.districtRepCount + '</div>' +
+        '</div>';
+    }
+
+    const filtered = filterSchoolResultItems(data.items, filterCode, searchVal);
+    if (filtered.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="7" class="py-8 text-center text-xs text-slate-400">' +
+        (data.totalRegs === 0
+          ? 'โรงเรียนนี้ยังไม่มีรายการลงทะเบียนเข้าแข่งขันในระบบ'
+          : 'ไม่พบรายการแข่งขันของโรงเรียนตามตัวกรองที่เลือก') +
+        '</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered
+      .map(function (it, idx) {
+        const stuHtml =
+          (it.students || [])
+            .map(function (s, i) {
+              return (
+                '<div>' +
+                (i + 1) +
+                '. ' +
+                formatResponsiveNameHtml(s.prefix, s.name) +
+                (s.grade ? ' <span class="text-slate-500">(' + escapeHtml(s.grade) + ')</span>' : '') +
+                '</div>'
+              );
+            })
+            .join('') || '-';
+        const tchHtml =
+          (it.teachers || [])
+            .map(function (t, i) {
+              return '<div>' + (i + 1) + '. ' + formatResponsiveNameHtml(t.prefix, t.name) + '</div>';
+            })
+            .join('') || '-';
+
+        const medalBadge =
+          !it.isEvaluated
+            ? '<span class="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-500 font-heading text-xs">รอประกาศผล</span>'
+            : it.isByeRep
+            ? '<span class="inline-block px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-heading font-semibold text-xs">ตัวแทนกลุ่ม (ไม่มีคู่แข่ง)</span>'
+            : renderMedalBadgeHtml(it.medalText);
+
+        const repPill = it.isDistrictRep
+          ? '<span class="inline-block mt-1 px-2 py-0.5 rounded bg-slate-900 text-white font-heading text-[10px] font-semibold">ตัวแทนระดับเขตฯ</span>'
+          : '';
+        const rankLabel = it.isAbsent
+          ? '<span class="text-rose-700 font-heading text-xs">ขาดสอบ</span>'
+          : it.isEvaluated
+          ? '<div class="font-heading font-semibold text-slate-800 text-xs">' + escapeHtml(it.awardText) + '</div>' + repPill
+          : '<span class="text-slate-400 font-heading text-xs">รอประกาศผล</span>';
+
+        return `
+          <tr class="hover:bg-slate-50 transition ${it.isAbsent ? 'bg-rose-50/30 text-slate-500' : ''}">
+            <td class="py-2.5 px-2.5 text-center text-xs font-heading text-slate-500 align-top">${idx + 1}</td>
+            <td class="py-2.5 px-3 align-top">
+              <div class="font-heading font-semibold text-slate-900 text-xs sm:text-sm">
+                <span class="font-mono text-[11px] text-slate-500 mr-1">[${escapeHtml(it.comp_id)}]</span>${escapeHtml(it.comp_name)}
+              </div>
+              <div class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(it.learning_area)} • ${escapeHtml(it.level)} (${escapeHtml(it.team_type || '-')})</div>
+            </td>
+            <td class="py-2.5 px-3 text-xs text-slate-700 align-top space-y-0.5">${stuHtml}</td>
+            <td class="py-2.5 px-3 text-xs text-slate-700 align-top space-y-0.5">${tchHtml}</td>
+            <td class="py-2.5 px-2.5 text-center font-heading font-bold text-slate-900 align-top">${escapeHtml(it.scoreText)}</td>
+            <td class="py-2.5 px-2.5 text-center align-top">${medalBadge}</td>
+            <td class="py-2.5 px-3 text-center align-top">${rankLabel}</td>
+          </tr>
+        `;
+      })
+      .join('');
+  }
+
+  function buildSchoolResultPrintSectionHtml(schoolName, filterCode, searchQuery) {
+    const data = getSchoolResultData(schoolName);
+    const items = filterSchoolResultItems(data.items, filterCode, searchQuery);
+    const cfg = state.config || DEFAULT_CONFIG;
+    const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
+    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+    const filterNote = filterCode && filterCode !== 'ALL' ? ' • ตัวกรอง: ' + getSchoolResultFilterLabel(filterCode) : '';
+
+    const rowsHtml =
+      items.length === 0
+        ? '<tr><td colspan="8" style="text-align:center; padding:18px 8px;">ไม่พบรายการแข่งขันตามเงื่อนไขที่เลือก</td></tr>'
+        : items
+            .map(function (it, idx) {
+              const stuLines =
+                (it.students || [])
+                  .map(function (s, i) {
+                    return (
+                      '<div>' +
+                      (i + 1) +
+                      '. ' +
+                      escapeHtml(formatFullNameForPrint(s.prefix, s.name)) +
+                      (s.grade ? ' (' + escapeHtml(s.grade) + ')' : '') +
+                      '</div>'
+                    );
+                  })
+                  .join('') || '-';
+              const tchLines =
+                (it.teachers || [])
+                  .map(function (t, i) {
+                    return '<div>' + (i + 1) + '. ' + escapeHtml(formatFullNameForPrint(t.prefix, t.name)) + '</div>';
+                  })
+                  .join('') || '-';
+              const rankCell = it.isAbsent
+                ? 'ไม่มาแข่งขัน'
+                : it.isEvaluated
+                ? '<strong>' + escapeHtml(it.awardText) + '</strong>' + (it.isDistrictRep ? '<br/><span style="font-size:13pt; font-weight:700;">(ตัวแทนระดับเขตฯ)</span>' : '')
+                : 'รอประกาศผล';
+
+              return `
+                <tr>
+                  <td style="text-align:center; vertical-align:top;">${idx + 1}</td>
+                  <td style="text-align:center; vertical-align:top; font-weight:700;">${escapeHtml(it.comp_id)}</td>
+                  <td style="vertical-align:top;">
+                    <strong>${escapeHtml(it.comp_name)}</strong><br/>
+                    <span style="font-size:13pt;">${escapeHtml(it.learning_area)} • ชั้น${escapeHtml(it.level)} (${escapeHtml(it.team_type || '-')})</span>
+                  </td>
+                  <td style="vertical-align:top; line-height:1.3;">${stuLines}</td>
+                  <td style="vertical-align:top; line-height:1.3;">${tchLines}</td>
+                  <td style="text-align:center; vertical-align:top; font-weight:700;">${escapeHtml(it.scoreText)}</td>
+                  <td style="text-align:center; vertical-align:top; font-weight:700;">${escapeHtml(it.isEvaluated ? it.medalText : 'รอประกาศผล')}</td>
+                  <td style="text-align:center; vertical-align:top;">${rankCell}</td>
+                </tr>
+              `;
+            })
+            .join('');
+
+    return `
+      <div class="report-wrap">
+        <div class="report-title">
+          <h1>รายงานผลการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 (ระดับกลุ่มโรงเรียน)</h1>
+          <h2>${escapeHtml(data.school_name)}${data.subdistrict ? ' (' + escapeHtml(data.subdistrict) + ')' : ''}</h2>
+          <div class="report-submeta">กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3${escapeHtml(filterNote)}</div>
+        </div>
+        <div class="summary-strip">
+          <span>ส่งแข่งขัน <strong>${data.totalRegs}</strong> รายการ</span>
+          <span>ประกาศผลแล้ว <strong>${data.announcedCount}</strong></span>
+          <span>เหรียญทอง <strong>${data.gold}</strong></span>
+          <span>เหรียญเงิน <strong>${data.silver}</strong></span>
+          <span>เหรียญทองแดง <strong>${data.bronze}</strong></span>
+          <span>เข้าร่วม/รอผล <strong>${data.part + data.pending}</strong></span>
+          <span>ขาดสอบ <strong>${data.absent}</strong></span>
+          <span>ตัวแทนระดับเขตฯ <strong>${data.districtRepCount}</strong> รายการ</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:4%;">ที่</th>
+              <th style="width:8%;">รหัส</th>
+              <th style="width:22%;">กิจกรรมการแข่งขัน</th>
+              <th style="width:21%;">รายชื่อนักเรียนผู้เข้าแข่งขัน</th>
+              <th style="width:16%;">รายชื่อครูผู้ฝึกสอน</th>
+              <th style="width:7%;">คะแนน</th>
+              <th style="width:10%;">ระดับเหรียญ</th>
+              <th style="width:12%;">ลำดับ / ตัวแทนเขตฯ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+        <div style="margin-top:8px; font-size:15pt; font-weight:700;">
+          แสดงในรายงาน ${items.length} รายการ (จากที่โรงเรียนส่งทั้งหมด ${data.totalRegs} รายการ • ตัวแทนส่งต่อระดับเขตฯ ${data.districtRepCount} รายการ)
+        </div>
+        <div class="sign-section">
+          <div class="sign-box">
+            <div>ขอรับรองว่าเป็นรายงานผลการแข่งขันถูกต้องตรงตามระบบ</div>
+            <div style="height:40px;"></div>
+            <div>(ลงชื่อ)....................................................................</div>
+            <div>(${signerName ? escapeHtml(signerName) : '....................................................................'})</div>
+            <div style="font-weight:700;">${escapeHtml(signerPos)}</div>
+            <div>วันที่ ............ เดือน ................................. พ.ศ. 2569</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function printSchoolResultsReport(schoolName, mode) {
+    const isBatchAll = mode === 'all';
+    const filterCode = isBatchAll ? 'ALL' : ((document.getElementById('resSchoolMedalFilter') || {}).value || 'ALL');
+    const searchQuery = isBatchAll ? '' : ((document.getElementById('resSchoolSearchInput') || {}).value || '');
+    const targetSchool =
+      schoolName ||
+      (document.getElementById('resSchoolSelect') || {}).value ||
+      (state.schools[0] ? state.schools[0].school_name : '');
+
+    let sections = [];
+    if (isBatchAll) {
+      const schoolsWithRegs = (state.schools || []).filter(function (s) {
+        return (state.registrations || []).some((r) => r.school_name === s.school_name);
+      });
+      if (schoolsWithRegs.length === 0) {
+        showToast('ยังไม่มีข้อมูลการแข่งขันของโรงเรียนในระบบ', 'warning');
+        return;
+      }
+      sections = schoolsWithRegs.map(function (s) {
+        return buildSchoolResultPrintSectionHtml(s.school_name, 'ALL', '');
+      });
+    } else {
+      if (!targetSchool) {
+        showToast('กรุณาเลือกโรงเรียนก่อนพิมพ์รายงานผล', 'warning');
+        return;
+      }
+      sections = [buildSchoolResultPrintSectionHtml(targetSchool, filterCode, searchQuery)];
+    }
+
+    const docTitle = isBatchAll
+      ? 'รายงานผลการแข่งขันแยกรายโรงเรียน (ครบทุกโรงเรียน) - ศิลปหัตถกรรมครั้งที่ 74'
+      : 'รายงานผลการแข่งขันรายโรงเรียน - ' + targetSchool;
+    const topLabel = isBatchAll
+      ? 'รายงานผลการแข่งขันแยกรายโรงเรียน (' + sections.length + ' โรงเรียน)'
+      : 'รายงานผลการแข่งขัน: ' + targetSchool;
+
+    const sectionsHtml = sections
+      .map(function (sec, idx) {
+        const cls = idx < sections.length - 1 ? 'school-page-section school-page-break' : 'school-page-section';
+        return '<div class="' + cls + '">' + sec + '</div>';
+      })
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(docTitle)}</title>
+  ${OFFICIAL_PRINT_FONT_LINKS}
+  <style>
+    @page { size: A4 landscape; margin: 12mm 10mm; }
+    * { box-sizing: border-box; }
+    body { font-family: ${OFFICIAL_THAI_FONT}; color: #000; margin: 0; background: #fff; font-size: 16pt; line-height: 1.32; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif; font-size: 13px; gap: 12px; }
+    .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+    .school-page-section { padding: 8px 0; }
+    .school-page-break { page-break-after: always; break-after: page; border-bottom: 3px dashed #cbd5e1; margin-bottom: 16px; }
+    .report-wrap { max-width: 277mm; margin: 8px auto; background: #fff; padding: 8mm 10mm; }
+    .report-title { text-align: center; margin-bottom: 8px; }
+    .report-title h1 { font-size: 18pt; font-weight: 700; margin: 0 0 2px 0; line-height: 1.25; }
+    .report-title h2 { font-size: 17pt; font-weight: 700; margin: 0; line-height: 1.25; }
+    .report-submeta { font-size: 14.5pt; margin-top: 3px; }
+    .summary-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; border: 1px solid #000; background: #f8fafc; padding: 5px 10px; font-size: 14.5pt; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14pt; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th, td { border: 1px solid #000; padding: 4px 6px; }
+    th { background: #f2f2f2; font-weight: 700; text-align: center; }
+    .sign-section { margin-top: 22px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+    .sign-box { text-align: center; width: 380px; font-size: 16pt; line-height: 1.45; }
+    @media print {
+      body { background: #fff; margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+      .school-page-section { padding: 0; }
+      .school-page-break { border-bottom: none; margin-bottom: 0; }
+      .report-wrap { max-width: 100%; width: 100%; margin: 0; padding: 0; }
+      th, .summary-strip { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div>${escapeHtml(topLabel)}</div>
+    <button onclick="window.print()">สั่งพิมพ์รายงาน (A4 แนวนอน)</button>
+  </div>
+  ${sectionsHtml}
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์รายงานรายโรงเรียน', 'warning');
+    }
+  }
+
+  function printAllSchoolsOverviewReport(sortMode) {
+    const summaryData = computeAllSchoolsSummaryStats();
+    const isMedalMode = sortMode === 'medal';
+    const list = isMedalMode ? summaryData.medalSorted : summaryData.rankSorted;
+    const t = summaryData.totals;
+    const cfg = state.config || DEFAULT_CONFIG;
+    const signerName = cfg.certSignerName || 'นายกิจภูมิ บุญอบ';
+    const signerPos = cfg.certSignerPos || 'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
+    const titleSuffix = isMedalMode ? 'สรุปเหรียญรางวัลรวม 13 โรงเรียน' : 'สรุปอันดับรายโรงเรียน (ตัวแทนกลุ่ม) 13 โรงเรียน';
+
+    const theadHtml = isMedalMode
+      ? `<tr>
+          <th style="width:6%;">ที่</th>
+          <th style="width:34%;">โรงเรียน</th>
+          <th style="width:10%;">เหรียญทอง</th>
+          <th style="width:10%;">เหรียญเงิน</th>
+          <th style="width:10%;">เหรียญทองแดง</th>
+          <th style="width:10%;">เข้าร่วม</th>
+          <th style="width:10%;">ขาดสอบ</th>
+          <th style="width:10%;">รวมผลแล้ว</th>
+        </tr>`
+      : `<tr>
+          <th style="width:6%;">ที่</th>
+          <th style="width:34%;">โรงเรียน</th>
+          <th style="width:13%;">ชนะเลิศ (อันดับ 1)</th>
+          <th style="width:13%;">รองฯ อันดับ 1</th>
+          <th style="width:13%;">รองฯ อันดับ 2</th>
+          <th style="width:11%;">อันดับ 4 ขึ้นไป</th>
+          <th style="width:10%;">รวมที่ส่ง</th>
+        </tr>`;
+
+    const tbodyHtml = list
+      .map(function (st, idx) {
+        if (isMedalMode) {
+          return `<tr>
+            <td style="text-align:center;">${idx + 1}</td>
+            <td style="font-weight:700;">${escapeHtml(st.school_name)}</td>
+            <td style="text-align:center; font-weight:700;">${st.gold}</td>
+            <td style="text-align:center;">${st.silver}</td>
+            <td style="text-align:center;">${st.bronze}</td>
+            <td style="text-align:center;">${st.part}</td>
+            <td style="text-align:center;">${st.absent}</td>
+            <td style="text-align:center; font-weight:700;">${st.total_medals}</td>
+          </tr>`;
+        }
+        return `<tr>
+          <td style="text-align:center;">${idx + 1}</td>
+          <td style="font-weight:700;">${escapeHtml(st.school_name)}</td>
+          <td style="text-align:center; font-weight:700;">${st.rank1}</td>
+          <td style="text-align:center;">${st.rank2}</td>
+          <td style="text-align:center;">${st.rank3}</td>
+          <td style="text-align:center;">${st.rankOther}</td>
+          <td style="text-align:center; font-weight:700;">${st.total_regs}</td>
+        </tr>`;
+      })
+      .join('');
+
+    const tfootHtml = isMedalMode
+      ? `<tr style="background:#f2f2f2; font-weight:700;">
+          <td colspan="2" style="text-align:center;">รวมทั้งกลุ่มโรงเรียน (13 โรงเรียน)</td>
+          <td style="text-align:center;">${t.gold}</td>
+          <td style="text-align:center;">${t.silver}</td>
+          <td style="text-align:center;">${t.bronze}</td>
+          <td style="text-align:center;">${t.part}</td>
+          <td style="text-align:center;">${t.absent}</td>
+          <td style="text-align:center;">${t.total_medals}</td>
+        </tr>`
+      : `<tr style="background:#f2f2f2; font-weight:700;">
+          <td colspan="2" style="text-align:center;">รวมทั้งกลุ่มโรงเรียน (13 โรงเรียน)</td>
+          <td style="text-align:center;">${t.rank1}</td>
+          <td style="text-align:center;">${t.rank2}</td>
+          <td style="text-align:center;">${t.rank3}</td>
+          <td style="text-align:center;">${t.rankOther}</td>
+          <td style="text-align:center;">${t.total_regs}</td>
+        </tr>`;
+
+    const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(titleSuffix)} - ศิลปหัตถกรรมครั้งที่ 74</title>
+  ${OFFICIAL_PRINT_FONT_LINKS}
+  <style>
+    @page { size: A4 landscape; margin: 12mm 10mm; }
+    * { box-sizing: border-box; }
+    body { font-family: ${OFFICIAL_THAI_FONT}; color: #000; margin: 0; background: #fff; font-size: 16pt; line-height: 1.35; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { padding: 12px 20px; background: #0f172a; color: #fff; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif; font-size: 13px; }
+    .no-print button { background: #38bdf8; color: #0f172a; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    .report-wrap { max-width: 277mm; margin: 10px auto; background: #fff; padding: 10mm 12mm; }
+    .report-title { text-align: center; margin-bottom: 10px; }
+    .report-title h1 { font-size: 19pt; font-weight: 700; margin: 0 0 2px 0; line-height: 1.25; }
+    .report-title h2 { font-size: 17pt; font-weight: 700; margin: 0; line-height: 1.25; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15pt; }
+    th, td { border: 1px solid #000; padding: 5px 8px; }
+    th { background: #f2f2f2; font-weight: 700; text-align: center; }
+    .sign-section { margin-top: 24px; display: flex; justify-content: flex-end; page-break-inside: avoid; }
+    .sign-box { text-align: center; width: 380px; font-size: 16pt; line-height: 1.5; }
+    @media print {
+      body { background: #fff; margin: 0; padding: 0; }
+      .no-print { display: none !important; }
+      .report-wrap { max-width: 100%; width: 100%; margin: 0; padding: 0; }
+      th, tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <div>${escapeHtml(titleSuffix)}</div>
+    <button onclick="window.print()">สั่งพิมพ์รายงาน (A4 แนวนอน)</button>
+  </div>
+  <div class="report-wrap">
+    <div class="report-title">
+      <h1>รายงาน${escapeHtml(titleSuffix)}</h1>
+      <h2>งานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 • กลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง</h2>
+    </div>
+    <table>
+      <thead>${theadHtml}</thead>
+      <tbody>${tbodyHtml}${tfootHtml}</tbody>
+    </table>
+    <div class="sign-section">
+      <div class="sign-box">
+        <div>ขอรับรองว่าเป็นสรุปผลการแข่งขันถูกต้องจริง</div>
+        <div style="height:40px;"></div>
+        <div>(ลงชื่อ)....................................................................</div>
+        <div>(${signerName ? escapeHtml(signerName) : '....................................................................'})</div>
+        <div style="font-weight:700;">${escapeHtml(signerPos)}</div>
+        <div>วันที่ ............ เดือน ................................. พ.ศ. 2569</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } else {
+      showToast('เบราว์เซอร์บล็อกหน้าต่างป๊อปอัป กรุณาอนุญาต Pop-up เพื่อเปิดหน้าพิมพ์สรุปผล', 'warning');
+    }
+  }
+
+  async function exportSchoolResultsExcel(schoolName) {
+    const targetSchool =
+      schoolName ||
+      (document.getElementById('resSchoolSelect') || {}).value ||
+      (state.schools[0] ? state.schools[0].school_name : '');
+    if (!targetSchool) {
+      showToast('กรุณาเลือกโรงเรียนก่อนส่งออก Excel', 'warning');
+      return;
+    }
+
+    const filterCode = (document.getElementById('resSchoolMedalFilter') || {}).value || 'ALL';
+    const searchQuery = (document.getElementById('resSchoolSearchInput') || {}).value || '';
+    const data = getSchoolResultData(targetSchool);
+    const items = filterSchoolResultItems(data.items, filterCode, searchQuery);
+    if (items.length === 0) {
+      showToast('ไม่มีรายการสำหรับส่งออก Excel ในตัวกรองปัจจุบัน', 'warning');
+      return;
+    }
+
+    let ExcelJS;
+    try {
+      ExcelJS = await loadExcelJs();
+    } catch (err) {
+      showToast(err.message, 'error');
+      return;
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('รายงานผลรายโรงเรียน');
+    ws.columns = [
+      { width: 6 },
+      { width: 12 },
+      { width: 38 },
+      { width: 22 },
+      { width: 12 },
+      { width: 10 },
+      { width: 28 },
+      { width: 26 },
+      { width: 10 },
+      { width: 16 },
+      { width: 22 },
+      { width: 16 }
+    ];
+
+    const titles = [
+      'รายงานผลการแข่งขันงานศิลปหัตถกรรมนักเรียน ครั้งที่ 74 ปีการศึกษา 2569 — ' + targetSchool,
+      'สรุป: ส่ง ' + data.totalRegs + ' รายการ • ทอง ' + data.gold + ' | เงิน ' + data.silver + ' | ทองแดง ' + data.bronze + ' | เข้าร่วม/รอผล ' + (data.part + data.pending) + ' | ขาดสอบ ' + data.absent + ' | ตัวแทนเขตฯ ' + data.districtRepCount + ' รายการ',
+      ''
+    ];
+    titles.forEach(function (t, i) {
+      ws.mergeCells(i + 1, 1, i + 1, 12);
+      const cell = ws.getCell(i + 1, 1);
+      cell.value = t;
+      cell.font = { bold: true, size: i === 0 ? 14 : 11 };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    const thin = { style: 'thin' };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const headerRow = ws.getRow(4);
+    const headers = [
+      'ที่',
+      'รหัส',
+      'กิจกรรมการแข่งขัน',
+      'หมวดกิจกรรม',
+      'ระดับชั้น',
+      'ประเภท',
+      'รายชื่อนักเรียนผู้เข้าแข่งขัน',
+      'รายชื่อครูผู้ฝึกสอน',
+      'คะแนน',
+      'ระดับเหรียญ',
+      'ลำดับ / รางวัล',
+      'สถานะตัวแทนเขตฯ'
+    ];
+    headers.forEach(function (h, i) {
+      const c = headerRow.getCell(i + 1);
+      c.value = h;
+      c.font = { bold: true, size: 11 };
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      c.border = border;
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F1EF' } };
+    });
+
+    let rowNo = 5;
+    items.forEach(function (it, idx) {
+      const stuLines =
+        (it.students || [])
+          .map((s, i) => `${i + 1}. ${formatFullNameForPrint(s.prefix, s.name)}${s.grade ? ' (' + s.grade + ')' : ''}`)
+          .join('\n') || '-';
+      const teaLines =
+        (it.teachers || [])
+          .map((t, i) => `${i + 1}. ${formatFullNameForPrint(t.prefix, t.name)}`)
+          .join('\n') || '-';
+
+      const row = ws.getRow(rowNo);
+      row.getCell(1).value = idx + 1;
+      row.getCell(2).value = it.comp_id;
+      row.getCell(3).value = it.comp_name;
+      row.getCell(4).value = it.learning_area;
+      row.getCell(5).value = it.level;
+      row.getCell(6).value = it.team_type;
+      row.getCell(7).value = stuLines;
+      row.getCell(8).value = teaLines;
+      row.getCell(9).value = it.scoreText;
+      row.getCell(10).value = it.isEvaluated ? it.medalText : 'รอประกาศผล';
+      row.getCell(11).value = it.awardText;
+      row.getCell(12).value = it.isDistrictRep ? 'ตัวแทนระดับเขตฯ' : '-';
+
+      for (let c = 1; c <= 12; c++) {
+        const cell = row.getCell(c);
+        cell.border = border;
+        cell.alignment = {
+          vertical: 'top',
+          wrapText: true,
+          horizontal: [1, 2, 5, 6, 9, 10, 12].includes(c) ? 'center' : 'left'
+        };
+      }
+      rowNo++;
+    });
+
+    const safeSchool = targetSchool.replace(/[/\\?%*:|"<>]/g, '_');
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = safeSchool + '_รายงานผลการแข่งขัน_ศิลปหัตถกรรม74.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('ดาวน์โหลดไฟล์ Excel รายงานผลการแข่งขันรายโรงเรียนเรียบร้อยแล้ว', 'success');
   }
 
   // Smart Substitution Request Form Modal State & Handlers
@@ -20836,6 +22450,15 @@
       resSearchInput.addEventListener('input', renderResultsTab);
     }
 
+    ['resSchoolSelect', 'resSchoolMedalFilter'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', renderResultsBySchoolSubview);
+    });
+    const resSchoolSearchInput = document.getElementById('resSchoolSearchInput');
+    if (resSchoolSearchInput) {
+      resSchoolSearchInput.addEventListener('input', renderResultsBySchoolSubview);
+    }
+
     // Phase 2 Certificates Tab Events
     ['certRoleFilter', 'certSchoolFilter'].forEach(function (id) {
       const el = document.getElementById(id);
@@ -21212,6 +22835,40 @@
       btnAdminPrintDistrictRepsReport.addEventListener('click', printDistrictRepresentativesReport);
     }
 
+    // Per-school Results Reports & Summaries (Print & Excel)
+    const btnPrintSelectedSchoolResult = document.getElementById('btnPrintSelectedSchoolResult');
+    if (btnPrintSelectedSchoolResult) {
+      btnPrintSelectedSchoolResult.addEventListener('click', function () {
+        const schVal = (document.getElementById('resSchoolSelect') || {}).value || '';
+        printSchoolResultsReport(schVal, 'single');
+      });
+    }
+    const btnPrintAllSchoolsResultsBatch = document.getElementById('btnPrintAllSchoolsResultsBatch');
+    if (btnPrintAllSchoolsResultsBatch) {
+      btnPrintAllSchoolsResultsBatch.addEventListener('click', function () {
+        printSchoolResultsReport(null, 'all');
+      });
+    }
+    const btnExportSelectedSchoolResultExcel = document.getElementById('btnExportSelectedSchoolResultExcel');
+    if (btnExportSelectedSchoolResultExcel) {
+      btnExportSelectedSchoolResultExcel.addEventListener('click', function () {
+        const schVal = (document.getElementById('resSchoolSelect') || {}).value || '';
+        exportSchoolResultsExcel(schVal);
+      });
+    }
+    const btnPrintAllSchoolsSummaryRank = document.getElementById('btnPrintAllSchoolsSummaryRank');
+    if (btnPrintAllSchoolsSummaryRank) {
+      btnPrintAllSchoolsSummaryRank.addEventListener('click', function () {
+        printAllSchoolsOverviewReport('rank');
+      });
+    }
+    const btnPrintAllSchoolsSummaryMedal = document.getElementById('btnPrintAllSchoolsSummaryMedal');
+    if (btnPrintAllSchoolsSummaryMedal) {
+      btnPrintAllSchoolsSummaryMedal.addEventListener('click', function () {
+        printAllSchoolsOverviewReport('medal');
+      });
+    }
+
     const repCriteriaBindings = [
       ['cfgDistrictRepCriteriaPrimarySelect', 'districtRepCriteriaPrimary'],
       ['cfgDistrictRepCriteriaMixedSelect', 'districtRepCriteriaMixed'],
@@ -21265,6 +22922,7 @@
         state.config.featureVisibility.certificates = 'open';
         saveState();
         renderAll();
+        syncFeatureVisibilityToGas();
         showToast(
           isJudgesModeDisabled()
             ? 'เปิดผลคะแนนและเกียรติบัตรต่อสาธารณะทันทีแล้ว (คงการปิดระบบสถานที่และกรรมการไว้ตามเดิม)'
@@ -21284,15 +22942,17 @@
         state.config.featureVisibility.venue = 'hidden';
         state.config.featureVisibility.judges = 'disabled';
         state.config.featureVisibility.judge_certs = 'disabled';
-        state.config.featureVisibility.results = 'auto';
-        state.config.featureVisibility.certificates = 'auto';
+        state.config.featureVisibility.results = 'hidden';
+        state.config.featureVisibility.certificates = 'hidden';
         state.config.featureVisibility.id_cards = 'open';
         state.config.featureVisibility.substitution_form = 'hidden';
         state.config.idCardsDefaultMigratedV1 = true;
         state.config.nonHostDefaultsMigratedV1 = true;
+        state.config.resultsCertsHiddenDefaultMigratedV1 = true;
         saveState();
         renderAll();
-        showToast('รีเซ็ตเป็นค่าเริ่มต้นเรียบร้อย (เปิดรับสมัคร/พิมพ์บัตร/ผล/เกียรติบัตรนักเรียน-ครู และปิดสถานที่/กรรมการ)', 'info');
+        syncFeatureVisibilityToGas();
+        showToast('รีเซ็ตเป็นค่าเริ่มต้นเรียบร้อย (ซ่อนผลคะแนนและเกียรติบัตรไว้ตรวจสอบเฉพาะแอดมิน)', 'info');
       });
     }
 
@@ -21310,6 +22970,7 @@
         state.config.nonHostDefaultsMigratedV1 = true;
         saveState();
         renderAll();
+        syncFeatureVisibilityToGas();
         showToast('เปิดโหมดรับสมัคร+ผล+เกียรติบัตร (ปิดระบบสถานที่และกรรมการเรียบร้อย)', 'success');
       });
     }
@@ -21326,6 +22987,7 @@
         state.config.nonHostDefaultsMigratedV1 = true;
         saveState();
         renderAll();
+        syncFeatureVisibilityToGas();
         showToast('เปิดโหมดเจ้าภาพจัดงานเองแล้ว (สามารถจัดตารางเวลา สถานที่ และกรรมการได้จากแถบด้านซ้าย)', 'success');
       });
     }
@@ -21423,6 +23085,7 @@
         state.certNumeralMode = mode;
         saveState();
         syncCertNumeralModeUI();
+        syncCertConfigToGas();
         const labelMap = {
           thai: 'เฉพาะแบบเลขไทย',
           arabic: 'เฉพาะแบบเลขอารบิก',
@@ -21545,28 +23208,143 @@
     }
 
     // Phase 2: Certificate & Canva Template Customizer Events
+    const onCertFormatDraftInput = function () {
+      renderCertNumberLivePreview(readCertFormNumberingDraft());
+    };
+    ['cfgCertPrefixInput', 'cfgCertCodeStudent', 'cfgCertCodeTeacher', 'cfgCertCodeJudge'].forEach(function (elId) {
+      const el = document.getElementById(elId);
+      if (el) el.addEventListener('input', onCertFormatDraftInput);
+    });
+    ['certNumberModeTeamFixed', 'certNumberModeSequential'].forEach(function (elId) {
+      const el = document.getElementById(elId);
+      if (el) el.addEventListener('change', onCertFormatDraftInput);
+    });
+
+    const btnToggleCertFormatLock = document.getElementById('btnToggleCertFormatLock');
+    if (btnToggleCertFormatLock) {
+      btnToggleCertFormatLock.addEventListener('click', async function () {
+        if (!state.isAdmin) return;
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+        const wasLocked = Boolean(state.config.certFormatLocked);
+        if (wasLocked) {
+          const risk = getCertPublishRiskStatus();
+          if (risk.certOpenPublic || risk.announcedCount > 0) {
+            const msg = risk.certOpenPublic
+              ? 'คำเตือน: แท็บเกียรติบัตรเปิดให้คนทั่วไปดาวน์โหลดแล้ว! ต้องการปลดล็อกเพื่อแก้ไขรูปแบบเลขเกียรติบัตรใช่หรือไม่?'
+              : 'คำเตือน: มีรายการที่ประกาศผลแล้ว ' + risk.announcedCount + ' รายการ ต้องการปลดล็อกเพื่อแก้ไขรูปแบบเลขเกียรติบัตรใช่หรือไม่?';
+            if (!window.confirm(msg)) return;
+          }
+        }
+        state.config.certFormatLocked = !wasLocked;
+        saveState();
+        updateCertConfigUI();
+        await syncCertConfigToGas();
+        showToast(
+          state.config.certFormatLocked
+            ? 'ล็อกรูปแบบเลขเกียรติบัตรเรียบร้อยแล้ว (กันเผลอแก้เลขโดยไม่ตั้งใจ)'
+            : 'ปลดล็อกรูปแบบเลขเกียรติบัตรแล้ว สามารถปรับแก้และกดบันทึกได้',
+          state.config.certFormatLocked ? 'success' : 'info'
+        );
+      });
+    }
+
     const certConfigForm = document.getElementById('certConfigForm');
     if (certConfigForm) {
-      certConfigForm.addEventListener('submit', function (e) {
+      certConfigForm.addEventListener('submit', async function (e) {
         e.preventDefault();
         if (!state.isAdmin) return;
-        state.config.certPrefix =
-          (document.getElementById('cfgCertPrefixInput').value || '').trim() || 'WYK74-2569-';
+        if (!state.config) state.config = Object.assign({}, DEFAULT_CONFIG);
+
+        const savedNumCfg = getCertNumberingConfig(state.config);
+        const seqRadio = document.getElementById('certNumberModeSequential');
+        const nextPrefix =
+          ((document.getElementById('cfgCertPrefixInput') || {}).value || '').trim() || 'WYK74-2569-';
+        const nextMode = seqRadio && seqRadio.checked ? 'sequential' : 'team_fixed';
+        const nextStu = sanitizeCertRoleCode((document.getElementById('cfgCertCodeStudent') || {}).value, 'น');
+        const nextTch = sanitizeCertRoleCode((document.getElementById('cfgCertCodeTeacher') || {}).value, 'ค');
+        const nextJdg = sanitizeCertRoleCode((document.getElementById('cfgCertCodeJudge') || {}).value, 'ก');
+
+        const formatChanged =
+          nextPrefix !== savedNumCfg.prefix ||
+          nextMode !== savedNumCfg.mode ||
+          nextStu !== savedNumCfg.studentCode ||
+          nextTch !== savedNumCfg.teacherCode ||
+          nextJdg !== savedNumCfg.judgeCode;
+
+        if (formatChanged) {
+          if (state.config.certFormatLocked) {
+            showToast('รูปแบบเลขเกียรติบัตรถูกล็อกอยู่ กรุณากดปุ่ม "ล็อกอยู่ (กดเพื่อปลดล็อกแก้ไข)" ก่อนแก้ไข', 'warning');
+            updateCertConfigUI();
+            return;
+          }
+          const nextDraft = {
+            prefix: nextPrefix,
+            mode: nextMode,
+            studentCode: nextStu,
+            teacherCode: nextTch,
+            judgeCode: nextJdg
+          };
+          const oldSample = formatCertificateCodeByMode({
+            config: savedNumCfg,
+            role_type: 'STUDENT',
+            seqNum: 1,
+            teamToken: '6067',
+            memberIndex: 0
+          });
+          const newSample = formatCertificateCodeByMode({
+            config: nextDraft,
+            role_type: 'STUDENT',
+            seqNum: 1,
+            teamToken: '6067',
+            memberIndex: 0
+          });
+          const risk = getCertPublishRiskStatus();
+          let confirmLines = [
+            'ยืนยันการเปลี่ยนรูปแบบเลขเกียรติบัตรหรือไม่?',
+            '',
+            'ตัวอย่างเดิม: ' + oldSample + ' (' + toThaiNumerals(oldSample) + ')',
+            'ตัวอย่างใหม่: ' + newSample + ' (' + toThaiNumerals(newSample) + ')'
+          ];
+          if (risk.certOpenPublic) {
+            confirmLines.push('');
+            confirmLines.push('[คำเตือนสำคัญ] ขณะนี้เปิดแท็บเกียรติบัตรให้คนทั่วไปดาวน์โหลดแล้ว ผู้ที่ดาวน์โหลดไปแล้วจะมีเลขตามรูปแบบเดิม');
+          } else if (risk.announcedCount > 0) {
+            confirmLines.push('');
+            confirmLines.push('[ข้อควรระวัง] มีรายการที่ประกาศผลแล้ว ' + risk.announcedCount + ' รายการ');
+          }
+          confirmLines.push('');
+          confirmLines.push('หมายเหตุ: QR Code บนเกียรติบัตรใบเดิมจะยังสแกนตรวจสอบพบได้ปกติ');
+          if (!window.confirm(confirmLines.join('\n'))) {
+            updateCertConfigUI();
+            return;
+          }
+        }
+
+        state.config.certPrefix = nextPrefix;
+        state.config.certNumberMode = nextMode;
+        state.config.certRoleCodeStudent = nextStu;
+        state.config.certRoleCodeTeacher = nextTch;
+        state.config.certRoleCodeJudge = nextJdg;
         state.config.certIssueDate =
-          (document.getElementById('cfgCertIssueDateInput').value || '').trim() ||
+          ((document.getElementById('cfgCertIssueDateInput') || {}).value || '').trim() ||
           '25 พฤศจิกายน พุทธศักราช 2569';
         state.config.certSignerName = (
-          document.getElementById('cfgCertSignerNameInput').value || ''
+          (document.getElementById('cfgCertSignerNameInput') || {}).value || ''
         ).trim();
         state.config.certSignerPos =
-          (document.getElementById('cfgCertSignerPosInput').value || '').trim() ||
+          ((document.getElementById('cfgCertSignerPosInput') || {}).value || '').trim() ||
           'ประธานกลุ่มโรงเรียนวังยาวเขวาไร่ดอนกลาง';
         state.config.certSignerOrg =
-          (document.getElementById('cfgCertSignerOrgInput').value || '').trim() ||
+          ((document.getElementById('cfgCertSignerOrgInput') || {}).value || '').trim() ||
           'สำนักงานเขตพื้นที่การศึกษาประถมศึกษามหาสารคาม เขต 3';
         saveState();
         renderAll();
-        showToast('บันทึกการตั้งค่าเกียรติบัตรเรียบร้อยแล้ว', 'success');
+        const res = await syncCertConfigToGas();
+        if (res && !res.ok) {
+          showToast('บันทึกการตั้งค่าเกียรติบัตรในหน้าเว็บแล้ว (ซิงก์ข้ามเครื่องเมื่อ Deploy Code.gs ใหม่)', 'info');
+        } else {
+          showToast('บันทึกการตั้งค่าเกียรติบัตรเรียบร้อยแล้ว', 'success');
+        }
       });
     }
 
@@ -21696,10 +23474,16 @@
     const btnPreviewCertSample = document.getElementById('btnPreviewCertSample');
     if (btnPreviewCertSample) {
       btnPreviewCertSample.addEventListener('click', function () {
-        const prefix = state.config.certPrefix || 'WYK74-2569-';
+        const draftCfg = readCertFormNumberingDraft();
         const sampleEntries = [
           {
-            cert_code: prefix + 'SAMPLE-S1',
+            cert_code: formatCertificateCodeByMode({
+              config: draftCfg,
+              role_type: 'STUDENT',
+              seqNum: 1,
+              teamToken: '6067',
+              memberIndex: 0
+            }),
             role_type: 'STUDENT',
             role_label: 'นักเรียนผู้เข้าแข่งขัน',
             recipient_name: 'เด็กชายตัวอย่าง มีปัญญา',
@@ -21713,7 +23497,13 @@
             award_title: 'ชนะเลิศ'
           },
           {
-            cert_code: prefix + 'SAMPLE-T1',
+            cert_code: formatCertificateCodeByMode({
+              config: draftCfg,
+              role_type: 'TEACHER',
+              seqNum: 1,
+              teamToken: '6067',
+              memberIndex: 0
+            }),
             role_type: 'TEACHER',
             role_label: 'ครูผู้ฝึกซ้อม',
             recipient_name: 'นางสาวใจดี มีเมตตา',
@@ -21727,7 +23517,13 @@
             award_title: 'ครูผู้ฝึกสอนนักเรียน ได้รับรางวัลระดับเหรียญทอง รองชนะเลิศอันดับ 1'
           },
           {
-            cert_code: prefix + 'SAMPLE-J1',
+            cert_code: formatCertificateCodeByMode({
+              config: draftCfg,
+              role_type: 'JUDGE',
+              seqNum: 1,
+              teamToken: '',
+              memberIndex: 0
+            }),
             role_type: 'JUDGE',
             role_label: 'คณะกรรมการตัดสิน',
             recipient_name: 'นายเกียรติศักดิ์ คิดแม่น',
@@ -21872,6 +23668,44 @@
       });
       syncBackToTopVisibility();
     }
+
+    // QR Certificate Verification Modal Events & Hash Routing
+    const certVerifyModalEl = document.getElementById('certVerifyModal');
+    const btnCloseCertVerifyModal = document.getElementById('btnCloseCertVerifyModal');
+    const btnCertVerifyGoMain = document.getElementById('btnCertVerifyGoMain');
+    const btnCertVerifyPrint = document.getElementById('btnCertVerifyPrint');
+    if (btnCloseCertVerifyModal) {
+      btnCloseCertVerifyModal.addEventListener('click', function () {
+        closeCertificateVerifyModal(true);
+      });
+    }
+    if (btnCertVerifyGoMain) {
+      btnCertVerifyGoMain.addEventListener('click', function () {
+        closeCertificateVerifyModal(true);
+      });
+    }
+    if (btnCertVerifyPrint) {
+      btnCertVerifyPrint.addEventListener('click', function () {
+        if (currentVerifiedCertEntry) {
+          printCertificatesWindow([currentVerifiedCertEntry]);
+        }
+      });
+    }
+    if (certVerifyModalEl) {
+      certVerifyModalEl.addEventListener('click', function (ev) {
+        if (ev.target === certVerifyModalEl) {
+          closeCertificateVerifyModal(true);
+        }
+      });
+    }
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && certVerifyModalEl && !certVerifyModalEl.classList.contains('hidden')) {
+        closeCertificateVerifyModal(true);
+      }
+    });
+    window.addEventListener('hashchange', function () {
+      checkCertificateHashVerification({ openIfEmptyClose: true });
+    });
   }
 
   // Boot Application
@@ -21882,8 +23716,14 @@
     initEvents();
     onRegistrationSelectionChange();
     renderAll();
+    const initialHashCertCode = parseCertHashFromLocation();
     if (state.gasWebAppUrl) {
+      if (initialHashCertCode) {
+        openCertificateVerifyModal(initialHashCertCode, { loading: true });
+      }
       syncFromGoogleSheets(false);
+    } else if (initialHashCertCode) {
+      checkCertificateHashVerification({ fromSync: true });
     }
   });
 })();
