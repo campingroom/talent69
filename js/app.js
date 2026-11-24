@@ -15297,84 +15297,12 @@
         ctx.restore();
       }
 
-      // 3. Top-right certificate number pill
-      const pillText = 'เลขที่ ' + textData.certCodeFormatted;
-      ctx.font = '600 13px ' + FONT_FAMILY;
-      const pillTextWidth = ctx.measureText(pillText).width;
-      const pillW = pillTextWidth + 28;
-      const pillH = 24;
-      const pillX = LOGICAL_W - 83 - pillW;
-      const pillY = 49;
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.04)';
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetY = 1;
-      drawRoundedRectPath(ctx, pillX, pillY, pillW, pillH, 12);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.fill();
-      ctx.restore();
-      ctx.save();
-      drawRoundedRectPath(ctx, pillX, pillY, pillW, pillH, 12);
-      ctx.strokeStyle = 'rgba(212, 175, 55, 0.6)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-      ctx.fillStyle = '#334155';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(pillText, pillX + pillW / 2, pillY + pillH / 2 + 0.5);
-
       const cx = LOGICAL_W / 2;
-
-      // 4. Central OBEC emblem
-      if (obecImg) {
-        const logoH = 117;
-        const logoW = logoH * ((obecImg.naturalWidth || 547) / (obecImg.naturalHeight || 789));
-        ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.14)';
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetY = 1.5;
-        ctx.drawImage(obecImg, cx - logoW / 2, 50, logoW, logoH);
-        ctx.restore();
-      }
-
-      ctx.textBaseline = 'alphabetic';
-      ctx.textAlign = 'center';
-
-      // 5. Header organization block
-      ctx.fillStyle = '#1e1b4b';
-      fitFontSizeForCanvasText(ctx, textData.headerOrg, '700', 21, 16, FONT_FAMILY, 900);
-      ctx.fillText(textData.headerOrg, cx, 192);
-
-      ctx.fillStyle = '#0f172a';
-      fitFontSizeForCanvasText(ctx, textData.signerOrgFormatted, '600', 17.5, 13.5, FONT_FAMILY, 900);
-      ctx.fillText(textData.signerOrgFormatted, cx, 217);
-
-      ctx.fillStyle = '#334155';
-      ctx.font = '500 15px ' + FONT_FAMILY;
-      ctx.fillText(textData.subtitle, cx, 243);
-
-      // 6. Recipient name & school
-      ctx.save();
-      ctx.fillStyle = '#090d16';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.06)';
-      ctx.shadowBlur = 2;
-      ctx.shadowOffsetY = 1;
-      fitFontSizeForCanvasText(ctx, textData.recipientName, '700', 34, 21, FONT_FAMILY, 880);
-      ctx.fillText(textData.recipientName, cx, 295);
-      ctx.restore();
-
-      if (textData.schoolFormatted) {
-        ctx.fillStyle = '#334155';
-        fitFontSizeForCanvasText(ctx, textData.schoolFormatted, '600', 17.5, 13.5, FONT_FAMILY, 880);
-        ctx.fillText(textData.schoolFormatted, cx, 326);
-      }
-
-      // 7. Award & Activity
-      const awardY = textData.schoolFormatted ? 373 : 355;
-      ctx.fillStyle = '#92400e';
-      fitFontSizeForCanvasText(ctx, textData.awardFormatted, '700', 21, 15, FONT_FAMILY, 880);
-      ctx.fillText(textData.awardFormatted, cx, awardY);
+      const MM = 3.77952756;
+      const innerLeft = 22 * MM;
+      const innerTop = 13 * MM;
+      const innerBottom = LOGICAL_H - 18 * MM;
+      const availH = innerBottom - innerTop;
 
       const actWrap = wrapThaiTextTwoLinesForCanvas(
         ctx,
@@ -15385,38 +15313,187 @@
         FONT_FAMILY,
         860
       );
+      const actLineCount = actWrap.lines.length > 1 && actWrap.lines[1] ? 2 : 1;
+      const signNameH = textData.signerName ? 21.7 : 0;
+
+      // Match CSS flexbox space-between distribution across the 7 sections of .cert-inner
+      const bTop = { mt: 0, h: 22.0, mb: 0 };
+      const bLogo = { mt: -5.5 * MM, h: 31 * MM, mb: 0.5 * MM };
+      const bHeader = {
+        mt: -1 * MM,
+        h: 26.25 + 0.5 * MM + 21.88 + 1.5 * MM + 20.0,
+        mb: 1 * MM
+      };
+      const bRecipient = {
+        mt: 2 * MM,
+        h: textData.schoolFormatted ? 42.5 + 2.5 * MM + 22.0 : 42.5,
+        mb: 1.5 * MM
+      };
+      const bAward = {
+        mt: 1.5 * MM,
+        h: 27.3 + 0.5 * MM + 22.28 * actLineCount,
+        mb: 1 * MM
+      };
+      const bEvent = {
+        mt: 1.5 * MM,
+        h: 20.25 + 19.58 + 1 * MM + 18.0 + 1 * MM + 19.0,
+        mb: 1 * MM
+      };
+      const bFooter = {
+        mt: 1 * MM,
+        h: 52.0 + signNameH + 1.0 + 18.9 + 1.0 + 17.5 + 1 * MM,
+        mb: 2 * MM
+      };
+
+      const totalFlexH =
+        bTop.mt + bTop.h + bTop.mb +
+        bLogo.mt + bLogo.h + bLogo.mb +
+        bHeader.mt + bHeader.h + bHeader.mb +
+        bRecipient.mt + bRecipient.h + bRecipient.mb +
+        bAward.mt + bAward.h + bAward.mb +
+        bEvent.mt + bEvent.h + bEvent.mb +
+        bFooter.mt + bFooter.h + bFooter.mb;
+      const flexGap = Math.max(4, (availH - totalFlexH) / 6);
+
+      let cursorY = innerTop;
+      const placeBlock = function (blk) {
+        const top = cursorY + blk.mt;
+        cursorY = top + blk.h + blk.mb + flexGap;
+        return top;
+      };
+      const topPos = {
+        bTop: placeBlock(bTop),
+        bLogo: placeBlock(bLogo),
+        bHeader: placeBlock(bHeader),
+        bRecipient: placeBlock(bRecipient),
+        bAward: placeBlock(bAward),
+        bEvent: placeBlock(bEvent),
+        bFooter: placeBlock(bFooter)
+      };
+
+      // 3. Top-right certificate number pill
+      const pillText = 'เลขที่ ' + textData.certCodeFormatted;
+      ctx.font = '600 13px ' + FONT_FAMILY;
+      const pillTextWidth = ctx.measureText(pillText).width;
+      const pillW = pillTextWidth + 28;
+      const pillH = 22;
+      const pillX = LOGICAL_W - innerLeft - pillW;
+      const pillY = topPos.bTop;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.04)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 1;
+      drawRoundedRectPath(ctx, pillX, pillY, pillW, pillH, 11);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      drawRoundedRectPath(ctx, pillX, pillY, pillW, pillH, 11);
+      ctx.strokeStyle = 'rgba(212, 175, 55, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#334155';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(pillText, pillX + pillW / 2, pillY + 11.5);
+
+      // 4. Central OBEC emblem
+      if (obecImg) {
+        const logoH = 31 * MM;
+        const logoW = logoH * ((obecImg.naturalWidth || 547) / (obecImg.naturalHeight || 789));
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.14)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 1.5;
+        ctx.drawImage(obecImg, cx - logoW / 2, topPos.bLogo, logoW, logoH);
+        ctx.restore();
+      }
+
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+
+      // 5. Header organization block
+      const hY = topPos.bHeader;
+      ctx.fillStyle = '#1e1b4b';
+      fitFontSizeForCanvasText(ctx, textData.headerOrg, '700', 21, 16, FONT_FAMILY, 900);
+      ctx.fillText(textData.headerOrg, cx, hY + 26.25 / 2);
+
+      ctx.fillStyle = '#0f172a';
+      fitFontSizeForCanvasText(ctx, textData.signerOrgFormatted, '600', 17.5, 13.5, FONT_FAMILY, 900);
+      ctx.fillText(textData.signerOrgFormatted, cx, hY + 26.25 + 0.5 * MM + 21.88 / 2);
+
+      ctx.fillStyle = '#334155';
+      ctx.font = '500 15px ' + FONT_FAMILY;
+      ctx.fillText(textData.subtitle, cx, hY + 26.25 + 0.5 * MM + 21.88 + 1.5 * MM + 20.0 / 2);
+
+      // 6. Recipient name & school
+      const rY = topPos.bRecipient;
+      ctx.save();
+      ctx.fillStyle = '#090d16';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.06)';
+      ctx.shadowBlur = 2;
+      ctx.shadowOffsetY = 1;
+      fitFontSizeForCanvasText(ctx, textData.recipientName, '700', 34, 21, FONT_FAMILY, 880);
+      ctx.fillText(textData.recipientName, cx, rY + 42.5 / 2);
+      ctx.restore();
+
+      if (textData.schoolFormatted) {
+        ctx.fillStyle = '#334155';
+        fitFontSizeForCanvasText(ctx, textData.schoolFormatted, '600', 17.5, 13.5, FONT_FAMILY, 880);
+        ctx.fillText(textData.schoolFormatted, cx, rY + 42.5 + 2.5 * MM + 22.0 / 2);
+      }
+
+      // 7. Award & Activity
+      const aY = topPos.bAward;
+      ctx.fillStyle = '#92400e';
+      fitFontSizeForCanvasText(ctx, textData.awardFormatted, '700', 21, 15, FONT_FAMILY, 880);
+      ctx.fillText(textData.awardFormatted, cx, aY + 27.3 / 2);
+
       ctx.fillStyle = '#0f172a';
       ctx.font = '600 ' + actWrap.fontSize + 'px ' + FONT_FAMILY;
-      ctx.fillText(actWrap.lines[0], cx, awardY + 26);
-      let extraActY = 0;
-      if (actWrap.lines.length > 1 && actWrap.lines[1]) {
-        ctx.fillText(actWrap.lines[1], cx, awardY + 49);
-        extraActY = 22;
+      ctx.fillText(actWrap.lines[0], cx, aY + 27.3 + 0.5 * MM + 22.28 / 2);
+      if (actLineCount > 1) {
+        ctx.fillText(actWrap.lines[1], cx, aY + 27.3 + 0.5 * MM + 22.28 + 22.28 / 2);
       }
 
       // 8. Event & Ceremony details
-      const eventBaseY = awardY + 67 + extraActY;
+      const eY = topPos.bEvent;
       ctx.fillStyle = '#1e293b';
       fitFontSizeForCanvasText(ctx, textData.eventTitleFormatted, '600', 15, 12, FONT_FAMILY, 910);
-      ctx.fillText(textData.eventTitleFormatted, cx, eventBaseY);
+      ctx.fillText(textData.eventTitleFormatted, cx, eY + 20.25 / 2);
 
       ctx.fillStyle = '#334155';
       ctx.font = '500 14.5px ' + FONT_FAMILY;
-      ctx.fillText(textData.eventDatesFormatted, cx, eventBaseY + 23);
+      ctx.fillText(textData.eventDatesFormatted, cx, eY + 20.25 + 19.58 / 2);
 
       ctx.fillStyle = '#475569';
       ctx.font = '400 14px ' + FONT_FAMILY;
-      ctx.fillText(textData.blessingText, cx, eventBaseY + 47);
+      ctx.fillText(textData.blessingText, cx, eY + 20.25 + 19.58 + 1 * MM + 18.0 / 2);
 
       ctx.fillStyle = '#0f172a';
       ctx.font = '600 14.5px ' + FONT_FAMILY;
-      ctx.fillText(textData.issueDateFormatted, cx, eventBaseY + 71);
+      ctx.fillText(
+        textData.issueDateFormatted,
+        cx,
+        eY + 20.25 + 19.58 + 1 * MM + 18.0 + 1 * MM + 19.0 / 2
+      );
 
-      // 9. Footer Left: QR verification block
-      const qrBoxX = 98;
-      const qrBoxY = 616;
-      const qrBoxSize = 68;
-      drawRoundedRectPath(ctx, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 4);
+      // 9. Footer Left: QR verification block (left: 4mm, bottom: 2mm inside .cert-footer)
+      ctx.font = '600 9.5px ' + FONT_FAMILY;
+      const qrLabelW = ctx.measureText(textData.qrLabel).width;
+      ctx.font = '500 8px monospace';
+      const qrCodeW = ctx.measureText(textData.certCodeFormatted).width;
+      const qrBlockW = Math.max(64, qrLabelW, qrCodeW);
+      const qrCenterX = innerLeft + 4 * MM + qrBlockW / 2;
+      const qrBoxSize = 64;
+      const qrBoxX = qrCenterX - qrBoxSize / 2;
+      const qrBottom = topPos.bFooter + bFooter.h - 2 * MM;
+      const qrCodeCenterY = qrBottom - 6;
+      const qrLabelCenterY = qrBottom - 20;
+      const qrBoxTop = qrBottom - 28 - qrBoxSize;
+
+      drawRoundedRectPath(ctx, qrBoxX, qrBoxTop, qrBoxSize, qrBoxSize, 4);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
       ctx.strokeStyle = '#cbd5e1';
@@ -15424,24 +15501,24 @@
       ctx.stroke();
 
       if (qrImg) {
-        ctx.drawImage(qrImg, qrBoxX + 2, qrBoxY + 2, 64, 64);
+        ctx.drawImage(qrImg, qrBoxX + 2.5, qrBoxTop + 2.5, 59, 59);
       } else {
         ctx.fillStyle = '#94a3b8';
         ctx.font = '600 11px ' + FONT_FAMILY;
-        ctx.fillText('QR', qrBoxX + qrBoxSize / 2, qrBoxY + qrBoxSize / 2 + 4);
+        ctx.fillText('QR', qrCenterX, qrBoxTop + qrBoxSize / 2);
       }
 
-      const qrCenterX = qrBoxX + qrBoxSize / 2;
       ctx.fillStyle = '#475569';
       ctx.font = '600 9.5px ' + FONT_FAMILY;
-      ctx.fillText(textData.qrLabel, qrCenterX, qrBoxY + qrBoxSize + 13);
+      ctx.fillText(textData.qrLabel, qrCenterX, qrLabelCenterY);
 
       ctx.fillStyle = '#64748b';
-      ctx.font = '500 8.5px monospace';
-      ctx.fillText(textData.certCodeFormatted, qrCenterX, qrBoxY + qrBoxSize + 25);
+      ctx.font = '500 8px monospace';
+      ctx.fillText(textData.certCodeFormatted, qrCenterX, qrCodeCenterY);
 
       // 10. Footer Center: Authorized signature block
-      const sigAnchorY = 656;
+      const fY = topPos.bFooter;
+      const sigAnchorY = fY + 52.0;
       if (sigImg) {
         const ratio = Math.min(195 / sigImg.width, 52 / sigImg.height);
         const fitW = sigImg.width * ratio;
@@ -15455,22 +15532,30 @@
       } else {
         ctx.fillStyle = '#64748b';
         ctx.font = '400 14px ' + FONT_FAMILY;
-        ctx.fillText('........................................................', cx, sigAnchorY - 4);
+        ctx.fillText('........................................................', cx, sigAnchorY - 8);
       }
 
       if (textData.signerName) {
         ctx.fillStyle = '#0f172a';
         ctx.font = '700 15.5px ' + FONT_FAMILY;
-        ctx.fillText('(' + textData.signerName + ')', cx, 676);
+        ctx.fillText('(' + textData.signerName + ')', cx, sigAnchorY + 21.7 / 2);
       }
 
       ctx.fillStyle = '#1e293b';
       ctx.font = '600 13.5px ' + FONT_FAMILY;
-      ctx.fillText(textData.signerPosFormatted, cx, 696);
+      ctx.fillText(
+        textData.signerPosFormatted,
+        cx,
+        sigAnchorY + signNameH + 1.0 + 18.9 / 2
+      );
 
       ctx.fillStyle = '#475569';
       fitFontSizeForCanvasText(ctx, textData.signerOrgFormatted, '400', 12.5, 10.5, FONT_FAMILY, 520);
-      ctx.fillText(textData.signerOrgFormatted, cx, 714);
+      ctx.fillText(
+        textData.signerOrgFormatted,
+        cx,
+        sigAnchorY + signNameH + 1.0 + 18.9 + 1.0 + 17.5 / 2
+      );
 
       return canvas.toDataURL('image/jpeg', 0.95);
     };
