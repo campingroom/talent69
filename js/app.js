@@ -14373,6 +14373,459 @@
     openCertificateVerifyModal(code, options);
   }
 
+  // ==========================================
+  // PURE-JS LOCAL QR CODE GENERATOR (ISO/IEC 18004 Model 2, Byte Mode, ECC-M, V1-V10)
+  // ==========================================
+  const QR_GF_EXP = new Uint8Array(510);
+  const QR_GF_LOG = new Uint8Array(256);
+  (function initQrGaloisTables() {
+    let v = 1;
+    for (let i = 0; i < 255; i++) {
+      QR_GF_EXP[i] = v;
+      QR_GF_EXP[i + 255] = v;
+      QR_GF_LOG[v] = i;
+      v <<= 1;
+      if (v & 0x100) v ^= 0x11d;
+    }
+  })();
+
+  function qrGfMul(a, b) {
+    if (a === 0 || b === 0) return 0;
+    return QR_GF_EXP[QR_GF_LOG[a] + QR_GF_LOG[b]];
+  }
+
+  function qrRsGeneratorPoly(ecLen) {
+    let poly = [1];
+    for (let i = 0; i < ecLen; i++) {
+      const next = new Array(poly.length + 1).fill(0);
+      const factor = QR_GF_EXP[i];
+      for (let j = 0; j < poly.length; j++) {
+        next[j] ^= poly[j];
+        next[j + 1] ^= qrGfMul(poly[j], factor);
+      }
+      poly = next;
+    }
+    return poly;
+  }
+
+  function qrRsComputeRemainder(dataBytes, ecLen) {
+    const gen = qrRsGeneratorPoly(ecLen);
+    const rem = new Array(ecLen).fill(0);
+    for (let i = 0; i < dataBytes.length; i++) {
+      const factor = dataBytes[i] ^ rem[0];
+      for (let j = 0; j < ecLen - 1; j++) {
+        rem[j] = rem[j + 1];
+      }
+      rem[ecLen - 1] = 0;
+      for (let k = 0; k < ecLen; k++) {
+        rem[k] ^= qrGfMul(gen[k + 1], factor);
+      }
+    }
+    return rem;
+  }
+
+  function encodeUtf8BytesForQr(str) {
+    const text = String(str || '');
+    if (typeof TextEncoder === 'function') {
+      return Array.from(new TextEncoder().encode(text));
+    }
+    const out = [];
+    for (let i = 0; i < text.length; i++) {
+      let c = text.charCodeAt(i);
+      if (c < 0x80) {
+        out.push(c);
+      } else if (c < 0x800) {
+        out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+      } else if (c < 0xd800 || c >= 0xe000) {
+        out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+      } else {
+        i++;
+        c = 0x10000 + (((c & 0x3ff) << 10) | (text.charCodeAt(i) & 0x3ff));
+        out.push(
+          0xf0 | (c >> 18),
+          0x80 | ((c >> 12) & 0x3f),
+          0x80 | ((c >> 6) & 0x3f),
+          0x80 | (c & 0x3f)
+        );
+      }
+    }
+    return out;
+  }
+
+  const QR_VERSIONS_ECC_M = [
+    null,
+    { ver: 1, ec: 10, g1: [1, 16], g2: [0, 0], align: [] },
+    { ver: 2, ec: 16, g1: [1, 28], g2: [0, 0], align: [6, 18] },
+    { ver: 3, ec: 26, g1: [1, 44], g2: [0, 0], align: [6, 22] },
+    { ver: 4, ec: 18, g1: [2, 32], g2: [0, 0], align: [6, 26] },
+    { ver: 5, ec: 24, g1: [2, 43], g2: [0, 0], align: [6, 30] },
+    { ver: 6, ec: 16, g1: [4, 27], g2: [0, 0], align: [6, 34] },
+    { ver: 7, ec: 18, g1: [4, 31], g2: [0, 0], align: [6, 22, 38] },
+    { ver: 8, ec: 22, g1: [2, 38], g2: [2, 39], align: [6, 24, 42] },
+    { ver: 9, ec: 22, g1: [3, 36], g2: [2, 37], align: [6, 26, 46] },
+    { ver: 10, ec: 26, g1: [4, 43], g2: [1, 44], align: [6, 28, 50] }
+  ];
+
+  function encodeQrMatrix(text) {
+    const bytes = encodeUtf8BytesForQr(text);
+    let spec = null;
+    let totalDataBytes = 0;
+    for (let v = 1; v < QR_VERSIONS_ECC_M.length; v++) {
+      const candidate = QR_VERSIONS_ECC_M[v];
+      const cap = candidate.g1[0] * candidate.g1[1] + candidate.g2[0] * candidate.g2[1];
+      const headerBits = 4 + (v >= 10 ? 16 : 8);
+      if (headerBits + bytes.length * 8 <= cap * 8) {
+        spec = candidate;
+        totalDataBytes = cap;
+        break;
+      }
+    }
+    if (!spec) return null;
+
+    // 1. Encode Byte Mode bitstream
+    const bitBuf = [];
+    const pushBits = function (val, len) {
+      for (let i = len - 1; i >= 0; i--) {
+        bitBuf.push((val >>> i) & 1);
+      }
+    };
+    pushBits(0x4, 4);
+    pushBits(bytes.length, spec.ver >= 10 ? 16 : 8);
+    for (let i = 0; i < bytes.length; i++) {
+      pushBits(bytes[i], 8);
+    }
+    const maxDataBits = totalDataBytes * 8;
+    const termLen = Math.min(4, maxDataBits - bitBuf.length);
+    for (let i = 0; i < termLen; i++) bitBuf.push(0);
+    while (bitBuf.length % 8 !== 0) bitBuf.push(0);
+
+    const dataCodewords = [];
+    for (let i = 0; i < bitBuf.length; i += 8) {
+      let b = 0;
+      for (let j = 0; j < 8; j++) b = (b << 1) | bitBuf[i + j];
+      dataCodewords.push(b);
+    }
+    const padBytes = [0xec, 0x11];
+    let padIdx = 0;
+    while (dataCodewords.length < totalDataBytes) {
+      dataCodewords.push(padBytes[padIdx % 2]);
+      padIdx++;
+    }
+
+    // 2. Split into blocks & interleave Data + RS Error Correction codewords
+    const blocks = [];
+    let offset = 0;
+    for (let b = 0; b < spec.g1[0]; b++) {
+      const slice = dataCodewords.slice(offset, offset + spec.g1[1]);
+      offset += spec.g1[1];
+      blocks.push({ data: slice, ec: qrRsComputeRemainder(slice, spec.ec) });
+    }
+    for (let b = 0; b < spec.g2[0]; b++) {
+      const slice = dataCodewords.slice(offset, offset + spec.g2[1]);
+      offset += spec.g2[1];
+      blocks.push({ data: slice, ec: qrRsComputeRemainder(slice, spec.ec) });
+    }
+
+    const interleaved = [];
+    const maxBlockDataLen = Math.max(spec.g1[1], spec.g2[1]);
+    for (let i = 0; i < maxBlockDataLen; i++) {
+      for (let b = 0; b < blocks.length; b++) {
+        if (i < blocks[b].data.length) interleaved.push(blocks[b].data[i]);
+      }
+    }
+    for (let i = 0; i < spec.ec; i++) {
+      for (let b = 0; b < blocks.length; b++) {
+        interleaved.push(blocks[b].ec[i]);
+      }
+    }
+
+    // 3. Build function modules matrix
+    const N = 17 + 4 * spec.ver;
+    const base = [];
+    const isFunc = [];
+    for (let y = 0; y < N; y++) {
+      base.push(new Uint8Array(N));
+      isFunc.push(new Uint8Array(N));
+    }
+    const setFunc = function (x, y, dark) {
+      if (x < 0 || x >= N || y < 0 || y >= N) return;
+      isFunc[y][x] = 1;
+      base[y][x] = dark ? 1 : 0;
+    };
+
+    const placeFinder = function (fx, fy) {
+      for (let dy = -1; dy <= 7; dy++) {
+        for (let dx = -1; dx <= 7; dx++) {
+          const px = fx + dx;
+          const py = fy + dy;
+          if (px < 0 || px >= N || py < 0 || py >= N) continue;
+          const isBorderOrCenter =
+            dx >= 0 &&
+            dx <= 6 &&
+            dy >= 0 &&
+            dy <= 6 &&
+            (dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4));
+          setFunc(px, py, isBorderOrCenter ? 1 : 0);
+        }
+      }
+    };
+    placeFinder(0, 0);
+    placeFinder(N - 7, 0);
+    placeFinder(0, N - 7);
+
+    // Alignment patterns
+    for (let i = 0; i < spec.align.length; i++) {
+      for (let j = 0; j < spec.align.length; j++) {
+        const ax = spec.align[i];
+        const ay = spec.align[j];
+        if ((ax <= 8 && ay <= 8) || (ax >= N - 9 && ay <= 8) || (ax <= 8 && ay >= N - 9)) {
+          continue;
+        }
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            setFunc(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1 ? 1 : 0);
+          }
+        }
+      }
+    }
+
+    // Timing patterns
+    for (let i = 8; i <= N - 9; i++) {
+      setFunc(i, 6, i % 2 === 0 ? 1 : 0);
+      setFunc(6, i, i % 2 === 0 ? 1 : 0);
+    }
+
+    // Dark module + reserve format areas
+    setFunc(8, N - 8, 1);
+    for (let i = 0; i <= 8; i++) {
+      if (!isFunc[8][i]) setFunc(i, 8, 0);
+      if (!isFunc[i][8]) setFunc(8, i, 0);
+    }
+    for (let i = N - 8; i < N; i++) {
+      if (!isFunc[8][i]) setFunc(i, 8, 0);
+    }
+    for (let i = N - 7; i < N; i++) {
+      if (!isFunc[i][8]) setFunc(8, i, 0);
+    }
+
+    // Version info for v >= 7
+    if (spec.ver >= 7) {
+      let rem = spec.ver;
+      for (let i = 0; i < 12; i++) {
+        rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+      }
+      const verBits = (spec.ver << 12) | rem;
+      for (let i = 0; i < 18; i++) {
+        const bit = (verBits >>> i) & 1;
+        const a = Math.floor(i / 3);
+        const b = i % 3;
+        setFunc(a, N - 11 + b, bit);
+        setFunc(N - 11 + b, a, bit);
+      }
+    }
+
+    // 4. Zigzag data placement
+    const cwBits = [];
+    for (let i = 0; i < interleaved.length; i++) {
+      const byteVal = interleaved[i];
+      for (let b = 7; b >= 0; b--) {
+        cwBits.push((byteVal >>> b) & 1);
+      }
+    }
+    let bitIdx = 0;
+    for (let right = N - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (let vert = 0; vert < N; vert++) {
+        const upward = ((right + 1) & 2) === 0;
+        const y = upward ? N - 1 - vert : vert;
+        for (let j = 0; j < 2; j++) {
+          const x = right - j;
+          if (!isFunc[y][x]) {
+            base[y][x] = bitIdx < cwBits.length ? cwBits[bitIdx] : 0;
+            bitIdx++;
+          }
+        }
+      }
+    }
+
+    // 5. Evaluate 8 masks & pick lowest ISO/IEC 18004 penalty score
+    const maskCondition = function (m, x, y) {
+      switch (m) {
+        case 0: return (x + y) % 2 === 0;
+        case 1: return y % 2 === 0;
+        case 2: return x % 3 === 0;
+        case 3: return (x + y) % 3 === 0;
+        case 4: return (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0;
+        case 5: return ((x * y) % 2) + ((x * y) % 3) === 0;
+        case 6: return ((((x * y) % 2) + ((x * y) % 3)) % 2) === 0;
+        case 7: return ((((x + y) % 2) + ((x * y) % 3)) % 2) === 0;
+        default: return false;
+      }
+    };
+
+    const writeFormatBits = function (mat, maskId) {
+      const data5 = (0 << 3) | maskId; // ECC Level M = 00
+      let rem = data5;
+      for (let i = 0; i < 10; i++) {
+        rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+      }
+      const fmtBits = ((data5 << 10) | rem) ^ 0x5412;
+      for (let i = 0; i <= 5; i++) mat[i][8] = (fmtBits >>> i) & 1;
+      mat[7][8] = (fmtBits >>> 6) & 1;
+      mat[8][8] = (fmtBits >>> 7) & 1;
+      mat[8][7] = (fmtBits >>> 8) & 1;
+      for (let i = 9; i <= 14; i++) mat[8][14 - i] = (fmtBits >>> i) & 1;
+      for (let i = 0; i <= 7; i++) mat[8][N - 1 - i] = (fmtBits >>> i) & 1;
+      for (let i = 8; i <= 14; i++) mat[N - 15 + i][8] = (fmtBits >>> i) & 1;
+    };
+
+    const computePenaltyScore = function (mat) {
+      let penalty = 0;
+      const runPenalty = function (len) {
+        return len >= 5 ? 3 + (len - 5) : 0;
+      };
+      // N1 horizontal + vertical runs
+      for (let y = 0; y < N; y++) {
+        let cur = mat[y][0];
+        let run = 1;
+        for (let x = 1; x < N; x++) {
+          if (mat[y][x] === cur) {
+            run++;
+          } else {
+            penalty += runPenalty(run);
+            cur = mat[y][x];
+            run = 1;
+          }
+        }
+        penalty += runPenalty(run);
+      }
+      for (let x = 0; x < N; x++) {
+        let cur = mat[0][x];
+        let run = 1;
+        for (let y = 1; y < N; y++) {
+          if (mat[y][x] === cur) {
+            run++;
+          } else {
+            penalty += runPenalty(run);
+            cur = mat[y][x];
+            run = 1;
+          }
+        }
+        penalty += runPenalty(run);
+      }
+      // N2 2x2 same-color blocks
+      for (let y = 0; y < N - 1; y++) {
+        for (let x = 0; x < N - 1; x++) {
+          const c = mat[y][x];
+          if (mat[y][x + 1] === c && mat[y + 1][x] === c && mat[y + 1][x + 1] === c) {
+            penalty += 3;
+          }
+        }
+      }
+      // N3 finder-like 1:1:3:1:1 patterns
+      const countFinderLike = function (getCell) {
+        let count = 0;
+        const p1 = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+        const p2 = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1];
+        for (let i = 0; i <= N - 11; i++) {
+          let m1 = true;
+          let m2 = true;
+          for (let k = 0; k < 11; k++) {
+            const v = getCell(i + k);
+            if (v !== p1[k]) m1 = false;
+            if (v !== p2[k]) m2 = false;
+          }
+          if (m1) count++;
+          if (m2) count++;
+        }
+        return count * 40;
+      };
+      for (let y = 0; y < N; y++) {
+        penalty += countFinderLike(function (idx) { return mat[y][idx]; });
+      }
+      for (let x = 0; x < N; x++) {
+        penalty += countFinderLike(function (idx) { return mat[idx][x]; });
+      }
+      // N4 dark module proportion
+      let darkCount = 0;
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          if (mat[y][x]) darkCount++;
+        }
+      }
+      const total = N * N;
+      const k = Math.floor(Math.abs(darkCount * 20 - total * 10) / total);
+      penalty += k * 10;
+      return penalty;
+    };
+
+    let bestMatrix = null;
+    let bestScore = Infinity;
+    for (let m = 0; m < 8; m++) {
+      const trial = [];
+      for (let y = 0; y < N; y++) {
+        const row = new Uint8Array(N);
+        for (let x = 0; x < N; x++) {
+          row[x] = isFunc[y][x] ? base[y][x] : (base[y][x] ^ (maskCondition(m, x, y) ? 1 : 0));
+        }
+        trial.push(row);
+      }
+      writeFormatBits(trial, m);
+      const score = computePenaltyScore(trial);
+      if (score < bestScore) {
+        bestScore = score;
+        bestMatrix = trial;
+      }
+    }
+    return bestMatrix;
+  }
+
+  function buildLocalQrCodeCanvas(text, targetSize) {
+    try {
+      if (typeof document === 'undefined') return null;
+      const matrix = encodeQrMatrix(text);
+      if (!matrix || !matrix.length) return null;
+      const N = matrix.length;
+      const quiet = 2;
+      const cellPx = Math.max(4, Math.floor((targetSize || 220) / (N + quiet * 2)));
+      const side = (N + quiet * 2) * cellPx;
+      const canvas = document.createElement('canvas');
+      canvas.width = side;
+      canvas.height = side;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, side, side);
+      ctx.fillStyle = '#000000';
+      for (let y = 0; y < N; y++) {
+        const row = matrix[y];
+        for (let x = 0; x < N; x++) {
+          if (row[x]) {
+            ctx.fillRect((x + quiet) * cellPx, (y + quiet) * cellPx, cellPx, cellPx);
+          }
+        }
+      }
+      return canvas;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const cachedLocalQrDataUrls = {};
+  function generateLocalQrCodeDataUrl(text, targetSize) {
+    const key = String(text || '') + '|' + String(targetSize || 180);
+    if (cachedLocalQrDataUrls[key]) return cachedLocalQrDataUrls[key];
+    const canvas = buildLocalQrCodeCanvas(text, targetSize || 180);
+    if (!canvas) return '';
+    try {
+      const url = canvas.toDataURL('image/png');
+      cachedLocalQrDataUrls[key] = url;
+      return url;
+    } catch (e) {
+      return '';
+    }
+  }
+
   function getCertificateDesignAssetsConfig() {
     const cfg = state.config || DEFAULT_CONFIG;
     const baseDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
@@ -14526,6 +14979,10 @@
     function renderCertPage(c, useThaiNumerals) {
       const textData = buildCertificateTextContent(c, useThaiNumerals, designCfg);
       const pageVariantCls = useThaiNumerals ? 'cert-page-thai' : 'cert-page-arabic';
+      const localQrUrl = generateLocalQrCodeDataUrl(textData.rawVerifyUrl, 180);
+      const qrImgSrc =
+        localQrUrl ||
+        'https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=' + textData.verifyUrlEncoded;
       const sigHtml = resolvedSigUrl
         ? `<div class="sign-img-wrap"><img src="${escapeHtml(resolvedSigUrl)}" alt="ลายมือชื่อ" class="cert-signature-img" style="${sigTransformStyle}" /></div>`
         : `<div class="sign-line">........................................................</div>`;
@@ -14579,7 +15036,7 @@
             <!-- Footer: QR Verification & Authorized Signer -->
             <div class="cert-footer">
               <div class="cert-qr">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${textData.verifyUrlEncoded}" alt="QR Verify" class="cert-qr-img" width="64" height="64" />
+                <img src="${qrImgSrc}" alt="QR Verify" class="cert-qr-img" width="64" height="64" />
                 <div class="cert-qr-label">${escapeHtml(textData.qrLabel)}</div>
                 <div class="cert-qr-code">${escapeHtml(textData.certCodeFormatted)}</div>
               </div>
@@ -15238,6 +15695,7 @@
       ]);
     }
 
+    const localQrCanvas = buildLocalQrCodeCanvas(textData.rawVerifyUrl, 240);
     const assetPromises = [
       loadImageForCanvas(designCfg.certBgUrl, 6000),
       getObecLogoSvgAsset().then(function (pngUrl) {
@@ -15247,7 +15705,7 @@
         return loadImageForCanvas(pngUrl || designCfg.certWatermarkUrl, 4500);
       }),
       loadImageForCanvas(designCfg.resolvedSigUrl, 4500),
-      loadImageForCanvas(textData.qrImageUrl, 4500)
+      localQrCanvas ? Promise.resolve(null) : loadImageForCanvas(textData.qrImageUrl, 4500)
     ];
 
     const loaded = await Promise.all(assetPromises);
@@ -15255,7 +15713,7 @@
     const obecImg = loaded[1];
     const watermarkImg = loaded[2];
     const sigImg = loaded[3];
-    const qrImg = loaded[4];
+    const qrImg = localQrCanvas || loaded[4];
 
     if (!bgImg && designCfg.certBgUrl !== designCfg.defaultCertBgUrl) {
       bgImg = await loadImageForCanvas(designCfg.defaultCertBgUrl, 6000);
@@ -15501,7 +15959,10 @@
       ctx.stroke();
 
       if (qrImg) {
-        ctx.drawImage(qrImg, qrBoxX + 2.5, qrBoxTop + 2.5, 59, 59);
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(qrImg, qrBoxX + 2, qrBoxTop + 2, 60, 60);
+        ctx.restore();
       } else {
         ctx.fillStyle = '#94a3b8';
         ctx.font = '600 11px ' + FONT_FAMILY;
